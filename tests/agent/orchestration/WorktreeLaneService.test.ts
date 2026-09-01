@@ -11,7 +11,6 @@ const git = vi.hoisted(() => ({
   removeWorktree: vi.fn(),
   pruneWorktrees: vi.fn(),
   listWorktrees: vi.fn(),
-  listBranchesWithPrefix: vi.fn(),
   deleteBranch: vi.fn(),
 }))
 const exclude = vi.hoisted(() => ({ update: vi.fn() }))
@@ -37,7 +36,6 @@ describe('WorktreeLaneService', () => {
     git.removeWorktree.mockResolvedValue({ success: true })
     git.pruneWorktrees.mockResolvedValue({ success: true })
     git.listWorktrees.mockResolvedValue([])
-    git.listBranchesWithPrefix.mockResolvedValue([])
     git.deleteBranch.mockResolvedValue({ success: true })
     exclude.update.mockResolvedValue({ changed: true, pattern: '/.adnify/', target: 'exclude' })
 
@@ -273,18 +271,6 @@ describe('WorktreeLaneService', () => {
   })
 
   describe('recovery', () => {
-    it('lists archived branches next to lanes that still have a folder', async () => {
-      git.listWorktrees.mockResolvedValue([{ path: 'D:/repo/.adnify/worktrees/live-1234abcd', branch: 'adnify/lane-live-1234abcd' }])
-      git.listBranchesWithPrefix.mockResolvedValue(['adnify/lane-live-1234abcd', 'adnify/lane-archived-5678ef01'])
-      git.countCommitsBetween.mockResolvedValue(3)
-
-      const lanes = await service.listLanes('D:/repo')
-      expect(lanes).toEqual([
-        { branch: 'adnify/lane-live-1234abcd', path: 'D:/repo/.adnify/worktrees/live-1234abcd', ahead: 3, active: false },
-        { branch: 'adnify/lane-archived-5678ef01', ahead: 3, active: false },
-      ])
-    })
-
     it('merges a retained branch through the same serialized queue', async () => {
       const result = await service.retryMerge('D:/repo', 'adnify/lane-archived-5678ef01')
       expect(result).toEqual({ success: true })

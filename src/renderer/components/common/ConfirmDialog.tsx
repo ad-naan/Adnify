@@ -2,6 +2,7 @@ import { useState, useCallback, createContext, useContext, type ReactNode, useEf
 import { AlertTriangle, Info, Trash2 } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@shared/i18n'
+import { securityReasonsText } from '@shared/security/securityReasonText'
 import { logger } from '@utils/Logger'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -195,7 +196,7 @@ export function GlobalConfirmDialog() {
         title: request.operation === 'file:delete'
           ? (t('confirmDialog.deleteConfirmation', language))
           : (t('confirmDialog.securityConfirmation', language)),
-        message: `${request.reason[language]}\n\n${t('confirmDialog.target', language, { target: request.target })}`,
+        message: `${securityReasonsText(request.reasons, language)}\n\n${t('confirmDialog.target', language, { target: request.target })}`,
         confirmText: t('confirmDialog.allowOnce', language),
         cancelText: t('confirmDialog.deny', language),
         variant: request.operation === 'file:delete' ? 'danger' : 'warning',

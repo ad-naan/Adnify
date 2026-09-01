@@ -566,7 +566,7 @@ export default function StatusBar() {
           <button
             onClick={() => setTerminalVisible(!terminalVisible)}
             className="group flex items-center justify-center w-7 h-7 rounded-md transition-all"
-            title="Toggle Terminal"
+            title={t('statusBar.toggleTerminal', language)}
           >
             <div className={`flex items-center justify-center w-5 h-5 rounded-md transition-colors ${terminalVisible ? 'text-accent drop-shadow-[0_0_6px_rgba(var(--accent-rgb),0.5)]' : 'text-text-muted hover:bg-white/5 hover:text-text-primary'}`}>
               <Terminal className="w-3 h-3" />

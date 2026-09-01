@@ -61,7 +61,6 @@ export {
     calculateLevel,
     LEVEL_NAMES,
     buildHandoffContext,
-    buildWelcomeMessage,
 } from './context'
 export type { CompressionLevel, CompressionStats, StructuredSummary, HandoffDocument } from './context'
 

@@ -4,7 +4,7 @@
  * 和 `@shared/i18n` 的区别只有一个：默认语言从 store 里取，省得每个调用点都传一遍。
  * 语言类型、`t()`、双语数据的取值都复用 shared 的实现，这里不再重复一份。
  */
-import { pickLocalized, t, type Language } from '@shared/i18n'
+import { t, type Language } from '@shared/i18n'
 import { useStore } from '@store'
 
 export type AgentLanguage = Language
@@ -19,12 +19,4 @@ export function translateAgentText(
   language: AgentLanguage = getAgentLanguage()
 ): string {
   return t(key, language, params)
-}
-
-export function pickLocalizedText(
-  zh: string,
-  en: string,
-  language: AgentLanguage = getAgentLanguage()
-): string {
-  return pickLocalized({ zh, en }, language)
 }

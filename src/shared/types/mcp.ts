@@ -337,9 +337,6 @@ export interface McpOAuthTokens {
 // 预设类型（用于内置服务器和 Registry）
 // ============================================
 
-/** 支持的平台 */
-export type McpPlatform = 'windows' | 'macos' | 'linux'
-
 /** 依赖类型 */
 export type McpDependencyType = 'node' | 'python' | 'uv' | 'bun' | 'docker'
 
@@ -347,10 +344,6 @@ export type McpDependencyType = 'node' | 'python' | 'uv' | 'bun' | 'docker'
 export interface McpDependency {
   /** 依赖类型 */
   type: McpDependencyType
-  /** 最低版本（可选） */
-  minVersion?: string
-  /** 检查命令（用于验证是否安装） */
-  checkCommand?: string
   /**
    * 安装说明的文案键。
    *
@@ -430,16 +423,8 @@ export interface McpBasePreset {
   usageExamples?: string[]
   /** 使用示例（中文） */
   usageExamplesZh?: string[]
-  /** 支持的平台（不指定则支持所有平台） */
-  platforms?: McpPlatform[]
   /** 依赖要求 */
   dependencies?: McpDependency[]
-  /** 最低版本要求（MCP 服务器版本） */
-  minVersion?: string
-  /** 是否已废弃 */
-  deprecated?: boolean
-  /** 废弃说明 */
-  deprecatedNote?: string
 }
 
 /** 本地 MCP 预设 */

@@ -1,14 +1,6 @@
 import type { TranslationKey } from '@shared/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
-import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../../utils/agentText'
-
-export function getLocalizedText(language: string, zh: string, en: string): string {
-  return pickLocalizedText(zh, en, language as 'en' | 'zh')
-}
-
-export function getCurrentLanguage(): string {
-  return getAgentLanguage()
-}
+import { translateAgentText } from '../../utils/agentText'
 
 export function translate(key: TranslationKey, params?: Record<string, string | number>): string {
   return translateAgentText(key, params)

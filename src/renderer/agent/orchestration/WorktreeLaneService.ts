@@ -73,17 +73,6 @@ export interface LaneActionResult {
   error?: string
 }
 
-/** 仓库里残留的车道（目录、分支，或两者都有） */
-export interface RetainedLaneInfo {
-  branch: string
-  /** worktree 目录仍存在时给出；已归档的车道只有分支 */
-  path?: string
-  /** 相对当前 HEAD 领先的提交数；无法解析时为 null */
-  ahead: number | null
-  /** 是否是本会话仍在运行的车道 */
-  active: boolean
-}
-
 /**
  * 车道目录名/分支名片段。
  *
@@ -370,35 +359,6 @@ class WorktreeLaneServiceClass {
   }
 
   /**
-   * 列出仓库里残留的车道（含已归档的纯分支）。
-   *
-   * 目前只有测试在用：`WorktreeLanePanel` 是按当前会话的 lane projection 逐条渲染的，
-   * 拿不到上次会话崩溃留下的孤立分支，所以这个"全仓库扫一遍"的入口还没有 UI。
-   * 留着是因为 `sweep` 保留脏车道的策略依赖它 —— 没有它，那些提交在界面上就彻底不可见了。
-   */
-  async listLanes(workspacePath: string): Promise<RetainedLaneInfo[]> {
-    const laneRoot = this.laneRoot(workspacePath)
-    const [worktrees, branches] = await Promise.all([
-      gitService.listWorktrees(workspacePath),
-      gitService.listBranchesWithPrefix(WORKTREE_LANE_BRANCH_PREFIX, workspacePath),
-    ])
-
-    const lanes = new Map<string, RetainedLaneInfo>()
-    for (const entry of worktrees) {
-      if (!pathStartsWith(entry.path, laneRoot) || pathEquals(entry.path, laneRoot) || !entry.branch) continue
-      lanes.set(entry.branch, { branch: entry.branch, path: entry.path, ahead: null, active: this.activeLanes.has(this.laneKey(entry.path)) })
-    }
-    for (const branch of branches) {
-      if (!lanes.has(branch)) lanes.set(branch, { branch, ahead: null, active: false })
-    }
-
-    return await Promise.all([...lanes.values()].map(async lane => ({
-      ...lane,
-      ahead: await gitService.countCommitsBetween('HEAD', lane.branch, workspacePath),
-    })))
-  }
-
-  /**
    * 重试合并一条归档车道（任务面板的「恢复」动作）。
    *
    * 走同一条串行合并队列，所以不会和正在结束的车道抢基准工作区。
@@ -456,9 +416,9 @@ class WorktreeLaneServiceClass {
    * 会话开始后第一次建车道时，回收上次会话崩溃留下的残留。
    *
    * 只动"干净"的车道目录：清掉目录、留下分支（提交还在，随时能捞回来）。
-   * 有未提交改动的残留车道一律不碰 —— 那是别人没保存的工作，让它留在 `listLanes` 的
-   * 结果里由用户决定，比我们替他删掉安全。注意 `listLanes` 目前还没有 UI 入口，
-   * 所以用户实际上要靠 `git worktree list` 才能发现它们。
+   * 有未提交改动的残留车道一律不碰 —— 那是别人没保存的工作，让它留在原地由用户决定，
+   * 比我们替他删掉安全。留下来的分支会出现在 Git 面板的分支列表里（`adnify/lane-*`
+   * 前缀），签出、合并、删除都走那条既有通道，这里不再另开一套残留车道清单。
    */
   private async sweepOnce(workspacePath: string): Promise<void> {
     const key = this.laneKey(workspacePath)

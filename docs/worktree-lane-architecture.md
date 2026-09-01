@@ -119,9 +119,9 @@ active -> merged      (merged into the base branch; folder and branch removed)
 Retained lanes are recoverable from the Plan task panel
 ([WorktreeLanePanel](../src/renderer/components/plan/WorktreeLanePanel.tsx)):
 `retryMerge` re-enters the same serialized merge queue, and `dropLane` deletes
-folder and branch after an explicit confirmation. `listLanes` enumerates both
-lane worktrees and archived `adnify/lane-*` branches, so nothing is only
-discoverable by typing `git branch --list` by hand.
+folder and branch after an explicit confirmation. A lane whose plan is gone is
+still reachable through the Git panel's branch list: archived lanes keep the
+`adnify/lane-*` prefix, and checkout/merge/delete there are the same operations.
 
 ## Rollout
 

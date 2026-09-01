@@ -766,7 +766,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('security:authorizeCommand', request) as Promise<{
       allowed: boolean
       authorizationId?: string
-      reason?: string
+      reasons?: import('@shared/security/executionPolicy').ExecutionReason[]
       risk?: string
     }>,
   onSecurityApprovalRequest: (callback: (request: import('@shared/security/executionPolicy').AppSecurityApprovalRequest) => void) => {

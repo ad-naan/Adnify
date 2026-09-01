@@ -27,6 +27,7 @@ import {
   requireExternalPathApproval,
   type AgentApprovalProof,
   type ExecutionDecision,
+  type ExecutionReason,
 } from '@shared/security/executionPolicy'
 import { assessWorktreeLaneCommand } from './worktreeLanePolicy'
 import { randomUUID } from 'node:crypto'
@@ -274,7 +275,7 @@ async function runGitCommand(args: string[], cwd: string): Promise<GitCommandOut
     })
     return {
       success: false,
-      error: `Git执行失败: ${toAppError(err).message}`,
+      error: `Git execution failed: ${toAppError(err).message}`,
     }
   }
 }
@@ -414,29 +415,17 @@ export function registerSecureTerminalHandlers(
   getWorkspace: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   getWindowWorkspace?: (windowId: number) => string[] | null
 ) {
-  const localizedDecisionReason = (decision: ExecutionDecision): { zh: string; en: string } => {
-    const englishByCode: Record<string, string> = {
-      'path.external': 'The operation targets a path outside the active workspace',
-      'shell.critical': 'The command may modify or delete critical system resources',
-      'shell.dangerous': 'The command performs a destructive or privileged system operation',
-      'shell.untrusted': 'The executable is not in the trusted automatic-execution list',
-      'git.dangerous': 'The Git command may discard changes or rewrite history',
-      'git.untrusted': 'The Git subcommand is not in the trusted automatic-execution list',
-    }
-    return { zh: decision.reason, en: englishByCode[decision.code] || decision.reason }
-  }
-
   const authorizeDecision = async (
     operation: OperationType,
     target: string,
     decision: ExecutionDecision,
-  ): Promise<{ allowed: boolean; error?: string }> => {
+  ): Promise<{ allowed: boolean; reasons?: ExecutionReason[] }> => {
     if (decision.kind === 'deny') {
       securityManager.logOperation(operation, target, false, {
-        reason: decision.reason,
+        reasons: decision.reasons.map(reason => reason.code).join(','),
         code: decision.code,
       })
-      return { allowed: false, error: decision.reason }
+      return { allowed: false, reasons: decision.reasons }
     }
     if (decision.kind === 'ask') {
       const presentation = decision.code === 'path.external' || decision.code === 'shell.critical'
@@ -445,10 +434,10 @@ export function registerSecureTerminalHandlers(
       const allowed = await securityManager.requestApproval(
         operation,
         target,
-        localizedDecisionReason(decision),
+        decision.reasons,
         presentation,
       )
-      return { allowed, error: allowed ? undefined : '用户拒绝了此次高风险操作' }
+      return allowed ? { allowed: true } : { allowed: false, reasons: decision.reasons }
     }
     return { allowed: true }
   }
@@ -461,12 +450,12 @@ export function registerSecureTerminalHandlers(
     const base = assessShellCommand(command, WHITELIST.shell)
     const trustedWorkspaceOperation = base.code === 'shell.dangerous'
       && securityManager.isWorkspaceDangerousOperationTrusted(cwd, workspace?.roots || [])
-    const workspaceScoped = trustedWorkspaceOperation
+    const workspaceScoped: ExecutionDecision = trustedWorkspaceOperation
       ? {
           ...base,
-          kind: 'allow' as const,
+          kind: 'allow',
           code: 'shell.workspace-trusted',
-          reason: '危险命令位于已授权自动执行危险操作的工作区内',
+          reasons: [{ code: 'shellWorkspaceTrusted' }],
         }
       : base
     const resolvedCwd = path.resolve(cwd)
@@ -483,7 +472,7 @@ export function registerSecureTerminalHandlers(
   safeIpcHandle('security:authorizeCommand', async (
     event,
     request: { command: string; cwd?: string; approval?: AgentApprovalProof },
-  ): Promise<{ allowed: boolean; authorizationId?: string; reason?: string; risk?: string }> => {
+  ): Promise<{ allowed: boolean; authorizationId?: string; reasons?: ExecutionReason[]; risk?: string }> => {
     const command = typeof request?.command === 'string' ? request.command.trim() : ''
     const workspace = getWorkspace(event)
     const cwd = request?.cwd || workspace?.roots[0] || process.cwd()
@@ -492,22 +481,22 @@ export function registerSecureTerminalHandlers(
       request?.approval,
       commandApprovalScope(command, cwd),
     )
-    const authorization = decision.kind === 'ask'
+    const authorization: { allowed: boolean; reasons?: ExecutionReason[] } = decision.kind === 'ask'
       ? hasDockApproval
         ? { allowed: true }
-        : { allowed: false, error: '需要在工具 Dock 中批准，或审批凭据已过期' }
+        : { allowed: false, reasons: [{ code: 'terminalDockApprovalRequired' }] }
       : await authorizeDecision(
           OperationType.SHELL_EXECUTE,
           executionTarget(command, cwd),
           decision,
         )
     if (!authorization.allowed) {
-      return { allowed: false, reason: authorization.error || decision.reason, risk: decision.risk }
+      return { allowed: false, reasons: authorization.reasons ?? decision.reasons, risk: decision.risk }
     }
     return {
       allowed: true,
       authorizationId: issueCommandAuthorization(command, cwd),
-      reason: decision.reason,
+      reasons: decision.reasons,
       risk: decision.risk,
     }
   })
@@ -532,7 +521,7 @@ export function registerSecureTerminalHandlers(
     const workspace = getWorkspace(event)
 
     if (!mainWindow || mainWindow.isDestroyed()) {
-      return { success: false, error: '主窗口未就绪' }
+      return { success: false, error: 'Main window is not ready' }
     }
 
     // 1. 工作区检查（支持无工作区模式）
@@ -552,7 +541,7 @@ export function registerSecureTerminalHandlers(
       assessShellExecution(fullCommand, targetPath, workspace),
     )
     if (!policyAuthorization.allowed) {
-      return { success: false, error: policyAuthorization.error }
+      return { success: false, error: securityManager.localizeReasons(policyAuthorization.reasons ?? []) }
     }
 
     try {
@@ -585,7 +574,7 @@ export function registerSecureTerminalHandlers(
       })
       return {
         success: false,
-        error: `执行失败: ${errorDetail}`,
+        error: `Execution failed: ${errorDetail}`,
       }
     }
   })
@@ -635,7 +624,7 @@ export function registerSecureTerminalHandlers(
       requireExternalPathApproval(assessGitCommand(args, WHITELIST.git), outsideWorkspace),
     )
     if (!policyAuthorization.allowed) {
-      return { success: false, error: policyAuthorization.error }
+      return { success: false, error: securityManager.localizeReasons(policyAuthorization.reasons ?? []) }
     }
 
     // 5. 执行 Git 命令（优先 dugite，若已探测不可用则直接使用系统安全的 spawn）
@@ -1191,10 +1180,10 @@ export function registerSecureTerminalHandlers(
 
     if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
-        reason: '路径在工作区外',
+        reason: 'cwd outside workspace',
         cwd: targetCwd,
       })
-      return { success: false, error: '终端只能在工作区内创建' }
+      return { success: false, error: 'Terminals can only be created inside the workspace' }
     }
 
     try {
@@ -1507,7 +1496,7 @@ export function registerSecureTerminalHandlers(
         assessShellExecution(command, workingDir, workspace),
       )
       if (!policyAuthorization.allowed) {
-        return fail(policyAuthorization.error || 'Command was not approved')
+        return fail(securityManager.localizeReasons(policyAuthorization.reasons ?? []) || 'Command was not approved')
       }
     }
 
@@ -1561,7 +1550,12 @@ export function registerSecureTerminalHandlers(
       assessShellExecution(command, workingDir, workspace),
     )
     if (!policyAuthorization.allowed) {
-      return { success: false, output: '', exitCode: 1, error: policyAuthorization.error }
+      return {
+        success: false,
+        output: '',
+        exitCode: 1,
+        error: securityManager.localizeReasons(policyAuthorization.reasons ?? []),
+      }
     }
 
     return new Promise((resolve) => {

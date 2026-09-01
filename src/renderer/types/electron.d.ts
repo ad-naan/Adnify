@@ -579,7 +579,7 @@ export interface ElectronAPI {
   authorizeCommand: (request: { command: string; cwd?: string; approval?: import('@shared/security/executionPolicy').AgentApprovalProof }) => Promise<{
     allowed: boolean
     authorizationId?: string
-    reason?: string
+    reasons?: import('@shared/security/executionPolicy').ExecutionReason[]
     risk?: string
   }>
   onSecurityApprovalRequest: (callback: (request: import('@shared/security/executionPolicy').AppSecurityApprovalRequest) => void) => () => void

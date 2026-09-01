@@ -8,8 +8,6 @@ import { pickLocalized, type Language } from '@shared/i18n'
 export interface ReleaseDetailItem {
   title: string
   titleEn?: string
-  description?: string
-  descriptionEn?: string
   details?: string[]
   detailsEn?: string[]
 }
@@ -46,9 +44,9 @@ export interface MajorReleaseGroup {
 /**
  * 这份数据的双语约定：中文在 `x`，英文在可选的 `xEn`（没给就退回中文）。
  *
- * 读取收成两个函数，调用点就不用各自写 `language === 'zh' ? a : b` —— 那样和"漏迁移的
- * 内联文案"长得一模一样，评审时分不出来；也正是分类标签（`labelEn`）和明细条目
- * （`detailsEn`）一直只显示中文的原因：那两处根本没人写这个三元。
+ * 读取收成下面两个函数，调用点就不用各自写 `language === 'zh' ? a : b` —— 那样和"漏迁移的
+ * 内联文案"长得一模一样，评审时分不出来。分类标签（`labelEn`）和明细条目（`detailsEn`）
+ * 就曾经因为没人写那个三元，英文界面下一直显示中文。
  */
 export function releaseText(zh: string, en: string | undefined, lang: Language): string {
   return pickLocalized({ zh, en: en ?? zh }, lang)
@@ -7049,26 +7047,29 @@ export function getMajorReleaseGroups(): MajorReleaseGroup[] {
 }
 
 /**
- * 按关键词搜索更新记录
+ * 按关键词搜索更新记录。
+ *
+ * 中英两份文案一起进 haystack，不按当前界面语言挑字段：英文界面的用户搜英文词必须命中他
+ * 看得见的那份（`labelEn` / `detailsEn` 以前根本没被搜过），而中文关键词也不该因为切了语言
+ * 就搜不到。
  */
 export function searchChangelog(query: string): ReleaseNote[] {
   const q = query.trim().toLowerCase()
   if (!q) return CHANGELOG_DATA
 
-  return CHANGELOG_DATA.filter(r => {
-    if (r.version.toLowerCase().includes(q)) return true
-    if (r.title && r.title.toLowerCase().includes(q)) return true
-    if (r.titleEn && r.titleEn.toLowerCase().includes(q)) return true
-    if (r.highlight && r.highlight.toLowerCase().includes(q)) return true
-    if (r.highlightEn && r.highlightEn.toLowerCase().includes(q)) return true
-    for (const cat of r.categories) {
-      if (cat.label.toLowerCase().includes(q)) return true
-      for (const it of cat.items) {
-        if (it.title.toLowerCase().includes(q)) return true
-        if (it.titleEn && it.titleEn.toLowerCase().includes(q)) return true
-        if (it.details?.some(d => d.toLowerCase().includes(q))) return true
-      }
-    }
-    return false
-  })
+  const matches = (...values: Array<string | string[] | undefined>): boolean =>
+    values.flat().some(value => value?.toLowerCase().includes(q))
+
+  return CHANGELOG_DATA.filter(release =>
+    matches(release.version, release.title, release.titleEn, release.highlight, release.highlightEn) ||
+    release.categories.some(category =>
+      matches(category.label, category.labelEn) ||
+      category.items.some(item => matches(
+        item.title,
+        item.titleEn,
+        item.details,
+        item.detailsEn,
+      ))
+    )
+  )
 }

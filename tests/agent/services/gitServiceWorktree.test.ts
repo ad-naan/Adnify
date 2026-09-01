@@ -103,15 +103,6 @@ describe('gitService worktree lane commands', () => {
       .resolves.toEqual({ success: true, commit: 'def5678', committed: true })
   })
 
-  it('lists lane branches with a short-name format so callers never parse "* main"', async () => {
-    execSecure.mockResolvedValue(ok('adnify/lane-a-1\nadnify/lane-b-2\n'))
-    await expect(gitService.listBranchesWithPrefix('adnify/lane-', 'D:/repo')).resolves.toEqual(['adnify/lane-a-1', 'adnify/lane-b-2'])
-    expect(execSecure).toHaveBeenCalledWith(
-      ['--no-optional-locks', '-c', 'core.quotePath=false', 'branch', '--list', 'adnify/lane-*', '--format=%(refname:short)'],
-      'D:/repo',
-    )
-  })
-
   it('aborts a conflicting merge and reports the conflicting files', async () => {
     execSecure
       .mockResolvedValueOnce({ success: false, exitCode: 1, stdout: '', stderr: 'CONFLICT (content)' }) // merge

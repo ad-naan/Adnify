@@ -737,7 +737,7 @@ async function initializeModules(firstWin: BrowserWindow) {
   }
 
   securityManager.updateConfig(securityConfig)
-  securityManager.setLanguage(configStore.get('language') === 'en' ? 'en' : 'zh')
+  securityManager.setLanguage(asLanguage(configStore.get('language') as string | undefined))
   security.updateWhitelist(
     securityConfig.allowedShellCommands,
     securityConfig.allowedGitSubcommands,

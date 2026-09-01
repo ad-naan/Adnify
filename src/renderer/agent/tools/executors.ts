@@ -14,6 +14,7 @@ import { lspUriToPath, pathToLspUri } from '@shared/utils/uriUtils'
 import { compactAgentSymbols, extractLspRange, findAgentSymbols, findContainingAgentSymbol, limitAgentSymbolDepth, normalizeAgentNamePathPattern, toAgentSymbols } from '@shared/lsp/agentSymbols'
 import { applyLspTextEdits, collectWorkspaceTextEdits } from '@shared/lsp/textEdits'
 import { boundFileExcerpt, boundJsonOutput, clampOutputBudget, type JsonOutputStage } from '@shared/utils/toolOutput'
+import { securityReasonsText } from '@shared/security/securityReasonText'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
@@ -51,7 +52,7 @@ import type {
 } from '@/renderer/types/electron'
 import { detectTerminalShellFamily } from '@/renderer/services/terminalShell'
 import { RICH_DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, getFileExtension } from './executors/constants'
-import { getCurrentLanguage, getLocalizedText, getReplaceErrorMessage, translate } from './executors/i18n'
+import { getReplaceErrorMessage, translate } from './executors/i18n'
 import { formatRecommendation, formatUiuxResults } from './executors/uiuxFormat'
 
 // ===== 辅助函数 =====
@@ -2249,7 +2250,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     approval: ctx.securityApproval,
                 })
                 if (!authorization.allowed) {
-                    const reason = authorization.reason || 'Command was not approved'
+                    // 工具结果是给模型读的，固定英文：模型不需要跟着界面语言切换，
+                    // 而且这段文字会连同英文的 shell 报错一起回到对话里。
+                    const reason = securityReasonsText(authorization.reasons ?? [], 'en') || 'Command was not approved'
                     return {
                         success: false,
                         result: `Security approval required: ${reason}`,
@@ -3552,11 +3555,14 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: getLocalizedText(
-                    getCurrentLanguage(),
-                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n计划状态已安全存入 SQLite。\n需求文档：${mdPath}\n\n计划已显示在常驻看板中，请先审核，再点击“开始执行”。`,
-                    `Created task plan "${name}" with ${tasks.length} tasks.${reassignedCount ? ` ${reassignedCount} invalid provider/model assignment(s) were replaced with configured routes.` : ''}\nPlan state is stored transactionally in SQLite.\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
-                ),
+                result: translate('agent.tool.plan.created', {
+                    name,
+                    count: tasks.length,
+                    path: mdPath,
+                    reassigned: reassignedCount
+                        ? translate('agent.tool.plan.createdReassigned', { count: reassignedCount })
+                        : '',
+                }),
                 meta: { planId, storage: 'sqlite', stopLoop: true },
             }
         } catch (err) {
@@ -3744,11 +3750,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: getLocalizedText(
-                    getCurrentLanguage(),
-                    `规划已更新：\n${changes.map(c => `- ${c}`).join('\n')}\n\n请在 TaskBoard 中审核这些变更。`,
-                    `Plan updated:\n${changes.map(c => `- ${c}`).join('\n')}\n\nPlease review the changes in the TaskBoard.`,
-                ),
+                result: translate('agent.tool.plan.updated', {
+                    changes: changes.map(c => `- ${c}`).join('\n'),
+                }),
                 meta: { stopLoop: true },
             }
         } catch (err) {
@@ -3771,33 +3775,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             if (!plan) {
                 return {
                     success: false,
-                    result: getLocalizedText(
-                        getCurrentLanguage(),
-                        '错误：未找到可执行的任务规划。开始执行前，你需要先用 `create_task_plan` 创建规划。\n\n请按这个顺序进行：\n1. 使用 `ask_user` 收集需求\n2. 使用 `create_task_plan` 创建规划\n3. 等待用户审核并确认\n4. 然后再使用 `start_task_execution`',
-                        'Error: No task plan found. You must first create a plan using `create_task_plan` before starting execution.\n\nPlease:\n1. Use `ask_user` to gather requirements\n2. Use `create_task_plan` to create a plan\n3. Wait for user to review and approve\n4. Then use `start_task_execution`',
-                    )
+                    result: translate('agent.tool.plan.notFound')
                 }
             }
 
             if (plan.tasks.length === 0) {
                 return {
                     success: false,
-                    result: getLocalizedText(
-                        getCurrentLanguage(),
-                        '错误：当前规划没有任务，请先使用 `update_task_plan` 添加任务。',
-                        'Error: Plan has no tasks. Use `update_task_plan` to add tasks first.',
-                    )
+                    result: translate('agent.tool.plan.noTasks')
                 }
             }
 
             if (plan.status === 'executing') {
                 return {
                     success: false,
-                    result: getLocalizedText(
-                        getCurrentLanguage(),
-                        '错误：当前规划已经在执行中。',
-                        'Error: Plan is already being executed.',
-                    )
+                    result: translate('agent.tool.plan.alreadyExecuting')
                 }
             }
 
@@ -3812,11 +3804,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: getLocalizedText(
-                    getCurrentLanguage(),
-                    `已开始执行规划“${plan.name}”，共 ${plan.tasks.length} 个任务。\n\n进度会显示在 TaskBoard 中。`,
-                    `Started executing plan "${plan.name}" with ${plan.tasks.length} tasks.\n\nProgress will be shown in the TaskBoard.`,
-                ),
+                result: translate('agent.tool.plan.started', {
+                    name: plan.name,
+                    count: plan.tasks.length,
+                }),
                 meta: { stopLoop: true },
             }
         } catch (err) {

@@ -3,35 +3,19 @@
  * Shows app metadata, project links and contributors.
  */
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Code2, ExternalLink, Github, Sparkles, X, Zap, BookOpen } from 'lucide-react'
-import { CONTRIBUTORS, getCoreContributor, getOrbitContributors } from '@shared/config/contributors'
-import { t, type Language } from '@shared/i18n'
+import { CONTRIBUTORS, getCoreContributor } from '@shared/config/contributors'
+import { t } from '@shared/i18n'
 import { useStore } from '@store'
 import { logger } from '@utils/Logger'
 import { Modal } from '../ui'
 import { Logo } from '../common/Logo'
+import { ContributorGalaxy } from '../common/ContributorGalaxy'
 
 interface AboutDialogProps {
   onClose: () => void
-}
-
-interface RingSpec {
-  radius: number
-  capacity: number
-  angleOffset: number
-}
-
-interface RingLayout {
-  rings: RingSpec[]
-  avatarSize: number
-}
-
-interface RingAssignment<T> {
-  items: T[]
-  radius: number
-  angleOffset: number
 }
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
@@ -137,7 +121,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
           </div>
 
           <div className="adnify-about-community">
-            <ContributorGalaxy language={language} />
+            <ContributorGalaxy language={language} scale={0.9} />
             <div className="adnify-about-community-copy">
               <p className="adnify-about-eyebrow adnify-about-eyebrow-success">
                 {t('aboutDialog.communityBuilt', language)}
@@ -183,136 +167,6 @@ function SocialButton({ href, icon: Icon, label }: { href: string; icon: React.E
   )
 }
 
-function ContributorGalaxy({ language }: { language: Language }) {
-  const orbit = getOrbitContributors()
-  const core = getCoreContributor()
-  const layout = useMemo(() => computeGalaxyLayout(orbit.length), [orbit.length])
-  const rings = useMemo(() => assignRings(orbit, layout.rings), [orbit, layout.rings])
-  const visible = rings.flatMap(r => r.items)
-  const overflow = orbit.length - visible.length
-
-  return (
-    <div className="adnify-about-galaxy" role="img" aria-label={t('aboutDialog.contributorGalaxy', language)}>
-      <div className="adnify-about-galaxy-stars" aria-hidden="true" />
-      <svg className="adnify-about-galaxy-svg" viewBox="-150 -150 300 300" aria-hidden="true">
-        <defs>
-          <radialGradient id="aboutGalaxyHalo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="aboutGalaxyLine" cx="0" cy="0" r="140" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.64" />
-            <stop offset="62%" stopColor="rgb(var(--accent))" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle cx="0" cy="0" r="58" fill="url(#aboutGalaxyHalo)" />
-        {rings.flatMap((ring, ringIdx) =>
-          ring.items.map((_, idx) => {
-            const angle = ((idx + ring.angleOffset) / ring.items.length) * Math.PI * 2 - Math.PI / 2
-            const x = Math.cos(angle) * ring.radius
-            const y = Math.sin(angle) * ring.radius
-            const flatIdx = ringIdx * ring.items.length + idx
-            return (
-              <line
-                key={`line-${ringIdx}-${idx}`}
-                x1="0"
-                y1="0"
-                x2={x}
-                y2={y}
-                stroke="url(#aboutGalaxyLine)"
-                strokeWidth="0.75"
-                strokeLinecap="round"
-                className="adnify-about-galaxy-line"
-                style={{ animationDelay: `${0.18 + flatIdx * 0.05}s, ${(flatIdx * 0.3) % 4}s` }}
-              />
-            )
-          })
-        )}
-      </svg>
-
-      <a href={core.url} target="_blank" rel="noreferrer" className="adnify-about-galaxy-core" title={core.name}>
-        <span className="adnify-about-galaxy-core-pulse" aria-hidden="true" />
-        <img src={core.avatar} alt={core.name} draggable={false} />
-      </a>
-
-      {rings.map((ring, ringIdx) =>
-        ring.items.map((c, idx) => {
-          const angle = ((idx + ring.angleOffset) / ring.items.length) * Math.PI * 2 - Math.PI / 2
-          const x = Math.cos(angle) * ring.radius
-          const y = Math.sin(angle) * ring.radius
-          const flatIdx = ringIdx * ring.items.length + idx
-          return (
-            <a
-              key={c.name}
-              href={c.url}
-              target="_blank"
-              rel="noreferrer"
-              className="adnify-about-galaxy-node"
-              style={{
-                '--node-x': `${x}px`,
-                '--node-y': `${y}px`,
-                '--node-size': `${layout.avatarSize}px`,
-                '--node-enter-delay': `${0.25 + flatIdx * 0.05}s`,
-                '--node-float-delay': `${(flatIdx * 0.4) % 5}s`,
-              } as React.CSSProperties}
-              title={c.name}
-            >
-              <span className="adnify-about-galaxy-node-inner">
-                <img src={c.avatar} alt={c.name} draggable={false} />
-              </span>
-              <span className="adnify-about-galaxy-node-name">{c.name}</span>
-            </a>
-          )
-        })
-      )}
-
-      {overflow > 0 && (
-        <span className="adnify-about-galaxy-overflow" aria-label={`+${overflow}`}>
-          +{overflow}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function computeGalaxyLayout(count: number): RingLayout {
-  if (count <= 6) {
-    return {
-      rings: [{ radius: 96, capacity: 6, angleOffset: 0 }],
-      avatarSize: 34,
-    }
-  }
-  if (count <= 14) {
-    return {
-      rings: [
-        { radius: 64, capacity: 5, angleOffset: 0 },
-        { radius: 114, capacity: 9, angleOffset: 0.5 },
-      ],
-      avatarSize: 30,
-    }
-  }
-  return {
-    rings: [
-      { radius: 64, capacity: 5, angleOffset: 0 },
-      { radius: 116, capacity: 13, angleOffset: 0.5 },
-    ],
-    avatarSize: 26,
-  }
-}
-
-function assignRings<T>(items: T[], rings: RingSpec[]): RingAssignment<T>[] {
-  const result: RingAssignment<T>[] = []
-  let cursor = 0
-  for (const ring of rings) {
-    if (cursor >= items.length) break
-    const slice = items.slice(cursor, cursor + ring.capacity)
-    result.push({ items: slice, radius: ring.radius, angleOffset: ring.angleOffset })
-    cursor += slice.length
-  }
-  return result
-}
-
 function AboutStyles() {
   return (
     <style>{`
@@ -345,8 +199,7 @@ function AboutStyles() {
         pointer-events: none;
       }
 
-      .adnify-about-stars,
-      .adnify-about-galaxy-stars {
+      .adnify-about-stars {
         position: absolute;
         inset: 0;
         background-image:
@@ -621,162 +474,6 @@ function AboutStyles() {
         font-size: 12px;
         line-height: 1.5;
         color: rgb(var(--text-secondary));
-      }
-
-      .adnify-about-galaxy {
-        position: relative;
-        width: 300px;
-        height: 244px;
-        margin: 0 auto;
-        flex-shrink: 0;
-      }
-      .adnify-about-galaxy-stars {
-        opacity: 0.46;
-      }
-      .adnify-about-galaxy-svg {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 252px;
-        height: 252px;
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-      }
-      .adnify-about-galaxy-line {
-        opacity: 0;
-        animation:
-          adnify-about-galaxy-line-in 0.6s ease forwards,
-          adnify-about-galaxy-line-pulse 4s ease-in-out infinite;
-      }
-      @keyframes adnify-about-galaxy-line-in {
-        from { opacity: 0; stroke-dasharray: 0 200; }
-        to { opacity: 1; stroke-dasharray: 200 0; }
-      }
-      @keyframes adnify-about-galaxy-line-pulse {
-        0%, 100% { opacity: 0.35; }
-        50% { opacity: 0.72; }
-      }
-      .adnify-about-galaxy-core {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 58px;
-        height: 58px;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        z-index: 2;
-        animation: adnify-about-galaxy-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-      }
-      .adnify-about-galaxy-core img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 50%;
-        border: 2px solid rgb(var(--accent));
-        background: rgb(var(--surface));
-        box-shadow:
-          0 0 0 4px rgb(var(--accent) / 0.16),
-          0 8px 24px rgb(var(--accent) / 0.30);
-      }
-      .adnify-about-galaxy-core-pulse {
-        position: absolute;
-        inset: -8px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgb(var(--accent) / 0.42), transparent 70%);
-        animation: adnify-about-galaxy-pulse 2.4s ease-in-out infinite;
-        pointer-events: none;
-      }
-      @keyframes adnify-about-galaxy-pulse {
-        0%, 100% { opacity: 0.34; transform: scale(0.95); }
-        50% { opacity: 0.76; transform: scale(1.15); }
-      }
-      @keyframes adnify-about-galaxy-pop {
-        from { opacity: 0; transform: translate(-50%, -50%) scale(0); }
-        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-      }
-      .adnify-about-galaxy-node {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: var(--node-size, 34px);
-        height: var(--node-size, 34px);
-        opacity: 0;
-        z-index: 1;
-        transform: translate(-50%, -50%) scale(0.4);
-        animation: adnify-about-galaxy-node-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--node-enter-delay, 0s) forwards;
-      }
-      .adnify-about-galaxy-node-inner {
-        display: block;
-        width: 100%;
-        height: 100%;
-        animation: adnify-about-galaxy-node-float 6s ease-in-out var(--node-float-delay, 0s) infinite;
-      }
-      @keyframes adnify-about-galaxy-node-float {
-        0%, 100% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(-3px) scale(1.02); }
-      }
-      .adnify-about-galaxy-node img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 50%;
-        border: 2px solid rgb(var(--surface));
-        background: rgb(var(--surface));
-        box-shadow:
-          0 0 0 1px rgb(var(--border)),
-          0 4px 12px rgb(0 0 0 / 0.16);
-        transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.25s ease;
-      }
-      .adnify-about-galaxy-node:hover img {
-        transform: scale(1.18);
-        border-color: rgb(var(--accent));
-      }
-      .adnify-about-galaxy-node-name {
-        position: absolute;
-        top: calc(100% + 6px);
-        left: 50%;
-        padding: 2px 8px;
-        font-size: 10px;
-        font-weight: 700;
-        color: rgb(var(--text-secondary));
-        background: rgb(var(--surface) / 0.95);
-        border: 1px solid rgb(var(--border));
-        border-radius: 999px;
-        opacity: 0;
-        transform: translate(-50%, -4px);
-        transition: all 0.2s ease;
-        white-space: nowrap;
-        pointer-events: none;
-        backdrop-filter: blur(8px);
-      }
-      .adnify-about-galaxy-node:hover .adnify-about-galaxy-node-name {
-        opacity: 1;
-        transform: translate(-50%, 0);
-      }
-      .adnify-about-galaxy-overflow {
-        position: absolute;
-        right: 18px;
-        bottom: 8px;
-        padding: 3px 10px;
-        font-size: 11px;
-        font-weight: 800;
-        color: rgb(var(--accent));
-        background: rgb(var(--accent) / 0.12);
-        border: 1px solid rgb(var(--accent) / 0.3);
-        border-radius: 999px;
-        backdrop-filter: blur(8px);
-        animation: adnify-about-galaxy-pop 0.6s ease 0.8s both;
-      }
-      @keyframes adnify-about-galaxy-node-in {
-        0% {
-          opacity: 0;
-          transform: translate(-50%, -50%) scale(0.4);
-        }
-        60% { opacity: 1; }
-        100% {
-          opacity: 1;
-          transform: translate(calc(var(--node-x, 0px) - 50%), calc(var(--node-y, 0px) - 50%)) scale(1);
-        }
       }
 
       .adnify-about-footer {

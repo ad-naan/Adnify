@@ -4,13 +4,10 @@
  */
 
 import {
-  type McpPlatform,
-  type McpDependencyType,
   type McpPreset,
   type McpPresetCategory,
 } from '@shared/types/mcp'
-import { platform as runtimePlatform } from '@shared/utils/pathUtils'
-import { t, type Language } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
 /** 分类显示名称 */
 export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: string }> = {
@@ -148,7 +145,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Show all tables in the database', 'Query users where age > 18', 'Describe the orders table structure'],
     usageExamplesZh: ['显示数据库中的所有表', '查询年龄大于 18 的用户', '描述 orders 表的结构'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
+      { type: 'uv', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
   {
@@ -408,7 +405,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Fetch the content of https://example.com', 'Read this article and summarize it: [URL]'],
     usageExamplesZh: ['获取 https://example.com 的内容', '阅读这篇文章并总结：[URL]'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
+      { type: 'uv', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
   {
@@ -650,7 +647,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Search for the latest news about AI', 'Find tutorials about TypeScript'],
     usageExamplesZh: ['搜索 AI 最新动态', '查找 TypeScript 教程'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
+      { type: 'uv', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
 
@@ -676,7 +673,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['What time is it now in Tokyo?', 'Convert 3pm EST to Beijing time'],
     usageExamplesZh: ['现在东京是几点？', '将美东时间下午3点转换为北京时间'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
+      { type: 'uv', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
 
@@ -774,22 +771,6 @@ export const MCP_PRESETS: McpPreset[] = [
   },
 ]
 
-/** 根据分类获取预设 */
-export function getPresetsByCategory(category: McpPresetCategory): McpPreset[] {
-  return MCP_PRESETS.filter(p => p.category === category)
-}
-
-/** 根据 ID 获取预设 */
-export function getPresetById(id: string): McpPreset | undefined {
-  return MCP_PRESETS.find(p => p.id === id)
-}
-
-/** 获取所有分类 */
-export function getAllCategories(): McpPresetCategory[] {
-  const categories = new Set(MCP_PRESETS.map(p => p.category))
-  return Array.from(categories)
-}
-
 /** 搜索预设 */
 export function searchPresets(query: string): McpPreset[] {
   const lowerQuery = query.toLowerCase()
@@ -801,41 +782,16 @@ export function searchPresets(query: string): McpPreset[] {
   )
 }
 
-/** 获取当前平台 */
-export function getCurrentPlatform(): McpPlatform {
-  if (runtimePlatform.isWindows) return 'windows'
-  if (runtimePlatform.isMac) return 'macos'
-  return 'linux'
-}
-
-/** 检查预设是否支持当前平台 */
-export function isPresetSupportedOnCurrentPlatform(preset: McpPreset): boolean {
-  if (!preset.platforms || preset.platforms.length === 0) {
-    return true // 不指定则支持所有平台
-  }
-  return preset.platforms.includes(getCurrentPlatform())
-}
-
-/** 获取预设的依赖检查命令 */
-export function getPresetDependencyChecks(preset: McpPreset): Array<{ type: McpDependencyType; command: string }> {
-  if (!preset.dependencies) return []
-
-  return preset.dependencies
-    .filter(dep => dep.checkCommand)
-    .map(dep => ({
-      type: dep.type,
-      command: dep.checkCommand!,
-    }))
-}
-
-/** 获取预设的缺失依赖提示 */
-export function getPresetMissingDependencyNote(preset: McpPreset, missingType: McpDependencyType, language: Language): string | undefined {
-  const dep = preset.dependencies?.find(d => d.type === missingType)
-  if (!dep?.installNoteKey) return undefined
-  return t(dep.installNoteKey, language)
-}
-
-/** 根据平台过滤预设 */
-export function getPresetsForCurrentPlatform(): McpPreset[] {
-  return MCP_PRESETS.filter(p => !p.deprecated && isPresetSupportedOnCurrentPlatform(p))
+/**
+ * 预设声明的运行时依赖提示（"装 uv"这类）。
+ *
+ * 只出提示，不去探测机器上装没装：探测要在渲染进程里拉一条 shell 通道跑 `uvx --version`，
+ * 那是另一件事（要过安全审批、要处理超时和 PATH 差异）。四个 Python 预设跑不起来时，
+ * 用户需要的信息就是这一句话，先无条件给出来。
+ */
+export function getPresetDependencyNotes(preset: McpPreset, language: Language): string[] {
+  return (preset.dependencies ?? [])
+    .map(dependency => dependency.installNoteKey)
+    .filter((key): key is TranslationKey => Boolean(key))
+    .map(key => t(key, language))
 }

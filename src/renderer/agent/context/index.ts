@@ -24,7 +24,7 @@ export {
 } from '../domains/context/summaryService'
 
 // Handoff 管理
-export { buildHandoffContext, buildWelcomeMessage } from '../domains/context/HandoffManager'
+export { buildHandoffContext } from '../domains/context/HandoffManager'
 export {
   buildWorkingMemoryContext,
   calculateWorkingMemoryHealth,

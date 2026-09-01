@@ -16,6 +16,7 @@ import type {
   SessionWorkerResponse,
   SessionWorkerResult,
 } from '@shared/types/sessionPersistence'
+import { PLAN_HISTORY_WINDOW } from '@shared/constants'
 
 interface OpenDatabase {
   database: DatabaseSync
@@ -1213,8 +1214,8 @@ function writePlan(database: DatabaseSync, value: unknown): void {
 
 function readPlans(database: DatabaseSync): unknown[] {
   const rows = database.prepare(
-    'SELECT payload_json FROM plans ORDER BY updated_at DESC, id ASC',
-  ).all() as Array<{ payload_json: string }>
+    'SELECT payload_json FROM plans ORDER BY updated_at DESC, id ASC LIMIT ?',
+  ).all(PLAN_HISTORY_WINDOW) as Array<{ payload_json: string }>
   return rows.map(row => JSON.parse(row.payload_json))
 }
 

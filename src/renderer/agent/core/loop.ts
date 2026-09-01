@@ -19,7 +19,7 @@ import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
 import {
   messageContentHasImages, resolveMessageRouting, resolveRuntimeModelRoutingConfig, } from '@shared/config/modelRouting'
-import { pickLocalizedText, translateAgentText } from '../utils/agentText'
+import { translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
 import {
   injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromAllUserMessages, stripImagesFromLatestUserMessage, } from '../services/multimodalRoutingService'
@@ -29,7 +29,7 @@ import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
 import type { LLMMessage } from '@shared/types'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
-import { t } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
 export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
@@ -37,15 +37,11 @@ const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
 const importLintService = () => import('../services/lintService').then(m => m.lintService)
 
-function getLocalizedText(language: string, zh: string, en: string): string {
-  return pickLocalizedText(zh, en, language as 'en' | 'zh')
+function translate(language: Language, key: Parameters<typeof translateAgentText>[0], params?: Record<string, string | number>): string {
+  return translateAgentText(key, params, language)
 }
 
-function translate(language: string, key: Parameters<typeof translateAgentText>[0], params?: Record<string, string | number>): string {
-  return translateAgentText(key, params, language as 'en' | 'zh')
-}
-
-function getLoopCheckMessage(language: string, loopCheck: LoopCheckResult): string {
+function getLoopCheckMessage(language: Language, loopCheck: LoopCheckResult): string {
   const details = loopCheck.details
   if (!details) {
     return loopCheck.reason || loopCheck.warning || translate(language, 'agent.loop.generic')
@@ -85,7 +81,7 @@ function getLoopCheckMessage(language: string, loopCheck: LoopCheckResult): stri
   }
 }
 
-function getLoopCheckSuggestion(language: string, loopCheck: LoopCheckResult): string | undefined {
+function getLoopCheckSuggestion(language: Language, loopCheck: LoopCheckResult): string | undefined {
   const details = loopCheck.details
   switch (details?.category) {
     case 'exact_repeat':
@@ -109,31 +105,19 @@ function getLoopCheckSuggestion(language: string, loopCheck: LoopCheckResult): s
   }
 }
 
-function buildSoftLimitFeedback(language: string, title: string, detail: string, suggestion?: string): string {
-  if (language === 'zh') {
-    return [
-      `系统警告: ${title}`,
-      detail,
-      suggestion ? `建议: ${suggestion}` : '',
-      '你本轮接下来禁止继续调用任何工具。',
-      '不要中止会话，也不要把这次限制当作致命错误。',
-      '请基于当前已有信息直接完成收束。',
-      '优先输出当前结论、已完成内容、缺失信息，或更高效的下一步方案。',
-    ].filter(Boolean).join('\n')
-  }
-
+function buildSoftLimitFeedback(language: Language, title: string, detail: string, suggestion?: string): string {
   return [
-    `System warning: ${title}`,
+    t('agent.softLimit.warning', language, { title }),
     detail,
-    suggestion ? `Suggestion: ${suggestion}` : '',
-    'You must not call any more tools in this turn.',
-    'Do not abort the conversation and do not treat this limit as a fatal error.',
-    'Finish by concluding with the information already available.',
-    'Prioritize the current conclusion, completed work, missing information, or a more efficient next step.',
+    suggestion ? t('agent.softLimit.suggestion', language, { suggestion }) : '',
+    t('agent.softLimit.noMoreTools', language),
+    t('agent.softLimit.notFatal', language),
+    t('agent.softLimit.concludeNow', language),
+    t('agent.softLimit.prioritize', language),
   ].filter(Boolean).join('\n')
 }
 
-function buildToolRoutingFeedback(language: string, detail: string, suggestion?: string): string {
+function buildToolRoutingFeedback(language: Language, detail: string, suggestion?: string): string {
   return [
     translate(language, 'agent.routing.feedback.intro'),
     detail,
@@ -142,30 +126,29 @@ function buildToolRoutingFeedback(language: string, detail: string, suggestion?:
   ].filter(Boolean).join('\n')
 }
 
-function formatLoopDiagnostic(language: string, loopCheck?: LoopCheckResult): string {
+/**
+ * 循环诊断明细。字段标签走 i18n key，值本身是机器数据（category / pattern 等原样输出）。
+ */
+function formatLoopDiagnostic(language: Language, loopCheck?: LoopCheckResult): string {
   const details = loopCheck?.details
   if (!details) return ''
 
-  const lines: string[] = []
-  if (language === 'zh') {
-    lines.push('诊断信息:')
-    lines.push(`- 类型: ${details.category}`)
-    if (details.toolName) lines.push(`- 工具: ${details.toolName}`)
-    if (typeof details.count === 'number') lines.push(`- 次数: ${details.count}`)
-    if (typeof details.threshold === 'number') lines.push(`- 阈值: ${details.threshold}`)
-    if (details.target) lines.push(`- 目标: ${details.target}`)
-    if (details.pattern) lines.push(`- 模式: ${details.pattern}`)
-  } else {
-    lines.push('Diagnostics:')
-    lines.push(`- Category: ${details.category}`)
-    if (details.toolName) lines.push(`- Tool: ${details.toolName}`)
-    if (typeof details.count === 'number') lines.push(`- Count: ${details.count}`)
-    if (typeof details.threshold === 'number') lines.push(`- Threshold: ${details.threshold}`)
-    if (details.target) lines.push(`- Target: ${details.target}`)
-    if (details.pattern) lines.push(`- Pattern: ${details.pattern}`)
-  }
+  const fields: Array<[TranslationKey, string | number | null | undefined]> = [
+    ['agent.diagnostic.category', details.category],
+    ['agent.diagnostic.tool', details.toolName],
+    ['agent.diagnostic.count', details.count],
+    ['agent.diagnostic.threshold', details.threshold],
+    ['agent.diagnostic.target', details.target],
+    ['agent.diagnostic.pattern', details.pattern],
+  ]
 
-  return lines.join('\n')
+  return [
+    t('agent.diagnostic.title', language),
+    ...fields
+      // 0 要保留（count / threshold 是数字），空值和空串丢掉。
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => `- ${t(key, language)}: ${value}`),
+  ].join('\n')
 }
 
 function executeModePostProcessHook(
@@ -473,12 +456,8 @@ export async function runLoop(
           const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
           threadStore.addSystemAlertPart(assistantId, {
             alertType: 'warning',
-            title: getLocalizedText(language, '多模态回退', 'Multimodal Fallback'),
-            message: getLocalizedText(
-              language,
-              `多模态模型调用失败，已回退到主模型继续处理。${reason}`,
-              `The multimodal model failed, so Adnify fell back to the primary model.${reason}`,
-            ),
+            title: t('agent.alert.multimodalFallbackTitle', language),
+            message: t('agent.alert.multimodalFallbackMessage', language, { reason }),
             compact: true,
           })
         }
@@ -527,7 +506,7 @@ export async function runLoop(
       logger.agent.error('[Loop] Soft-limit recovery failed:', finalResult.error)
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'error',
-        title: getLocalizedText(language, '模型错误', 'Model Error'),
+        title: t('agent.alert.modelErrorTitle', language),
         message: finalResult.error,
       })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
@@ -557,8 +536,8 @@ export async function runLoop(
       logger.agent.error('[Loop] No messages to send')
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'error',
-        title: getLocalizedText(language, '请求异常', 'Request Error'),
-        message: getLocalizedText(language, '当前没有可发送给模型的消息。', 'No messages were available to send to the model.'),
+        title: t('agent.alert.requestErrorTitle', language),
+        message: t('agent.alert.noMessages', language),
       })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
       EventBus.emit({ type: 'loop:end', reason: 'no_messages', threadId, assistantId, requestId, planTaskId: context.planTaskId })
@@ -592,12 +571,8 @@ export async function runLoop(
       logger.agent.warn('[Loop] Image request failed; retrying once with text-only messages:', initialImageError)
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'warning',
-        title: getLocalizedText(language, '图片输入已降级', 'Image Input Fallback'),
-        message: getLocalizedText(
-          language,
-          '当前端点未能处理这次图片请求，已自动移除图片并继续文本处理。',
-          'The endpoint could not process this image request. Adnify removed the images and continued with text-only input.',
-        ),
+        title: t('agent.alert.imageFallbackTitle', language),
+        message: t('agent.alert.imageFallbackMessage', language),
         compact: true,
       })
 
@@ -641,7 +616,7 @@ export async function runLoop(
       logger.agent.error('[Loop] LLM error:', result.error)
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'error',
-        title: getLocalizedText(language, '模型错误', 'Model Error'),
+        title: t('agent.alert.modelErrorTitle', language),
         message: result.error,
       })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
@@ -968,12 +943,8 @@ export async function runLoop(
 
   if (exhaustedIterations) {
     const { language } = useStore.getState()
-    const limitTitle = getLocalizedText(language, '达到工具调用上限', 'Tool Call Limit Reached')
-    const limitMessage = getLocalizedText(
-      language,
-      `当前轮次已达到最大工具调用次数（${maxIterations} 次）。可在设置 → Agent → 最大循环中调高上限。`,
-      `The agent reached this turn's tool call limit (${maxIterations}). You can raise it in Settings → Agent → Max Loops.`
-    )
+    const limitTitle = t('agent.alert.toolLimitTitle', language)
+    const limitMessage = t('agent.alert.toolLimitMessage', language, { limit: maxIterations })
 
     logger.agent.warn('[Loop] Reached maximum iterations')
     threadStore.addSystemAlertPart(assistantId, {
@@ -987,11 +958,7 @@ export async function runLoop(
     await completeWithSoftLimitFeedback(
       limitTitle,
       limitMessage,
-      getLocalizedText(
-        language,
-        '请停止继续调工具，直接总结当前进展、说明还剩哪些未完成，以便用户决定是否继续。',
-        'Stop calling tools. Summarize what you accomplished and what remains, so the user can decide whether to continue.'
-      )
+      t('agent.alert.toolLimitSuggestion', language),
     )
   }
 }

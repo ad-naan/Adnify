@@ -3,7 +3,7 @@
  *
  * 项目里曾经有 1300+ 处 `language === 'zh' ? '中文' : 'English'`，同一句话散在多个文件、
  * 加语言等于全项目搜索替换。清理之后剩下的都记在下面这份清单里：它们本身就不是文案 ——
- * 语言代码、数组下标、`pickLocalizedText` 这类按语言选数据结构的分支。
+ * 语言代码、数组下标、`pickLocalized` 这类按语言选数据结构的分支。
  *
  * 这个测试只做一件事：数量只允许变小。
  * - 新文件里再写内联三元 → 红，请改成 `t('key', asLanguage(language))`
@@ -92,6 +92,37 @@ describe('inline bilingual text', () => {
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), found)
     // toEqual 而不是"小于等于"：清单必须和现状完全一致，否则失败信息里看不出该改哪一行。
     expect(found).toEqual(BUDGET)
+  })
+
+  it('never branches whole text blocks on the language', () => {
+    // 三元只是最显眼的写法。同一件事还有两种躲过上面那条正则的形态，这个 pocket 就是这么活下来的：
+    // 1. `if (language === 'zh') { return '整段中文' }` + 下面一段一模一样结构的英文
+    //    —— 两个分支各自拼一遍 sections 数组，加一种语言要改两处。
+    // 2. `getLocalizedText(language, zh, en)` 这类把双语对藏进函数参数的 helper
+    //    —— 调用点看着很干净，实际上文案还是内联的，locale 表里一个字都没有。
+    // 例外只有一种：按语言决定要不要走某条数据通路（比如一言 API 只有中文内容），
+    // 这种分支里不带任何文案，写在 DATA_GATES 里。
+    const DATA_GATES = ['src/renderer/components/welcome/poster/workPosterQuote.ts']
+    const LANGUAGE_IF = /if\s*\(\s*(language|lang|locale)\s*(===|!==)\s*['"](zh|en)['"]\s*\)/g
+    const BILINGUAL_PARAMS = /\(\s*(language|lang)\s*:\s*\w+\s*,\s*zh\s*:\s*string\s*,\s*en\s*:\s*string/g
+    const offenders: Record<string, number> = {}
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!/\.tsx?$/.test(entry.name) || /\.(test|spec|property)\.tsx?$/.test(entry.name)) continue
+        const relative = path.relative(REPO_ROOT, full).split(path.sep).join('/')
+        if (DATA_GATES.includes(relative)) continue
+        const source = fs.readFileSync(full, 'utf8')
+        const count = (source.match(LANGUAGE_IF) ?? []).length + (source.match(BILINGUAL_PARAMS) ?? []).length
+        if (count > 0) offenders[relative] = count
+      }
+    }
+    for (const root of ROOTS) walk(path.join(REPO_ROOT, root))
+    expect(offenders).toEqual({})
   })
 
   it('never lets a t() call site cast its key', () => {

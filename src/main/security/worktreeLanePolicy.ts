@@ -70,42 +70,42 @@ export function assessWorktreeLaneCommand(
   cwd: string,
   workspaceRoots: readonly string[],
 ): WorktreeLaneDecision {
-  if (!cwd) return deny('缺少执行目录')
-  if (workspaceRoots.length === 0) return deny('没有已授权的工作区根，车道通道不可用')
-  if (!isWithinAnyRoot(cwd, workspaceRoots)) return deny('执行目录不在已授权的工作区内')
+  if (!cwd) return deny('Missing working directory')
+  if (workspaceRoots.length === 0) return deny('No authorized workspace root; the lane channel is unavailable')
+  if (!isWithinAnyRoot(cwd, workspaceRoots)) return deny('Working directory is outside the authorized workspace')
 
-  if (args[0] !== 'worktree') return deny('车道通道只接受 git worktree 命令')
+  if (args[0] !== 'worktree') return deny('The lane channel only accepts git worktree commands')
   const subcommand = args[1]
   if (!subcommand || !LANE_SUBCOMMANDS.has(subcommand)) {
-    return deny(`车道通道不支持的子命令：${subcommand || '(空)'}`)
+    return deny(`Unsupported lane subcommand: ${subcommand || '(empty)'}`)
   }
 
   const operands = args.slice(2)
   if (operands.some(operand => typeof operand !== 'string' || operand.length === 0)) {
-    return deny('车道命令包含空参数')
+    return deny('The lane command contains an empty argument')
   }
 
   if (subcommand === 'add') {
     const [flag, branch, target, committish, ...rest] = operands
-    if (flag !== '-b' || rest.length > 0) return deny('车道创建只接受 worktree add -b <分支> <路径> <提交>')
-    if (!branch || !isLaneBranch(branch)) return deny('车道分支必须以 adnify/lane- 开头')
-    if (!target || !isLanePath(target, workspaceRoots)) return deny('车道目录必须位于工作区的 .adnify/worktrees 之内')
-    if (!committish || !isCommittish(committish)) return deny('车道基点只接受 HEAD 或提交哈希')
+    if (flag !== '-b' || rest.length > 0) return deny('Lane creation only accepts worktree add -b <branch> <path> <committish>')
+    if (!branch || !isLaneBranch(branch)) return deny(`Lane branches must start with ${WORKTREE_LANE_BRANCH_PREFIX}`)
+    if (!target || !isLanePath(target, workspaceRoots)) return deny(`Lane directories must live under ${WORKTREE_LANE_DIR} inside the workspace`)
+    if (!committish || !isCommittish(committish)) return deny('Lane base only accepts HEAD or a commit hash')
     return { allowed: true, subcommand }
   }
 
   if (subcommand === 'remove') {
     const targets = operands.filter(operand => operand !== '--force')
-    if (targets.length !== 1 || operands.length > 2) return deny('车道删除只接受 worktree remove [--force] <路径>')
-    if (!isLanePath(targets[0], workspaceRoots)) return deny('车道目录必须位于工作区的 .adnify/worktrees 之内')
+    if (targets.length !== 1 || operands.length > 2) return deny('Lane removal only accepts worktree remove [--force] <path>')
+    if (!isLanePath(targets[0], workspaceRoots)) return deny(`Lane directories must live under ${WORKTREE_LANE_DIR} inside the workspace`)
     return { allowed: true, subcommand }
   }
 
   if (subcommand === 'list') {
-    if (operands.length !== 1 || operands[0] !== '--porcelain') return deny('车道列举只接受 worktree list --porcelain')
+    if (operands.length !== 1 || operands[0] !== '--porcelain') return deny('Lane listing only accepts worktree list --porcelain')
     return { allowed: true, subcommand }
   }
 
-  if (operands.length > 0) return deny('车道回收只接受 worktree prune')
+  if (operands.length > 0) return deny('Lane pruning only accepts worktree prune')
   return { allowed: true, subcommand: 'prune' }
 }

@@ -9,7 +9,7 @@ import { Search, Plus, ChevronRight, ExternalLink, Check, AlertCircle, Loader2, 
 import { Button, Input, Modal } from '@components/ui'
 import { api } from '@renderer/services/electronAPI'
 import {
-  MCP_PRESETS, MCP_CATEGORY_NAMES, searchPresets, } from '@shared/config/mcpPresets'
+  MCP_PRESETS, MCP_CATEGORY_NAMES, searchPresets, getPresetDependencyNotes, } from '@shared/config/mcpPresets'
 import {
   type McpPreset, type McpPresetCategory, type McpEnvConfig, } from '@shared/types/mcp'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
@@ -131,6 +131,12 @@ export default function McpAddServerModal({
     }
     return presets.filter(p => !existingServerIds.includes(p.id))
   }, [searchQuery, selectedCategory, existingServerIds])
+
+  // 预设声明的运行时依赖提示（例如 uv），配置视图里给出安装入口
+  const dependencyNotes = useMemo(
+    () => (selectedPreset ? getPresetDependencyNotes(selectedPreset, language) : []),
+    [selectedPreset, language],
+  )
 
   // 分类列表
   const categories: Array<{ id: McpPresetCategory | 'all'; name: string }> = [
@@ -674,6 +680,18 @@ export default function McpAddServerModal({
                     {t('copy', language)}
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {dependencyNotes.length > 0 && (
+              <div className="p-4 bg-surface/30 border border-border rounded-lg space-y-1.5">
+                <div className="flex items-center gap-2 text-text-secondary text-sm font-medium">
+                  <Boxes className="w-4 h-4" />
+                  {t('mcpAddServerModal.dependenciesRequired', language)}
+                </div>
+                {dependencyNotes.map(note => (
+                  <p key={note} className="text-sm text-text-muted">{note}</p>
+                ))}
               </div>
             )}
 

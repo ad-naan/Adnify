@@ -85,7 +85,6 @@ vi.mock('@renderer/services/internalWriteTracker', () => ({
 vi.mock('@renderer/agent/services/skillService', () => ({ skillService: {} }))
 vi.mock('@renderer/agent/utils/agentText', () => ({
   getAgentLanguage: vi.fn(() => 'en'),
-  pickLocalizedText: vi.fn((_zh: string, en: string) => en),
   translateAgentText: vi.fn((key: string) => key),
 }))
 vi.mock('@renderer/agent/tools/fileWriteStrategy', () => ({ guardWriteFile: vi.fn() }))

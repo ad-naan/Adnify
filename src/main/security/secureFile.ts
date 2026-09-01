@@ -4,6 +4,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
+import { t } from '@shared/i18n'
 import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
@@ -13,7 +14,7 @@ import { securityManager, OperationType } from './securityModule'
 import { authorizeUserFile, isUserAuthorizedFile } from './userFileAccess'
 import * as os from 'os'
 import { getUserConfigDir } from '../services/configPath'
-import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof } from '@shared/security/executionPolicy'
+import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof, type ExecutionReason } from '@shared/security/executionPolicy'
 
 // 导入拆分的模块
 import { readFileWithEncodingInfo, readFileSized, readTextFileChunk, writeFileAtomic, getFileStats } from './fileUtils'
@@ -227,10 +228,7 @@ export function registerSecureFileHandlers(
         const approved = await securityManager.requestApproval(
           OperationType.FILE_READ,
           filePath,
-          {
-            zh: '用户选择的文件位于系统或凭据敏感路径',
-            en: 'The selected file is in a system-sensitive or credential-sensitive path',
-          },
+          [{ code: 'fileSensitivePath' }],
         )
         if (!approved) return null
       }
@@ -314,7 +312,7 @@ export function registerSecureFileHandlers(
 
     if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：路径未获授权',
+        reason: 'hard boundary: path is not authorized',
       })
       return null
     }
@@ -371,7 +369,7 @@ export function registerSecureFileHandlers(
 
     if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：路径未获授权',
+        reason: 'hard boundary: path is not authorized',
       })
       return null
     }
@@ -410,7 +408,7 @@ export function registerSecureFileHandlers(
     const workspace = getWorkspaceSessionFn(event)
     if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：路径未获授权',
+        reason: 'hard boundary: path is not authorized',
         richContent: true,
       })
       return {
@@ -456,7 +454,7 @@ export function registerSecureFileHandlers(
     if (targetPath) {
       if (!canAccessFile(targetPath, workspace, 'read')) {
         securityManager.logOperation(OperationType.FILE_READ, targetPath, false, {
-          reason: '安全底线：路径未获授权',
+          reason: 'hard boundary: path is not authorized',
           imageAnalysis: true,
         })
         return {
@@ -484,7 +482,7 @@ export function registerSecureFileHandlers(
 
     if (!canAccessFile(filePath, workspace, 'write')) {
       securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
-        reason: '安全底线：路径未获授权',
+        reason: 'hard boundary: path is not authorized',
       })
       return mutationFailure('policy_denied', 'Path is not authorized for writing.')
     }
@@ -494,7 +492,7 @@ export function registerSecureFileHandlers(
     for (const pattern of forbiddenPatterns) {
       if (pattern.test(filePath)) {
         securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
-          reason: '安全底线：禁止类型',
+          reason: 'hard boundary: forbidden file type',
         })
         return mutationFailure('policy_denied', 'This file type cannot be written.')
       }
@@ -554,7 +552,7 @@ export function registerSecureFileHandlers(
       const workspace = getWorkspaceSessionFn(event)
       if (!canAccessFile(currentPath, workspace, 'write')) {
         securityManager.logOperation(OperationType.FILE_WRITE, currentPath, false, {
-          reason: '安全底线：路径未获授权',
+          reason: 'hard boundary: path is not authorized',
         })
         return null
       }
@@ -587,7 +585,12 @@ export function registerSecureFileHandlers(
     if (!result.canceled && result.filePath) {
       const savePath = result.filePath
       if (securityManager.isSensitivePath(savePath)) {
-        showSecurityError(mainWindow, '安全警告', '不允许保存到系统敏感路径')
+        const language = securityManager.uiLanguage()
+        showSecurityError(
+          mainWindow,
+          t('securityApproval.sensitiveSaveTitle', language),
+          t('securityApproval.sensitiveSaveBlocked', language),
+        )
         return null
       }
 
@@ -683,18 +686,18 @@ export function registerSecureFileHandlers(
     const hasExactManageGrant = isUserAuthorizedFile(filePath, 'manage')
     if (!canAccessFile(filePath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-        reason: '安全底线：超出工作区边界',
+        reason: 'hard boundary: outside the workspace',
       })
       return mutationFailure('policy_denied', 'Path is outside the authorized workspace.')
     }
 
-    const riskReasons: Array<{ zh: string; en: string }> = []
+    const riskReasons: ExecutionReason[] = []
 
     // 关键配置文件需要更明确的审批，而不是直接拒绝。
     const criticalFiles = [/\.env$/i, /package-lock\.json$/i, /yarn\.lock$/i, /pnpm-lock\.yaml$/i]
     for (const pattern of criticalFiles) {
       if (pattern.test(filePath)) {
-        riskReasons.push({ zh: '目标是关键配置文件', en: 'The target is a critical configuration file' })
+        riskReasons.push({ code: 'fileCriticalConfig' })
         break
       }
     }
@@ -707,7 +710,7 @@ export function registerSecureFileHandlers(
         const dirSize = await calculateDirectorySize(filePath)
         if (dirSize > 100 * 1024 * 1024) {
           const size = (dirSize / 1024 / 1024).toFixed(1)
-          riskReasons.push({ zh: `目录较大（${size} MB）`, en: `The directory is large (${size} MB)` })
+          riskReasons.push({ code: 'fileLargeDirectory', params: { size } })
         }
       }
     } catch (err) {
@@ -734,24 +737,15 @@ export function registerSecureFileHandlers(
     )
     if (approval && !hasAgentApproval) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-        reason: 'Agent Dock 审批凭据无效、已过期或目标不匹配',
+        reason: 'agent dock approval proof is invalid, expired, or mismatched',
       })
       return mutationFailure('policy_denied', 'Approval proof is invalid or expired.')
     }
     if (!hasExactManageGrant && !hasAgentApproval && !isInternalAgentTemp && !isTrustedWorkspaceOperation) {
-      const reason = riskReasons.length > 0
-        ? {
-            zh: `删除操作不可恢复；${riskReasons.map(item => item.zh).join('；')}`,
-            en: `Deletion cannot be undone; ${riskReasons.map(item => item.en).join('; ')}`,
-          }
-        : {
-            zh: '删除文件或目录属于不可恢复操作',
-            en: 'Deleting a file or directory cannot be undone',
-          }
       const approved = await securityManager.requestApproval(
         OperationType.FILE_DELETE,
         filePath,
-        reason,
+        [{ code: 'fileDeleteIrreversible' }, ...riskReasons],
         isInsideWorkspace ? 'app' : 'native',
       )
       if (!approved) return mutationFailure('policy_denied', 'Deletion was not approved.')
@@ -788,7 +782,7 @@ export function registerSecureFileHandlers(
     const workspace = getWorkspaceSessionFn(event)
     if (!canAccessFile(sourcePath, workspace, 'manage') || !canAccessFile(destinationPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
-        reason: '安全底线：超出工作区边界',
+        reason: 'hard boundary: outside the workspace',
         destinationPath,
       })
       return mutationFailure('policy_denied', 'Source or destination is outside the authorized workspace.')
@@ -824,7 +818,7 @@ export function registerSecureFileHandlers(
     const workspace = getWorkspaceSessionFn(event)
     if (!canAccessFile(oldPath, workspace, 'manage') || !canAccessFile(newPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
-        reason: '安全底线：超出工作区边界',
+        reason: 'hard boundary: outside the workspace',
         newPath,
       })
       return mutationFailure('policy_denied', 'Source or destination is outside the authorized workspace.')

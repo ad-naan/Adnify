@@ -8,7 +8,7 @@ import { LEVEL_NAMES, updateStats, type CompressionStats } from '../domains/cont
 import { executeAutoHandoff } from '../services/autoHandoffService'
 import { prepareHandoffForThread, type PreparedHandoffResult } from '../services/handoffSessionService'
 import { getMessageText, type ChatMessage, type ChatThread, type UserMessage } from '../types'
-import { pickLocalizedText } from '../utils/agentText'
+import { t } from '@shared/i18n'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { StructuredSummary } from '../domains/context/types'
 import type { ExecutionContext } from './types'
@@ -16,10 +16,6 @@ import type { ExecutionContext } from './types'
 export interface CompressionCheckResult {
   level: 0 | 1 | 2 | 3 | 4
   needsHandoff: boolean
-}
-
-function getLocalizedText(language: string, zh: string, en: string): string {
-  return pickLocalizedText(zh, en, language as 'en' | 'zh')
 }
 
 function shouldRefreshSummary(summary: StructuredSummary | null | undefined, userTurns: number, minDelta = 2): boolean {
@@ -91,8 +87,8 @@ function emitContextLimitAlert(threadStore: ThreadBoundStore, assistantId: strin
   const { language } = useStore.getState()
   threadStore.addSystemAlertPart(assistantId, {
     alertType: 'warning',
-    title: getLocalizedText(language, '上下文已满', 'Context Limit Reached'),
-    message: getLocalizedText(language, '当前对话已达到上下文限制，请开始新会话继续。', 'Please start a new session to continue.'),
+    title: t('agent.alert.contextLimitTitle', language),
+    message: t('agent.alert.contextLimitMessage', language),
   })
 }
 

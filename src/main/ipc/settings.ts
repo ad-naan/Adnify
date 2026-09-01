@@ -16,6 +16,7 @@ import { systemPrivilegeService } from '../services/systemPrivilegeService'
 import { isSystemPermissionError } from '@shared/utils/permissionError'
 import { mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
 import { isSensitiveSettingsKey, sensitiveSettingsKeyError } from './sensitiveSettings'
+import { asLanguage } from '@shared/i18n'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -159,7 +160,7 @@ export function registerSettingsHandlers(
       }
 
       if (key === 'language' && securityRef) {
-        securityRef.securityManager.setLanguage(cleanedValue === 'en' ? 'en' : 'zh')
+        securityRef.securityManager.setLanguage(asLanguage(cleanedValue as string | undefined))
       }
 
       if (key === 'app-settings') {

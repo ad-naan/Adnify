@@ -110,7 +110,6 @@ vi.mock('@renderer/agent/services/skillService', () => ({
 
 vi.mock('@renderer/agent/utils/agentText', () => ({
   getAgentLanguage: vi.fn(() => 'en'),
-  pickLocalizedText: vi.fn((_zh: string, en: string) => en),
   translateAgentText: vi.fn((key: string) => key),
 }))
 

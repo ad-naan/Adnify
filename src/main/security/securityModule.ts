@@ -11,11 +11,11 @@ import { isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import type { SecuritySettings } from '@shared/config/types'
 import { isDangerousOperationWorkspaceTrusted } from '@shared/config/securitySettings'
-import type { AppSecurityApprovalRequest } from '@shared/security/executionPolicy'
-import { pickLocalized, t, type Language } from '@shared/i18n'
+import type { AppSecurityApprovalRequest, ExecutionReason } from '@shared/security/executionPolicy'
+import { securityReasonsText } from '@shared/security/securityReasonText'
+import { t, type Language } from '@shared/i18n'
 
 type ApprovalPresentation = 'native' | 'app'
-type ApprovalReason = string | { zh: string; en: string }
 
 // 敏感操作类型
 export enum OperationType {
@@ -35,7 +35,13 @@ export enum OperationType {
 }
 
 interface SecurityModule {
-  requestApproval: (operation: OperationType, target: string, reason: ApprovalReason, presentation?: ApprovalPresentation) => Promise<boolean>
+  requestApproval: (operation: OperationType, target: string, reasons: ExecutionReason[], presentation?: ApprovalPresentation) => Promise<boolean>
+
+  /** 原因码 → 人话，用渲染进程同步过来的界面语言 */
+  localizeReasons: (reasons: readonly ExecutionReason[]) => string
+
+  /** 主进程出文案时该用的界面语言（渲染进程还没同步时退回系统 locale） */
+  uiLanguage: () => Language
 
   // 工作区设置
   setWorkspacePath: (workspacePath: string | null) => void
@@ -96,9 +102,19 @@ class SecurityManager implements SecurityModule {
    * 渲染进程还没同步过语言时（启动早期就触发的审批）退回系统 locale —— 文案本身来自
    * 主进程自己的 locale 表，绝不接受渲染进程传入：那等于让被审批方决定审批框长什么样。
    */
-  private approvalLanguage(): Language {
+  uiLanguage(): Language {
     if (this.language) return this.language
     return app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  }
+
+  /**
+   * 原因码 → 人话。
+   *
+   * 主进程也需要出文案（原生审批弹框、IPC 返回的失败原因），语言取渲染进程同步过来的
+   * 界面语言 —— 写死英文的话中文用户看到英文，写死中文的话反过来，两种都错一半。
+   */
+  localizeReasons(reasons: readonly ExecutionReason[]): string {
+    return securityReasonsText(reasons, this.uiLanguage())
   }
 
   /**
@@ -108,10 +124,9 @@ class SecurityManager implements SecurityModule {
   async requestApproval(
     operation: OperationType,
     target: string,
-    reason: ApprovalReason,
+    reasons: ExecutionReason[],
     presentation: ApprovalPresentation = 'native',
   ): Promise<boolean> {
-    const localizedReason = typeof reason === 'string' ? { zh: reason, en: reason } : reason
     const key = `${presentation}:${operation}:${target}`
     const pending = this.pendingApprovals.get(key)
     if (pending) return pending
@@ -119,10 +134,10 @@ class SecurityManager implements SecurityModule {
     const approval = (async () => {
       const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       const allowed = presentation === 'app' && mainWindow
-        ? await this.requestAppApproval(mainWindow, { operation, target, reason: localizedReason })
-        : await this.requestNativeApproval(mainWindow, { operation, target, reason: localizedReason })
+        ? await this.requestAppApproval(mainWindow, { operation, target, reasons })
+        : await this.requestNativeApproval(mainWindow, { operation, target, reasons })
       this.logOperation(operation, target, allowed, {
-        reason: localizedReason.zh,
+        reasons: reasons.map(reason => reason.code).join(','),
         presentation: presentation === 'app' && mainWindow ? 'app-confirm' : 'native',
         decision: allowed ? 'approved-once' : 'denied',
       })
@@ -138,9 +153,9 @@ class SecurityManager implements SecurityModule {
 
   private async requestNativeApproval(
     mainWindow: BrowserWindow | null | undefined,
-    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reason'>,
+    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reasons'>,
   ): Promise<boolean> {
-    const language = this.approvalLanguage()
+    const language = this.uiLanguage()
     const options = {
       type: 'warning' as const,
       buttons: [t('securityApproval.allowOnce', language), t('securityApproval.deny', language)],
@@ -149,7 +164,7 @@ class SecurityManager implements SecurityModule {
       title: t('securityApproval.title', language),
       message: t('securityApproval.message', language),
       detail: t('securityApproval.detail', language, {
-        reason: pickLocalized(request.reason, language),
+        reason: securityReasonsText(request.reasons, language),
         operation: request.operation,
         target: request.target,
       }),
@@ -163,7 +178,7 @@ class SecurityManager implements SecurityModule {
 
   private requestAppApproval(
     mainWindow: BrowserWindow,
-    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reason'>,
+    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reasons'>,
   ): Promise<boolean> {
     const requestId = randomUUID()
     return new Promise(resolve => {

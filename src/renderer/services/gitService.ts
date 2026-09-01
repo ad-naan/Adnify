@@ -1094,13 +1094,6 @@ class GitService {
         return entries
     }
 
-    /** 按前缀列出本地分支（用于找出已归档但尚未合并的车道分支） */
-    async listBranchesWithPrefix(prefix: string, rootPath?: string): Promise<string[]> {
-        const result = await this.exec(['branch', '--list', `${prefix}*`, '--format=%(refname:short)'], rootPath)
-        if (result.exitCode !== 0) return []
-        return result.stdout.split('\n').map(line => line.trim()).filter(Boolean)
-    }
-
     /**
      * 检出远程分支（避免 detached HEAD）：
      * - "origin/HEAD" 先解析为远程默认分支

@@ -1,11 +1,75 @@
+/**
+ * 执行准入策略：shell 命令、Git 命令、路径越界的风险判定。
+ *
+ * 判定结果里的 `reasons` 是原因码，不是句子。这个模块两个进程都在用，两边都没有
+ * "当前界面语言"：主进程的语言是渲染进程异步同步过来的，渲染进程的语言在 store 里。
+ * 所以在这里拼句子的唯一结局是拼中文，再让消费方按分类码反查英文 —— 之前就是这样，
+ * 而分类码比原因粗得多（`shell.dangerous` 一个码盖了删文件、提权、改权限、跑网络脚本
+ * 等七条规则），英文版只能退化成"该命令执行了破坏性操作"这种什么都没说的句子。
+ *
+ * 现在文案只在渲染点取一次：`securityReasonText()`。
+ */
 export type ExecutionDecisionKind = 'allow' | 'ask' | 'deny'
 export type ExecutionRisk = 'safe' | 'elevated' | 'dangerous' | 'blocked'
+
+/**
+ * 审批原因码。
+ *
+ * 与 `ExecutionDecision.code` 的区别：`code` 是分类，决定弹框形态和工作区信任判断；
+ * 这里的码是"到底哪条规则命中了"，只用来出文案，所以粒度细得多。
+ */
+export type ExecutionReasonCode =
+  // shell：结构与可信列表
+  | 'shellEmpty'
+  | 'shellUnparsed'
+  | 'shellUntrusted'
+  | 'shellTrusted'
+  | 'shellWorkspaceTrusted'
+  // shell：不可逆的系统级操作
+  | 'shellRmRoot'
+  | 'shellFormatDisk'
+  | 'shellBlockDevice'
+  | 'shellSystemConfig'
+  // shell：破坏性或提权操作
+  | 'shellDeleteFiles'
+  | 'shellElevate'
+  | 'shellSystemState'
+  | 'shellPermissions'
+  | 'shellRemoteScript'
+  | 'shellEncodedPowerShell'
+  | 'shellSubstitution'
+  // git
+  | 'gitInvalid'
+  | 'gitUntrusted'
+  | 'gitTrusted'
+  | 'gitHardReset'
+  | 'gitClean'
+  | 'gitForcePush'
+  | 'gitBranchDelete'
+  | 'gitGlobalConfig'
+  | 'gitCheckoutOverwrite'
+  // 路径与文件
+  | 'pathExternal'
+  | 'fileSensitivePath'
+  | 'fileDeleteIrreversible'
+  | 'fileCriticalConfig'
+  | 'fileLargeDirectory'
+  // 终端通道
+  | 'terminalDockApprovalRequired'
+
+export interface ExecutionReason {
+  code: ExecutionReasonCode
+  /** 只放可序列化的值：这个结构要过 IPC */
+  params?: Record<string, string | number>
+}
 
 export interface ExecutionDecision {
   kind: ExecutionDecisionKind
   risk: ExecutionRisk
+  /** 分类码：决定审批弹框形态与工作区信任判断，不是文案 */
   code: string
-  reason: string
+  /** 给用户看的原因，按顺序拼成一句（见 `securityReasonText`） */
+  reasons: ExecutionReason[]
 }
 
 export interface AgentApprovalProof {
@@ -19,10 +83,7 @@ export interface AppSecurityApprovalRequest {
   requestId: string
   operation: string
   target: string
-  reason: {
-    zh: string
-    en: string
-  }
+  reasons: ExecutionReason[]
 }
 
 function normalizeApprovalPath(value: string): string {
@@ -52,34 +113,40 @@ export function isRecentAgentApprovalProof(value: unknown, expectedScope?: strin
     && now - proof.approvedAt <= 2 * 60_000
 }
 
-const CRITICAL_SHELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /(?:^|[;&|]\s*)rm\s+-[^\n]*r[^\n]*f[^\n]*(?:\s+\/\s*$|\s+~\/?\s*$)/i, reason: '命令将递归删除系统根目录或用户主目录' },
-  { pattern: /\b(?:mkfs(?:\.[a-z0-9]+)?|format)\b/i, reason: '命令将格式化磁盘或文件系统' },
-  { pattern: /\bdd\b[^\n]*\bof=\s*\/dev\//i, reason: '命令将直接覆写块设备' },
-  { pattern: /\b(?:reg\s+delete|remove-item)\b[^\n]*(?:system32|sam|security|system\\currentcontrolset)/i, reason: '命令将修改系统关键配置' },
+const CRITICAL_SHELL_PATTERNS: Array<{ pattern: RegExp; code: ExecutionReasonCode }> = [
+  { pattern: /(?:^|[;&|]\s*)rm\s+-[^\n]*r[^\n]*f[^\n]*(?:\s+\/\s*$|\s+~\/?\s*$)/i, code: 'shellRmRoot' },
+  { pattern: /\b(?:mkfs(?:\.[a-z0-9]+)?|format)\b/i, code: 'shellFormatDisk' },
+  { pattern: /\bdd\b[^\n]*\bof=\s*\/dev\//i, code: 'shellBlockDevice' },
+  { pattern: /\b(?:reg\s+delete|remove-item)\b[^\n]*(?:system32|sam|security|system\\currentcontrolset)/i, code: 'shellSystemConfig' },
 ]
 
-const DANGEROUS_SHELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\b(?:rm|rmdir|del|erase|remove-item)\b/i, reason: '命令会删除文件或目录' },
-  { pattern: /\b(?:sudo|doas|runas)\b/i, reason: '命令请求提升系统权限' },
-  { pattern: /\b(?:shutdown|reboot|restart-computer|stop-computer)\b/i, reason: '命令会改变系统运行状态' },
-  { pattern: /\b(?:chmod|chown|icacls|takeown)\b/i, reason: '命令会修改文件权限或所有权' },
-  { pattern: /\b(?:curl|wget|invoke-webrequest|irm|iwr)\b[^\n]*\|\s*(?:bash|sh|zsh|python|node|powershell|pwsh)\b/i, reason: '命令会执行网络下载的内容' },
-  { pattern: /\b(?:powershell|pwsh)\b[^\n]*(?:-e(?:ncodedcommand)?\b|frombase64string)/i, reason: '命令包含编码后的 PowerShell 指令' },
-  { pattern: /(?:`[^`]+`|\$\([^\n)]+\))/i, reason: '命令包含动态命令替换' },
+const DANGEROUS_SHELL_PATTERNS: Array<{ pattern: RegExp; code: ExecutionReasonCode }> = [
+  { pattern: /\b(?:rm|rmdir|del|erase|remove-item)\b/i, code: 'shellDeleteFiles' },
+  { pattern: /\b(?:sudo|doas|runas)\b/i, code: 'shellElevate' },
+  { pattern: /\b(?:shutdown|reboot|restart-computer|stop-computer)\b/i, code: 'shellSystemState' },
+  { pattern: /\b(?:chmod|chown|icacls|takeown)\b/i, code: 'shellPermissions' },
+  { pattern: /\b(?:curl|wget|invoke-webrequest|irm|iwr)\b[^\n]*\|\s*(?:bash|sh|zsh|python|node|powershell|pwsh)\b/i, code: 'shellRemoteScript' },
+  { pattern: /\b(?:powershell|pwsh)\b[^\n]*(?:-e(?:ncodedcommand)?\b|frombase64string)/i, code: 'shellEncodedPowerShell' },
+  { pattern: /(?:`[^`]+`|\$\([^\n)]+\))/i, code: 'shellSubstitution' },
 ]
 
-const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\breset\b[^\n]*\s--hard\b/i, reason: 'Git hard reset 会丢弃未提交修改' },
-  { pattern: /\bclean\b[^\n]*\s-[^\s]*f/i, reason: 'Git clean 会删除未跟踪文件' },
-  { pattern: /\bpush\b[^\n]*(?:--force(?:-with-lease)?\b|\s-f\b)/i, reason: '强制推送会重写远程历史' },
-  { pattern: /\bbranch\b[^\n]*\s-D\b/, reason: '强制删除分支可能丢失提交' },
-  { pattern: /\bconfig\b[^\n]*\s--(?:global|system)\b/i, reason: '操作会修改工作区之外的 Git 配置' },
-  { pattern: /\bcheckout\b[^\n]*\s--\s+\S+/i, reason: '操作会覆盖工作区文件内容' },
+const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; code: ExecutionReasonCode }> = [
+  { pattern: /\breset\b[^\n]*\s--hard\b/i, code: 'gitHardReset' },
+  { pattern: /\bclean\b[^\n]*\s-[^\s]*f/i, code: 'gitClean' },
+  { pattern: /\bpush\b[^\n]*(?:--force(?:-with-lease)?\b|\s-f\b)/i, code: 'gitForcePush' },
+  { pattern: /\bbranch\b[^\n]*\s-D\b/, code: 'gitBranchDelete' },
+  { pattern: /\bconfig\b[^\n]*\s--(?:global|system)\b/i, code: 'gitGlobalConfig' },
+  { pattern: /\bcheckout\b[^\n]*\s--\s+\S+/i, code: 'gitCheckoutOverwrite' },
 ]
 
-function decision(kind: ExecutionDecisionKind, risk: ExecutionRisk, code: string, reason: string): ExecutionDecision {
-  return { kind, risk, code, reason }
+function decision(
+  kind: ExecutionDecisionKind,
+  risk: ExecutionRisk,
+  code: string,
+  reason: ExecutionReasonCode,
+  params?: Record<string, string | number>,
+): ExecutionDecision {
+  return { kind, risk, code, reasons: [{ code: reason, ...(params ? { params } : {}) }] }
 }
 
 function normalizeExecutable(value: string): string {
@@ -144,23 +211,25 @@ function firstCommandToken(segment: string): string {
 
 export function assessShellCommand(command: string, trustedCommands: Iterable<string>): ExecutionDecision {
   const normalized = command.trim()
-  if (!normalized) return decision('deny', 'blocked', 'shell.empty', '命令为空')
+  if (!normalized) return decision('deny', 'blocked', 'shell.empty', 'shellEmpty')
 
   for (const rule of CRITICAL_SHELL_PATTERNS) {
-    if (rule.pattern.test(normalized)) return decision('ask', 'dangerous', 'shell.critical', rule.reason)
+    if (rule.pattern.test(normalized)) return decision('ask', 'dangerous', 'shell.critical', rule.code)
   }
   for (const rule of DANGEROUS_SHELL_PATTERNS) {
-    if (rule.pattern.test(normalized)) return decision('ask', 'dangerous', 'shell.dangerous', rule.reason)
+    if (rule.pattern.test(normalized)) return decision('ask', 'dangerous', 'shell.dangerous', rule.code)
   }
 
   const segments = splitShellCommandSegments(normalized)
-  if (!segments?.length) return decision('deny', 'blocked', 'shell.unparsed', '命令结构无效，无法安全解析')
+  if (!segments?.length) return decision('deny', 'blocked', 'shell.unparsed', 'shellUnparsed')
   const trusted = new Set(Array.from(trustedCommands, normalizeExecutable))
   const untrusted = segments.map(firstCommandToken).filter(token => !token || !trusted.has(token))
   if (untrusted.length > 0) {
-    return decision('ask', 'elevated', 'shell.untrusted', `命令不在可信自动执行列表：${Array.from(new Set(untrusted)).join(', ') || 'unknown'}`)
+    return decision('ask', 'elevated', 'shell.untrusted', 'shellUntrusted', {
+      commands: Array.from(new Set(untrusted)).join(', ') || 'unknown',
+    })
   }
-  return decision('allow', 'safe', 'shell.trusted', '命令位于可信自动执行列表')
+  return decision('allow', 'safe', 'shell.trusted', 'shellTrusted')
 }
 
 export function findGitSubcommand(args: readonly string[]): string | null {
@@ -173,28 +242,36 @@ export function findGitSubcommand(args: readonly string[]): string | null {
 
 export function assessGitCommand(args: readonly string[], trustedSubcommands: Iterable<string>): ExecutionDecision {
   const subcommand = findGitSubcommand(args)
-  if (!subcommand) return decision('deny', 'blocked', 'git.invalid', '未找到 Git 子命令')
+  if (!subcommand) return decision('deny', 'blocked', 'git.invalid', 'gitInvalid')
 
   const rendered = args.join(' ')
   for (const rule of DANGEROUS_GIT_PATTERNS) {
-    if (rule.pattern.test(rendered)) return decision('ask', 'dangerous', 'git.dangerous', rule.reason)
+    if (rule.pattern.test(rendered)) return decision('ask', 'dangerous', 'git.dangerous', rule.code)
   }
 
   const trusted = new Set(Array.from(trustedSubcommands, normalizeExecutable))
   if (!trusted.has(subcommand)) {
-    return decision('ask', 'elevated', 'git.untrusted', `Git 子命令不在可信自动执行列表：${subcommand}`)
+    return decision('ask', 'elevated', 'git.untrusted', 'gitUntrusted', { subcommand })
   }
-  return decision('allow', 'safe', 'git.trusted', 'Git 子命令位于可信自动执行列表')
+  return decision('allow', 'safe', 'git.trusted', 'gitTrusted')
 }
 
+/**
+ * 目标在工作区之外时升级为审批。
+ *
+ * 原因是叠加的而不是替换：越界这件事本身要说，但"为什么这条命令危险"同样得留着 ——
+ * 用户看到的应该是"命令会删除文件或目录；目标位于工作区外"，而不是只剩后半句。
+ */
 export function requireExternalPathApproval(base: ExecutionDecision, outsideWorkspace: boolean): ExecutionDecision {
   if (!outsideWorkspace || base.kind === 'deny') return base
-  return decision(
-    'ask',
-    base.risk === 'dangerous' ? 'dangerous' : 'elevated',
-    'path.external',
-    base.kind === 'ask' ? `${base.reason}；目标位于工作区外` : '目标位于工作区外',
-  )
+  return {
+    kind: 'ask',
+    risk: base.risk === 'dangerous' ? 'dangerous' : 'elevated',
+    code: 'path.external',
+    reasons: base.kind === 'ask'
+      ? [...base.reasons, { code: 'pathExternal' }]
+      : [{ code: 'pathExternal' }],
+  }
 }
 
 export function isAlwaysApprovalTool(toolName: string): boolean {
