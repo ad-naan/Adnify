@@ -41,7 +41,6 @@ const BUDGET: Record<string, number> = {
 
   // ---- 整段对象或数组是双语的（`? { … } : { … }`、`? 0 : 1` 下标、`? 'zh' : 'en'`
   //      语言代码），要先改数据结构才能进 locale ----
-  'src/renderer/components/settings/SettingsModal.tsx': 1,
   'src/renderer/components/settings/tabs/AgentSettings.tsx': 1,
   'src/renderer/components/settings/tabs/McpAddServerModal.tsx': 7,
   'src/renderer/components/settings/tabs/McpSettings.tsx': 1,
@@ -128,7 +127,6 @@ describe('inline bilingual text', () => {
     /** 文件（相对仓库根）→ 还允许存在的字面量双语对数量 */
     const COPY_TABLE_BUDGET: Record<string, number> = {
       // ---- 双语标签是数据表的一列：要先给每行定一个键，才谈得上搬进 locale ----
-      'src/renderer/components/settings/settingsSearchIndex.ts': 71,
       'src/shared/config/mcpPresets.ts': 9,
     }
     const found: Record<string, number> = {}

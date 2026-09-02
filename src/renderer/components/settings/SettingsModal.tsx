@@ -479,12 +479,16 @@ export default function SettingsModal() {
     ] as const, [language])
 
     // 搜索逻辑：按关键词筛选设置项，按 Tab 分组
+    //
+    // label 只比当前语言那一条（以前是 en/zh 两条都比）：文案搬进 locale 表之后，
+    // 一个条目在一次渲染里只有一个 label。跨语言检索由 `keywords` 承担 —— 那张表是
+    // 故意中英混排的，所以英文界面下搜"密钥"仍然命中 `provider.apiKey`，只是走 keywords
+    // 而不是走 label，没进 keywords 的词就搜不到了。
     const searchResults = useMemo(() => {
         const q = searchQuery.trim().toLowerCase()
         if (!q) return null
         const matched = SETTINGS_SEARCH_INDEX.filter(entry =>
-            entry.label.en.toLowerCase().includes(q) ||
-            entry.label.zh.includes(q) ||
+            t(entry.labelKey, language).toLowerCase().includes(q) ||
             entry.keywords.some(kw => kw.toLowerCase().includes(q))
         )
         const grouped = new Map<SettingsTab, SettingsSearchEntry[]>()
@@ -494,7 +498,7 @@ export default function SettingsModal() {
             grouped.set(entry.tab, list)
         }
         return grouped
-    }, [searchQuery])
+    }, [searchQuery, language])
 
     const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -674,7 +678,7 @@ export default function SettingsModal() {
                                                     onClick={() => handleSearchResultClick(entry.tab)}
                                                     className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors duration-150 ${activeTab === entry.tab ? 'text-text-primary bg-accent/5' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}`}
                                                 >
-                                                    <span className="truncate">{language === 'zh' ? entry.label.zh : entry.label.en}</span>
+                                                    <span className="truncate">{t(entry.labelKey, language)}</span>
                                                 </button>
                                             ))}
                                         </div>

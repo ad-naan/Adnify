@@ -46,11 +46,22 @@ describe('i18n locale parity', () => {
    * 键集平价、占位符、非空全都过。
    *
    * 不能要求"zh 值必须含汉字"：产品名、`Git`、URL 占位符这类正当的纯 ASCII 值本来就存在。
-   * 所以按棘轮来 —— 冻结今天这 5 个两边相同的键，只允许变小。新加的键要么真的翻了，
+   * 所以按棘轮来 —— 冻结今天这几个两边相同的键，只允许变小。新加的键要么真的翻了，
    * 要么必须显式写进这份清单，评审时看得见。
    */
   it('only ever shrinks the list of keys left identical in both locales', () => {
-    const IDENTICAL = ['app.name', 'git.cloneUrlPlaceholder', 'git.title', 'kb.category.Git', 'welcome.brandName']
+    // `settingsSearch.systemGithubToken` 是"GitHub Token"：设置里那一项的中文标签本来就是
+    // 这个英文词（`SystemSettings.tsx` 的标题也是），不是漏译。它从 `settingsSearchIndex.ts`
+    // 的 `label: { en: 'GitHub Token', zh: 'GitHub Token' }` 原样搬过来 —— 那个双语对两边
+    // 完全一样，也正是这条棘轮存在的理由：搬进 locale 之后它才第一次被记在案上。
+    const IDENTICAL = [
+      'app.name',
+      'git.cloneUrlPlaceholder',
+      'git.title',
+      'kb.category.Git',
+      'settingsSearch.systemGithubToken',
+      'welcome.brandName',
+    ]
     expect(enKeys.filter(key => zh[key as keyof typeof zh] === en[key]).sort()).toEqual(IDENTICAL)
   })
 
