@@ -10,8 +10,15 @@
  * 只检查"这个状态存在于代码里但永远不会发生"这一类错。
  */
 import { describe, expect, it } from 'vitest'
-import { scoreBehavior, type BaselineDeviation, type BehaviorScoringInput } from '@renderer/agent/emotion/behaviorScoring'
-import type { BehaviorMetrics } from '@renderer/agent/types/emotion'
+import {
+  scoreBehavior,
+  smoothState,
+  STATE_CONFIRM_TICKS,
+  type BaselineDeviation,
+  type BehaviorScoringInput,
+  type StateSmoothing,
+} from '@renderer/agent/emotion/behaviorScoring'
+import type { BehaviorMetrics, EmotionState } from '@renderer/agent/types/emotion'
 
 /** 未校准的基线：绝大多数用户在攒够 50 个样本之前都走这条路。 */
 const UNCALIBRATED: BaselineDeviation = {
@@ -145,5 +152,49 @@ describe('scoreBehavior', () => {
     expect(scoring.confidence).toBeLessThanOrEqual(0.8)
     expect(scoring.intensity).toBeGreaterThan(0)
     expect(scoring.intensity).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('smoothState', () => {
+  const fresh = (state: EmotionState = 'neutral'): StateSmoothing =>
+    ({ state, pending: null, pendingTicks: 0 })
+
+  /** 把一串候选依次喂进去，返回每一步对外生效的状态。 */
+  const run = (start: StateSmoothing, candidates: EmotionState[]): EmotionState[] => {
+    let current = start
+    return candidates.map(candidate => {
+      current = smoothState(current, candidate)
+      return current.state
+    })
+  }
+
+  it('absorbs a single-window blip', () => {
+    // 这就是平滑存在的理由：一次退格偏多不该让界面翻脸。
+    expect(run(fresh('focused'), ['frustrated', 'focused'])).toEqual(['focused', 'focused'])
+  })
+
+  it('commits a change once it wins two windows in a row', () => {
+    expect(run(fresh('focused'), ['frustrated', 'frustrated'])).toEqual(['focused', 'frustrated'])
+    expect(STATE_CONFIRM_TICKS).toBe(2)
+  })
+
+  it('restarts counting when the candidate itself keeps changing', () => {
+    // 三个窗口三个不同候选 —— 没有任何一个连赢两次，所以对外一直不动。
+    expect(run(fresh('focused'), ['frustrated', 'tired', 'bored'])).toEqual(
+      ['focused', 'focused', 'focused'],
+    )
+  })
+
+  it('drops the pending candidate when the current state comes back', () => {
+    const afterBlip = smoothState(fresh('focused'), 'tired')
+    expect(afterBlip.pending).toBe('tired')
+    const backHome = smoothState(afterBlip, 'focused')
+    expect(backHome).toEqual({ state: 'focused', pending: null, pendingTicks: 0 })
+    // 回来之后再看到 tired，要重新数两次，不能接着上一轮的计数直接生效。
+    expect(run(backHome, ['tired'])).toEqual(['focused'])
+  })
+
+  it('keeps reporting the same state when nothing changes', () => {
+    expect(run(fresh('flow'), ['flow', 'flow', 'flow'])).toEqual(['flow', 'flow', 'flow'])
   })
 })

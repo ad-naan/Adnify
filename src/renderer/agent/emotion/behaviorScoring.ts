@@ -49,6 +49,46 @@ export function clampScore(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
 
+/**
+ * 状态平滑。
+ *
+ * 打分是每个窗口从零重算的，没有任何记忆：一次退格偏多、一次多切了几个文件，
+ * 12 秒后状态就翻一次，用户看到的是水獬和状态栏每 12 秒变一下脸。
+ *
+ * 这里只做一件事：**一个新状态要连续赢两个窗口才生效**。单个窗口的抖动被吸收，
+ * 真的变化延迟一个窗口（24 秒）才对外可见 —— 对"你现在是什么情绪"这种量来说，
+ * 慢 24 秒远好过每 12 秒抖一下。
+ *
+ * 没做 EMA 是因为它会连 intensity 一起改掉语义；这里让未确认的窗口整个不算，
+ * 对外的 intensity 始终是某个真实窗口算出来的值，而不是几个窗口的混合。
+ */
+export interface StateSmoothing {
+  /** 对外生效的状态 */
+  state: EmotionState
+  /** 正在等待确认的候选状态 */
+  pending: EmotionState | null
+  /** 候选已经连续出现了几个窗口 */
+  pendingTicks: number
+}
+
+/** 新状态要连续赢几个窗口。一个窗口 12 秒，所以 2 = 24 秒。 */
+export const STATE_CONFIRM_TICKS = 2
+
+export function smoothState(previous: StateSmoothing, candidate: EmotionState): StateSmoothing {
+  if (candidate === previous.state) {
+    // 回到当前状态 —— 之前攒的候选作废。
+    return { state: candidate, pending: null, pendingTicks: 0 }
+  }
+  if (candidate === previous.pending) {
+    const pendingTicks = previous.pendingTicks + 1
+    return pendingTicks >= STATE_CONFIRM_TICKS
+      ? { state: candidate, pending: null, pendingTicks: 0 }
+      : { state: previous.state, pending: candidate, pendingTicks }
+  }
+  // 换了个候选，重新数。
+  return { state: previous.state, pending: candidate, pendingTicks: 1 }
+}
+
 export function normalizeTypingSpeed(wpm: number): number {
   if (wpm < 10) return 0.1
   if (wpm < 20) return 0.2

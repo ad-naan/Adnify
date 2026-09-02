@@ -10,7 +10,7 @@ import { logger } from '@utils/Logger'
 import { EventBus } from '../core/EventBus'
 import { emotionContextAnalyzer } from './emotionContextAnalyzer'
 import { emotionBaseline } from './emotionBaseline'
-import { scoreBehavior } from './behaviorScoring'
+import { scoreBehavior, smoothState, type StateSmoothing } from './behaviorScoring'
 import { loadEmotionPanelSettings } from './panelSettings'
 import type {
   EmotionDetection,
@@ -29,6 +29,8 @@ class EmotionDetectionEngine {
   private metricsBuffer: BehaviorMetrics[] = []
   private history: EmotionHistory[] = []
   private currentState: EmotionDetection | null = null
+  /** 状态平滑的游标：对外状态 + 正在等确认的候选，见 `smoothState`。 */
+  private smoothing: StateSmoothing = { state: 'neutral', pending: null, pendingTicks: 0 }
   private stateStartTime = Date.now()
   private sessionStartTime = Date.now()
   private _lastActivityTime = Date.now()
@@ -359,25 +361,31 @@ class EmotionDetectionEngine {
     const contextFactors = this.buildContextFactors(context)
     const allFactors = [...baseDetection.factors, ...contextFactors]
 
+    // —— 平滑：新状态要连续赢两个窗口才生效 ——
+    // 没确认的窗口整个不算：既不改 currentState 也不广播，所以对外的 intensity 永远是
+    // 某个真实窗口算出来的值。否则会出现"报 focused、强度却是 excited 那一档算出来的"。
+    const smoothing = smoothState(this.smoothing, enhanced.state)
+    this.smoothing = smoothing
+    if (smoothing.state !== enhanced.state) return
+
+    // stateStartTime 要在算 duration 之前更新：原来顺序是反的，所以状态切换那一个窗口
+    // 报出去的 duration 是**上一个状态**待了多久。
+    const now = Date.now()
+    const stateChanged = !this.currentState || this.currentState.state !== enhanced.state
+    if (stateChanged) this.stateStartTime = now
+
     const detection: EmotionDetection = {
       state: enhanced.state,
       intensity: enhanced.intensity,
       confidence: enhanced.confidence,
-      triggeredAt: Date.now(),
-      duration: Date.now() - this.stateStartTime,
+      triggeredAt: now,
+      duration: now - this.stateStartTime,
       factors: allFactors,
       context: context || undefined,
       suggestions: enhanced.suggestions.length > 0 ? enhanced.suggestions : undefined,
     }
 
-    // 检查状态是否真正变化（用于更新 stateStartTime）
-    const stateChanged = !this.currentState || this.currentState.state !== detection.state
     const shouldBroadcast = this.shouldNotifyStateChange(detection)
-    
-    // 如果状态类型变化，更新 stateStartTime
-    if (stateChanged) {
-      this.stateStartTime = Date.now()
-    }
     
     // 始终更新 currentState
     this.currentState = detection
