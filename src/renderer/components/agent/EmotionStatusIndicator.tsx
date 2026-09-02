@@ -39,6 +39,10 @@ export const EmotionStatusIndicator: React.FC = () => {
     return subscribeEmotionPanelSettings((settings) => setCompanionEnabled(settings.companionEnabled))
   }, [])
 
+  // 依赖只看 state，不看整个 emotion 对象：强度变化也会推一次 `emotion:changed`，
+  // 而那时 `prevStateRef.current === emotion.state`，effect 会先跑上一轮的 cleanup
+  // 把 8 秒计时器清掉、再从 if 里穿过去不重建 —— 结果 justChanged 永远停在 true，
+  // 展开态卡住不收。终端监听那个合成的 frustrated 在已经 frustrated 时正好触发这条。
   useEffect(() => {
     if (!emotion) return
     if (prevStateRef.current !== emotion.state) {
@@ -48,16 +52,20 @@ export const EmotionStatusIndicator: React.FC = () => {
       prevStateRef.current = emotion.state
       return () => clearTimeout(timer)
     }
-  }, [emotion])
+  }, [emotion?.state])
 
+  // 只在文案真的看得见的时候轮播。原来只要状态非 neutral 就每 6 秒 setState 一次，
+  // 而这段文字只在悬停或刚变化时渲染（见下面的 `isHovered || justChanged`）——
+  // 也就是整个会话每 6 秒重渲染一次去更新看不见的东西。
   useEffect(() => {
     if (!emotion || emotion.state === 'neutral' || activeFeedback) return
+    if (!isHovered && !justChanged) return
     const messages = EMOTION_MESSAGES[emotion.state]
     const interval = setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % messages.length)
     }, 6000)
     return () => clearInterval(interval)
-  }, [emotion?.state, activeFeedback])
+  }, [emotion?.state, activeFeedback, isHovered, justChanged])
 
   useEffect(() => {
     if (!companionEnabled) {

@@ -823,7 +823,6 @@ export const zh = {
 
   // Emotion Awareness
   'emotion.title': '情绪感知',
-  'emotion.desc': '数据报告与偏好设置',
   'emotion.todayOverview': '今日概览',
   'emotion.focusTime': '专注时间',
   'emotion.flowSessions': '心流次数',
@@ -860,21 +859,9 @@ export const zh = {
   'emotion.state.excited': '兴奋',
   'emotion.state.bored': '无聊',
   'emotion.state.neutral': '正常',
-  'emotion.notice.focused': '进入专注状态，保持节奏',
-  'emotion.notice.frustrated': '遇到了一些困难',
-  'emotion.notice.tired': '工作时间较长了',
-  'emotion.notice.excited': '状态很好，效率很高',
-  'emotion.notice.stressed': '任务负载较重',
-  'emotion.notice.flow': '深度沉浸中',
-  'emotion.notice.bored': '工作内容缺少变化',
-  'emotion.notice.fallback': '状态有所变化',
-  'emotion.companion.ok': '好的',
-  'emotion.companion.takeBreak': '休息一下',
   'emotion.companion.later': '稍后',
   'emotion.companion.feedbackThanks': '感谢反馈，会帮助我更准确 ✓',
   'emotion.companion.feedbackQuestion': '判断准确吗？',
-  'emotion.companion.accurate': '准确',
-  'emotion.companion.inaccurate': '不准',
 
 
   // Emotion Status Bar Messages
@@ -902,7 +889,6 @@ export const zh = {
   'emotion.status.neutral.1': '准备编码 💻',
   'emotion.status.neutral.2': '开始构建',
   'emotion.status.neutral.3': '稳步前进',
-  'emotion.status.clickToChange': '点击切换文案',
   'emotion.suggestion.syntaxError': '检测到语法错误，让 AI 帮你快速定位？',
   'emotion.suggestion.typeError': '类型错误有时候很烦人，需要帮忙梳理一下类型关系吗？',
   'emotion.suggestion.toolFailures': 'AI 工具执行遇到一些困难，要检查一下工具配置吗？',

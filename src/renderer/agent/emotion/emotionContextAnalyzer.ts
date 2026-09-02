@@ -51,23 +51,6 @@ class EmotionContextAnalyzer {
     if (this.initialized) return
     this.initialized = true
 
-    // 0. 同步引擎检测结果到 AgentStore（让 Store 消费者也能读到情绪数据）
-    this.unsubscribers.push(
-      EventBus.on('emotion:changed', (event) => {
-        if (event.emotion) {
-          const store = useAgentStore.getState()
-          store.setEmotionDetection(event.emotion)
-          store.updateEmotionHistory({
-            timestamp: event.emotion.triggeredAt,
-            state: event.emotion.state,
-            intensity: event.emotion.intensity,
-            project: '',
-            file: '',
-          })
-        }
-      }),
-    )
-
     // 1. 监听 EventBus 的工具/LLM 事件
     this.unsubscribers.push(
       EventBus.on('tool:completed', () => {

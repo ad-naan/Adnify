@@ -180,13 +180,20 @@ const FEEDBACK_EXPIRES: Record<EmotionFeedbackType, number> = {
 
 const DEFAULT_SNOOZE_MS = 30 * 60 * 1000
 const MAX_DISMISSED_IDS = 100
+/** 微休息间隔：眼睛该离开屏幕一次的节奏。 */
+const MICRO_BREAK_INTERVAL = 20 * 60 * 1000
+/** 休息提醒的轮询节奏。比最短的 breakInterval（15 分钟）小两个数量级就够用了。 */
+const BREAK_CHECK_INTERVAL = 60 * 1000
 
 type AmbientSoundType = 'focus' | 'relax' | 'energize'
 
 class EmotionAdapter {
   private currentAdaptation: EnvironmentAdaptation | null = null
-  private breakTimer: NodeJS.Timeout | null = null
-  private microBreakTimer: NodeJS.Timeout | null = null
+  private currentState: EmotionState = 'neutral'
+  /** 休息提醒的轮询句柄，`initialize` 里建一次 */
+  private breakCheckTimer: NodeJS.Timeout | null = null
+  private lastBreakSuggestedAt = Date.now()
+  private lastMicroBreakAt = Date.now()
   private audioContext: AudioContext | null = null
   private unsubscribeEmotionChanged: (() => void) | null = null
   private unsubscribeSettings: (() => void) | null = null
@@ -217,6 +224,9 @@ class EmotionAdapter {
     this.settings = loadEmotionPanelSettings()
     this.companionState.companionEnabled = this.settings.companionEnabled
     this.stopAmbientSound()
+    this.lastBreakSuggestedAt = Date.now()
+    this.lastMicroBreakAt = Date.now()
+    this.breakCheckTimer = setInterval(() => this.checkBreakReminders(), BREAK_CHECK_INTERVAL)
 
     this.unsubscribeEmotionChanged = EventBus.on('emotion:changed', (event) => {
       if (event.emotion) {
@@ -249,13 +259,9 @@ class EmotionAdapter {
       this.unsubscribeSettings = null
     }
 
-    if (this.breakTimer) {
-      clearInterval(this.breakTimer)
-      this.breakTimer = null
-    }
-    if (this.microBreakTimer) {
-      clearInterval(this.microBreakTimer)
-      this.microBreakTimer = null
+    if (this.breakCheckTimer) {
+      clearInterval(this.breakCheckTimer)
+      this.breakCheckTimer = null
     }
 
     for (const t of this.pendingTimeouts) clearTimeout(t)
@@ -269,10 +275,10 @@ class EmotionAdapter {
   adaptToEmotion(detection: EmotionDetection): void {
     const adaptation = DEFAULT_ADAPTATIONS[detection.state]
     this.currentAdaptation = adaptation
+    this.currentState = detection.state
 
     this.emitCompanionFeedback(detection)
     this.applySoundAdaptation(adaptation.sound)
-    this.setupBreakReminders(adaptation.break, detection.state)
 
     logger.agent.info('[EmotionAdapter] Adapted to:', detection.state)
   }
@@ -490,44 +496,41 @@ class EmotionAdapter {
     }
   }
 
-  private setupBreakReminders(
-    breakConfig: EnvironmentAdaptation['break'],
-    state: EmotionState,
-  ): void {
-    if (this.breakTimer) {
-      clearInterval(this.breakTimer)
-      this.breakTimer = null
-    }
-    if (this.microBreakTimer) {
-      clearInterval(this.microBreakTimer)
-      this.microBreakTimer = null
+  /**
+   * 到点了就提醒休息。
+   *
+   * 原来这里是 `setupBreakReminders`：每次 `adaptToEmotion` 先 clearInterval 再重建两个
+   * setInterval。而 `adaptToEmotion` 挂在 `emotion:changed` 上、状态或强度一动就跑
+   * （约 12 秒一次），所以 20 分钟的微休息和 15~150 分钟的休息间隔**永远等不到** ——
+   * 这个功能从写出来那天就没响过。
+   *
+   * 现在改成一个在 `initialize` 里建、只建一次的 60 秒轮询，比对"上次提醒到现在过了多久"。
+   * 不用事件驱动是因为 `emotion:changed` 被 `shouldNotifyStateChange` 挡着：状态稳住不动时
+   * 事件会变稀，而"稳定专注了 90 分钟"恰恰是最该提醒的时候。
+   */
+  private checkBreakReminders(): void {
+    const breakConfig = this.currentAdaptation?.break
+    if (!breakConfig?.suggestBreak || !this.settings.companionEnabled) return
+
+    const now = Date.now()
+    const state = this.currentState
+    const asDetection = (intensity: number): EmotionDetection => ({
+      state, intensity, confidence: 1, triggeredAt: now, duration: 0, factors: [],
+    })
+
+    if (breakConfig.microBreaks && now - this.lastMicroBreakAt >= MICRO_BREAK_INTERVAL) {
+      this.lastMicroBreakAt = now
+      this.emitFeedback(this.buildFeedback(
+        'break_micro', asDetection(0.6), 'emotion.break.micro', 'micro_break_timer', 4, ['statusBar'],
+      ))
     }
 
-    if (!breakConfig.suggestBreak || !this.settings.companionEnabled) return
-
-    if (breakConfig.microBreaks) {
-      this.microBreakTimer = setInterval(() => {
-        this.emitFeedback(this.buildFeedback('break_micro', {
-          state,
-          intensity: 0.6,
-          confidence: 1,
-          triggeredAt: Date.now(),
-          duration: 0,
-          factors: [],
-        }, 'emotion.break.micro', 'micro_break_timer', 4, ['statusBar']))
-      }, 20 * 60 * 1000)
+    if (now - this.lastBreakSuggestedAt >= breakConfig.breakInterval) {
+      this.lastBreakSuggestedAt = now
+      this.emitFeedback(this.buildFeedback(
+        'break_suggested', asDetection(0.7), BREAK_SUGGESTION_KEYS[state], 'break_timer', 7, ['statusBar'],
+      ))
     }
-
-    this.breakTimer = setInterval(() => {
-      this.emitFeedback(this.buildFeedback('break_suggested', {
-        state,
-        intensity: 0.7,
-        confidence: 1,
-        triggeredAt: Date.now(),
-        duration: 0,
-        factors: [],
-      }, BREAK_SUGGESTION_KEYS[state], 'break_timer', 7, ['statusBar']))
-    }, breakConfig.breakInterval)
   }
 
   private stopAmbientSound(): void {

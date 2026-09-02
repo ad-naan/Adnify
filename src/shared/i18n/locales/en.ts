@@ -824,7 +824,6 @@ export const en = {
 
   // Emotion Awareness
   'emotion.title': 'Emotion Awareness',
-  'emotion.desc': 'Data reports and preferences',
   'emotion.todayOverview': 'Today Overview',
   'emotion.focusTime': 'Focus Time',
   'emotion.flowSessions': 'Flow Sessions',
@@ -861,21 +860,9 @@ export const en = {
   'emotion.state.excited': 'Excited',
   'emotion.state.bored': 'Bored',
   'emotion.state.neutral': 'Normal',
-  'emotion.notice.focused': 'Entering focused state, keep the rhythm',
-  'emotion.notice.frustrated': 'Encountered some difficulties',
-  'emotion.notice.tired': 'Been working for a while',
-  'emotion.notice.excited': 'Great state, high efficiency',
-  'emotion.notice.stressed': 'Heavy task load',
-  'emotion.notice.flow': 'Deep immersion',
-  'emotion.notice.bored': 'Lacking variety in work',
-  'emotion.notice.fallback': 'State has changed',
-  'emotion.companion.ok': 'OK',
-  'emotion.companion.takeBreak': 'Take a Break',
   'emotion.companion.later': 'Later',
   'emotion.companion.feedbackThanks': 'Thanks for feedback, it helps me be more accurate ✓',
   'emotion.companion.feedbackQuestion': 'Is this accurate?',
-  'emotion.companion.accurate': 'Accurate',
-  'emotion.companion.inaccurate': 'Inaccurate',
 
 
   // Emotion Status Bar Messages
@@ -903,7 +890,6 @@ export const en = {
   'emotion.status.neutral.1': 'Ready to code 💻',
   'emotion.status.neutral.2': 'Let\'s build',
   'emotion.status.neutral.3': 'Steady progress',
-  'emotion.status.clickToChange': 'Click to change message',
   'emotion.suggestion.syntaxError': 'Syntax error detected — want AI to pinpoint it?',
   'emotion.suggestion.typeError': 'Type errors can be annoying. Want help untangling the types?',
   'emotion.suggestion.toolFailures': 'AI tools keep failing. Want to check the tool configuration?',
