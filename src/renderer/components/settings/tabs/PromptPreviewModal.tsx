@@ -136,7 +136,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                         </div>
                         <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                                <span className="truncate text-sm font-medium text-text-primary">{language === 'zh' ? template.nameZh : template.name}</span>
+                                <span className="truncate text-sm font-medium text-text-primary">{t(template.nameKey, language)}</span>
                                 <span className="rounded border border-border-subtle bg-background/50 px-1.5 py-0.5 text-[10px] text-text-muted">
                                     {preview?.sections.length ?? 0} {t('promptPreviewModal.layers', language)}
                                 </span>

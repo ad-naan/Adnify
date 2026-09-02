@@ -14,7 +14,7 @@ import {
   type McpPreset, type McpPresetCategory, type McpEnvConfig, } from '@shared/types/mcp'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t } from '@shared/i18n'
+import { t, tDynamic } from '@shared/i18n'
 
 interface McpAddServerModalProps {
   isOpen: boolean
@@ -125,12 +125,12 @@ export default function McpAddServerModal({
 
   // 过滤预设
   const filteredPresets = useMemo(() => {
-    let presets = searchQuery ? searchPresets(searchQuery) : MCP_PRESETS
+    let presets = searchQuery ? searchPresets(searchQuery, language) : MCP_PRESETS
     if (selectedCategory !== 'all') {
       presets = presets.filter(p => p.category === selectedCategory)
     }
     return presets.filter(p => !existingServerIds.includes(p.id))
-  }, [searchQuery, selectedCategory, existingServerIds])
+  }, [searchQuery, selectedCategory, existingServerIds, language])
 
   // 预设声明的运行时依赖提示（例如 uv），配置视图里给出安装入口
   const dependencyNotes = useMemo(
@@ -141,9 +141,9 @@ export default function McpAddServerModal({
   // 分类列表
   const categories: Array<{ id: McpPresetCategory | 'all'; name: string }> = [
     { id: 'all', name: t('common.all', language) },
-    ...Object.entries(MCP_CATEGORY_NAMES).map(([id, names]) => ({
+    ...Object.entries(MCP_CATEGORY_NAMES).map(([id, nameKey]) => ({
       id: id as McpPresetCategory,
-      name: language === 'zh' ? names.zh : names.en,
+      name: t(nameKey, language),
     })),
   ]
 
@@ -200,12 +200,12 @@ export default function McpAddServerModal({
         const { server, localConfig, requiredEnvVars } = result
         const isRemote = localConfig.type === 'remote' || 'url' in localConfig
 
+        // registry 拿到的是服务器自己写的散文，不是 locale 键 —— `label` / `description`
+        // 两种都装得下，读取点用 `tDynamic` 判别（见 `McpBasePreset.description` 的注释）。
         const envConfigs: McpEnvConfig[] = (requiredEnvVars || []).map((v: any) => ({
           key: v.name,
           label: v.name,
-          labelZh: v.name,
           description: v.description || '',
-          descriptionZh: v.description || '',
           placeholder: v.default || (v.isSecret ? '••••••••' : ''),
           defaultValue: v.default || '',
           required: v.isRequired ?? true,
@@ -217,7 +217,6 @@ export default function McpAddServerModal({
               id: localConfig.id || server.name,
               name: server.title || server.name,
               description: server.description || '',
-              descriptionZh: server.description || '',
               category: 'other',
               icon: 'Globe',
               requiresConfig: envConfigs.some(e => e.required),
@@ -231,7 +230,6 @@ export default function McpAddServerModal({
               id: localConfig.id || server.name,
               name: server.title || server.name,
               description: server.description || '',
-              descriptionZh: server.description || '',
               category: 'other',
               icon: 'Server',
               requiresConfig: envConfigs.some(e => e.required),
@@ -298,11 +296,9 @@ export default function McpAddServerModal({
         for (const envConfig of (selectedPreset.envConfig || [])) {
           const value = envValues[envConfig.key]
           if (envConfig.required && !value) {
-            throw new Error(
-              language === 'zh'
-                ? `请填写 ${envConfig.labelZh}`
-                : `Please fill in ${envConfig.label}`
-            )
+            throw new Error(t('mcpAddServerModal.fillInField', language, {
+              label: tDynamic(envConfig.label, language, envConfig.label),
+            }))
           }
           if (value) {
             env[envConfig.key] = value
@@ -466,7 +462,7 @@ export default function McpAddServerModal({
               )}
             </div>
             <p className="text-xs text-text-muted mt-1 line-clamp-2 leading-relaxed opacity-80">
-              {language === 'zh' ? preset.descriptionZh : preset.description}
+              {tDynamic(preset.description, language, preset.description)}
             </p>
             {preset.tags && (
               <div className="flex flex-wrap gap-1.5 mt-3">
@@ -488,11 +484,11 @@ export default function McpAddServerModal({
     return (
       <div key={envConfig.key} className="space-y-1.5">
         <label className="flex items-center gap-2 text-sm font-medium text-text-secondary">
-          {language === 'zh' ? envConfig.labelZh : envConfig.label}
+          {tDynamic(envConfig.label, language, envConfig.label)}
           {envConfig.required && <span className="text-red-400">*</span>}
         </label>
         {envConfig.description && (
-          <p className="text-xs text-text-muted">{language === 'zh' ? envConfig.descriptionZh : envConfig.description}</p>
+          <p className="text-xs text-text-muted">{tDynamic(envConfig.description, language, envConfig.description)}</p>
         )}
         <div className="relative">
           <Input
@@ -656,7 +652,7 @@ export default function McpAddServerModal({
                   )}
                 </div>
                 <p className="text-sm text-text-muted mt-1">
-                  {language === 'zh' ? selectedPreset.descriptionZh : selectedPreset.description}
+                  {tDynamic(selectedPreset.description, language, selectedPreset.description)}
                 </p>
                 {selectedPreset.docsUrl && (
                   <a href={selectedPreset.docsUrl} target="_blank" rel="noopener noreferrer"
@@ -673,7 +669,7 @@ export default function McpAddServerModal({
                   <AlertCircle className="w-4 h-4" />
                   {t('mcpAddServerModal.setupRequired', language)}
                 </div>
-                <p className="text-sm text-text-muted">{language === 'zh' ? selectedPreset.setupNoteZh : selectedPreset.setupNote}</p>
+                <p className="text-sm text-text-muted">{selectedPreset.setupNote && tDynamic(selectedPreset.setupNote, language, selectedPreset.setupNote)}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-3 py-2 bg-black/30 rounded font-mono text-xs text-text-primary">{selectedPreset.setupCommand}</code>
                   <Button variant="secondary" size="sm" onClick={() => writeClipboardText(selectedPreset.setupCommand!)}>

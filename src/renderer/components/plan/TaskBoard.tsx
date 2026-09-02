@@ -338,7 +338,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
 
   if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('taskBoard.planNotFound', language)}</div>
 
-  const promptOptions = getPromptTemplateSummary().map(item => ({ value: item.id, label: item.nameZh || item.name }))
+  const promptOptions = getPromptTemplateSummary().map(item => ({ value: item.id, label: t(item.nameKey, language) }))
 
   return <div className="plan-readable relative flex h-full min-h-0 flex-col bg-background">
     <header className="shrink-0 border-b border-border/50 px-5 pb-3.5 pt-3">

@@ -19,6 +19,7 @@ export function AgentSettings({
     webSearchConfig, setWebSearchConfig, language
 }: AgentSettingsProps) {
     const templates = getPromptTemplates()
+    const selectedTemplate = templates.find(template => template.id === promptTemplateId)
     const [showPreview, setShowPreview] = useState(false)
     const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<string | null>(null)
     const [showGoogleApiKey, setShowGoogleApiKey] = useState(false)
@@ -95,7 +96,11 @@ export function AgentSettings({
                                     onChange={(value) => setPromptTemplateId(value)}
                                     options={templates.map(template => ({
                                         value: template.id,
-                                        label: `${template.name} ${template.isDefault ? '(Default)' : ''}`
+                                        // 以前是 `${template.name} (Default)` —— 名字和"默认"标记
+                                        // 都写死在代码里，中文界面下两半都是英文。
+                                        label: template.isDefault
+                                            ? `${t(template.nameKey, language)} (${t('common.default', language)})`
+                                            : t(template.nameKey, language)
                                     }))}
                                     className="w-full bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
@@ -104,21 +109,19 @@ export function AgentSettings({
                             <div className="bg-surface/50 p-3 rounded-lg border border-border space-y-2">
                                 <div className="flex items-start gap-2 flex-wrap">
                                     <span className="text-xs font-medium text-text-primary">
-                                        {templates.find(template => template.id === promptTemplateId)?.name}
+                                        {selectedTemplate && t(selectedTemplate.nameKey, language)}
                                     </span>
                                     <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded border border-border">
-                                        P{templates.find(template => template.id === promptTemplateId)?.priority}
+                                        P{selectedTemplate?.priority}
                                     </span>
-                                    {templates.find(template => template.id === promptTemplateId)?.tags?.map(tag => (
+                                    {selectedTemplate?.tags?.map(tag => (
                                         <span key={tag} className="text-[10px] text-accent px-1.5 py-0.5 bg-accent/10 rounded">
                                             {tag}
                                         </span>
                                     ))}
                                 </div>
                                 <p className="text-xs text-text-secondary line-clamp-2">
-                                    {language === 'zh'
-                                        ? templates.find(template => template.id === promptTemplateId)?.descriptionZh
-                                        : templates.find(template => template.id === promptTemplateId)?.description}
+                                    {selectedTemplate && t(selectedTemplate.descriptionKey, language)}
                                 </p>
                                 <Button
                                     variant="secondary"

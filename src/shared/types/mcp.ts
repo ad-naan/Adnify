@@ -357,14 +357,10 @@ export interface McpDependency {
 export interface McpEnvConfig {
   /** 环境变量名 */
   key: string
-  /** 显示名称 */
+  /** 显示名称：locale 键或散文，见 `McpBasePreset.description` */
   label: string
-  /** 显示名称（中文） */
-  labelZh: string
-  /** 描述 */
+  /** 描述：locale 键或散文，见 `McpBasePreset.description` */
   description?: string
-  /** 描述（中文） */
-  descriptionZh?: string
   /** 是否必填 */
   required: boolean
   /** 是否为密钥（显示为密码输入框） */
@@ -393,10 +389,16 @@ export interface McpBasePreset {
   id: string
   /** 显示名称 */
   name: string
-  /** 描述 */
+  /**
+   * 描述：**locale 键或散文**。
+   *
+   * `mcpPresets.ts` 里的内置预设存 `'mcpPresets.<preset>.description'`；
+   * `McpAddServerModal` 从 registry API 现造的预设存服务器自己给的那段散文。
+   * 读取点一律 `tDynamic(value, language, value)` —— 它先查 locale 表里有没有这个键，
+   * 有就翻译、没有就原样返回，所以两条通路能共用同一个字段。
+   * 下面 `setupNote` / `usageExamples` 和 `McpEnvConfig` 的两个字段同理。
+   */
   description: string
-  /** 描述（中文） */
-  descriptionZh: string
   /** 分类 */
   category: McpPresetCategory
   /** 图标（lucide 图标名） */
@@ -415,14 +417,10 @@ export interface McpBasePreset {
   tags?: string[]
   /** 安装前置命令（首次使用时需要执行） */
   setupCommand?: string
-  /** 安装说明 */
+  /** 安装说明：locale 键或散文 */
   setupNote?: string
-  /** 安装说明（中文） */
-  setupNoteZh?: string
-  /** 使用示例（告诉用户怎么触发） */
+  /** 使用示例（告诉用户怎么触发）：每一项都是 locale 键或散文 */
   usageExamples?: string[]
-  /** 使用示例（中文） */
-  usageExamplesZh?: string[]
   /** 依赖要求 */
   dependencies?: McpDependency[]
 }

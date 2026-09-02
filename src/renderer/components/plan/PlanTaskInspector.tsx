@@ -21,7 +21,12 @@ const filesFromText = (value: string) => value.split(/[,，\n]/).map(item => ite
 const criteriaLines = (value: string) => value.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
 
 export const PlanTaskInspector = memo(function PlanTaskInspector({ task, tasks, language, disabled, onChange, onClose }: Props) {
-  const roleOptions = useMemo(() => getPromptTemplateSummary().map(item => ({ value: item.id, label: item.nameZh || item.name })), [])
+  // `item.nameZh || item.name` 以前在英文界面下也是中文（`nameZh` 永远非空，`||` 右边
+  // 从来不执行）。文案进 locale 表之后这个漏洞跟着字段一起消失。
+  const roleOptions = useMemo(
+    () => getPromptTemplateSummary().map(item => ({ value: item.id, label: t(item.nameKey, language) })),
+    [language],
+  )
   const executionOptions = useMemo(() => ([
     { value: 'general', label: t('planTaskInspector.general', language) },
     { value: 'analysis-read-heavy', label: t('planTaskInspector.analysisReadHeavy', language) },

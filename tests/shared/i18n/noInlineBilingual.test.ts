@@ -41,10 +41,6 @@ const BUDGET: Record<string, number> = {
 
   // ---- 整段对象或数组是双语的（`? { … } : { … }`、`? 0 : 1` 下标、`? 'zh' : 'en'`
   //      语言代码），要先改数据结构才能进 locale ----
-  'src/renderer/components/settings/tabs/AgentSettings.tsx': 1,
-  'src/renderer/components/settings/tabs/McpAddServerModal.tsx': 7,
-  'src/renderer/components/settings/tabs/McpSettings.tsx': 1,
-  'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 1,
   'src/renderer/components/welcome/poster/workPosterRenderer.ts': 1,
 }
 
@@ -125,10 +121,7 @@ describe('inline bilingual text', () => {
     // `toLocaleTag` 退回成三元（那只是把同一件事挪进另一条守卫的账上）。
     const GATES = ['src/shared/i18n/index.ts']
     /** 文件（相对仓库根）→ 还允许存在的字面量双语对数量 */
-    const COPY_TABLE_BUDGET: Record<string, number> = {
-      // ---- 双语标签是数据表的一列：要先给每行定一个键，才谈得上搬进 locale ----
-      'src/shared/config/mcpPresets.ts': 9,
-    }
+    const COPY_TABLE_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), COPY_TABLE, found, { gates: GATES })
     expect(found).toEqual(COPY_TABLE_BUDGET)
@@ -152,11 +145,7 @@ describe('inline bilingual text', () => {
     // 它有自己的守卫：changelogBilingual.test.ts。
     const GATES = ['src/shared/config/changelogData.ts']
     /** 文件（相对仓库根）→ 还允许存在的带语言后缀字段数 */
-    const SUFFIXED_BUDGET: Record<string, number> = {
-      // ---- 数据表整张是双语的：描述、用法示例、环境变量标签 ----
-      'src/shared/config/mcpPresets.ts': 113,
-      'src/renderer/agent/prompts/promptTemplates.ts': 16,
-    }
+    const SUFFIXED_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), SUFFIXED_FIELD, found, { gates: GATES })
     expect(found).toEqual(SUFFIXED_BUDGET)

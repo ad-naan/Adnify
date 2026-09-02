@@ -1,13 +1,18 @@
 /** Personality presets. Shared behavior and tool routing live in promptContract.ts. */
 
 import { registerTemplateTools, type TemplateToolConfig } from '@/shared/config/toolGroups'
+import type { TranslationKey } from '@shared/i18n'
 
 export interface PromptTemplate {
   id: string
-  name: string
-  nameZh: string
-  description: string
-  descriptionZh: string
+  /**
+   * 名称和描述的 locale 键。
+   *
+   * 存键而不是存 `name` / `nameZh` 一对：这张表是模块级常量，求值时还没有 `language`。
+   * `personality` 不在其中 —— 它是发给模型的英文提示词，不是给用户看的文案。
+   */
+  nameKey: TranslationKey
+  descriptionKey: TranslationKey
   /** 模板特有的人格和沟通风格部分 */
   personality: string
   /** 优先级：数字越小优先级越高 */
@@ -29,10 +34,8 @@ export interface PromptTemplate {
 export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'default',
-    name: 'Balanced',
-    nameZh: '均衡',
-    description: 'Clear, helpful, and adaptable - best for most use cases',
-    descriptionZh: '清晰、有帮助、适应性强 - 适合大多数场景',
+    nameKey: 'promptTemplate.default.name',
+    descriptionKey: 'promptTemplate.default.description',
     priority: 1,
     isDefault: true,
     tags: ['default', 'balanced', 'general'],
@@ -44,10 +47,8 @@ You are a plainspoken and direct assistant that helps users with coding tasks. B
 
   {
     id: 'concise',
-    name: 'Concise',
-    nameZh: '简洁',
-    description: 'Minimal output, like Claude Code CLI',
-    descriptionZh: '最少输出，类似 Claude Code CLI',
+    nameKey: 'promptTemplate.concise.name',
+    descriptionKey: 'promptTemplate.concise.description',
     priority: 2,
     tags: ['concise', 'minimal', 'cli'],
     personality: `You are a concise, direct coding assistant. Minimize output while maintaining helpfulness.
@@ -58,10 +59,8 @@ Keep responses short. Answer in 1-3 sentences when possible. Do NOT add unnecess
 
   {
     id: 'coder',
-    name: 'Coder',
-    nameZh: '程序员',
-    description: 'Expert developer focused on implementation and refactoring',
-    descriptionZh: '专注于实现的专家开发人员',
+    nameKey: 'promptTemplate.coder.name',
+    descriptionKey: 'promptTemplate.coder.description',
     priority: 3,
     tags: ['coder', 'implementation', 'development'],
     personality: `You are an expert software engineer specialized in code implementation, refactoring, and debugging.
@@ -72,10 +71,8 @@ You are practical, efficient, and detail-oriented. You write clean, performant, 
 
   {
     id: 'architect',
-    name: 'Architect',
-    nameZh: '架构师',
-    description: 'High-level system design and technical strategy',
-    descriptionZh: '高层系统设计和技术策略',
+    nameKey: 'promptTemplate.architect.name',
+    descriptionKey: 'promptTemplate.architect.description',
     priority: 4,
     tags: ['architect', 'design', 'strategy'],
     personality: `You are a senior technical architect specialized in system design and architectural patterns.
@@ -86,10 +83,8 @@ You think in terms of components, boundaries, and data flow. You prioritize scal
 
   {
     id: 'reviewer',
-    name: 'Code Reviewer',
-    nameZh: '代码审查',
-    description: 'Focus on code quality, security, and best practices',
-    descriptionZh: '专注于代码质量、安全性和最佳实践',
+    nameKey: 'promptTemplate.reviewer.name',
+    descriptionKey: 'promptTemplate.reviewer.description',
     priority: 5,
     tags: ['review', 'quality', 'security'],
     personality: `You are a meticulous code reviewer focused on quality, security, and maintainability.
@@ -100,10 +95,8 @@ Be constructive and specific in feedback. Prioritize issues by severity: securit
 
   {
     id: 'analyst',
-    name: 'Analyst',
-    nameZh: '分析师',
-    description: 'Requirement analysis and problem investigation',
-    descriptionZh: '需求分析和问题调查',
+    nameKey: 'promptTemplate.analyst.name',
+    descriptionKey: 'promptTemplate.analyst.description',
     priority: 6,
     tags: ['analyst', 'requirements', 'investigation'],
     personality: `You are a thorough technical analyst specialized in requirements gathering and complex problem investigation.
@@ -114,10 +107,8 @@ You are inquisitive, logical, and detail-oriented. You enjoy digging into comple
 
   {
     id: 'uiux-designer',
-    name: 'UI/UX Designer',
-    nameZh: 'UI/UX 设计师',
-    description: 'Expert in UI styles, colors, typography, and design best practices',
-    descriptionZh: '精通 UI 风格、配色、字体搭配和设计最佳实践',
+    nameKey: 'promptTemplate.uiuxDesigner.name',
+    descriptionKey: 'promptTemplate.uiuxDesigner.description',
     priority: 7,
     tags: ['design', 'ui', 'ux', 'frontend', 'css', 'tailwind'],
     tools: {
@@ -130,10 +121,8 @@ Create intentional interfaces grounded in the product, audience, existing design
 
   {
     id: 'plan',
-    name: 'Plan',
-    nameZh: '计划',
-    description: 'Multi-turn requirement gathering and task planning',
-    descriptionZh: '多轮需求收集和任务规划',
+    nameKey: 'promptTemplate.plan.name',
+    descriptionKey: 'promptTemplate.plan.description',
     priority: 8,
     tags: ['plan', 'planning', 'requirements'],
     tools: {
@@ -175,20 +164,16 @@ export function getDefaultPromptTemplate(): PromptTemplate {
  */
 export function getPromptTemplateSummary(): Array<{
   id: string
-  name: string
-  nameZh: string
-  description: string
-  descriptionZh: string
+  nameKey: TranslationKey
+  descriptionKey: TranslationKey
   priority: number
   tags: string[]
   isDefault: boolean
 }> {
   return PROMPT_TEMPLATES.map((t) => ({
     id: t.id,
-    name: t.name,
-    nameZh: t.nameZh,
-    description: t.description,
-    descriptionZh: t.descriptionZh,
+    nameKey: t.nameKey,
+    descriptionKey: t.descriptionKey,
     priority: t.priority,
     tags: t.tags,
     isDefault: t.isDefault || false,

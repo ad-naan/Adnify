@@ -17,7 +17,7 @@ import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t } from '@shared/i18n'
+import { t, tDynamic } from '@shared/i18n'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
@@ -246,7 +246,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     // 通过 presetId 查找预设获取使用示例
     const presetId = server.config.presetId
     const preset = presetId ? MCP_PRESETS.find(p => p.id === presetId) : undefined
-    const usageExamples = language === 'zh' ? preset?.usageExamplesZh : preset?.usageExamples
+    const usageExamples = preset?.usageExamples?.map(example => tDynamic(example, language, example))
 
     return (
       <div
