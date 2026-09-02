@@ -221,12 +221,8 @@ describe('inline bilingual text', () => {
     const DEV_ASSERTIONS = ['src/renderer/agent/store/storeUpdaterGuard.ts']
     /** 文件（相对仓库根）→ 还允许存在的单语中文文案数 */
     const CHINESE_ONLY_BUDGET: Record<string, number> = {
-      'src/renderer/components/chat/ModelSelector.tsx': 4,
       'src/main/services/llm/modelFactory.ts': 3,
       'src/main/services/openai/OpenAIAuthService.ts': 2,
-      'src/renderer/services/gitExcludeService.ts': 2,
-      'src/renderer/components/ui/DatePicker.tsx': 1,
-      'src/renderer/services/initService.ts': 1,
     }
     const found: Record<string, number> = {}
     for (const root of ROOTS) {

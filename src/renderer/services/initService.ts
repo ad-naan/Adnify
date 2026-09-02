@@ -26,6 +26,7 @@ import {
   restoreWorkspaceAgentStore,
 } from './workspaceLoadService'
 import { workspaceAnalyticsService } from './workspaceAnalyticsService'
+import { t } from '@shared/i18n'
 
 export interface InitResult {
   success: boolean
@@ -127,7 +128,12 @@ async function restoreWorkspace(): Promise<boolean> {
     if (workspaceConfig?.restoreError === 'missing-workspace') {
       const missing = workspaceConfig.missingRoots?.[0] || ''
       const { toast } = await import('@renderer/components/common/ToastProvider')
-      toast.warning('上次打开的工作区已不存在，请重新选择文件夹', missing || undefined)
+      // `loadUserSettings()`（内含 store.load()）在 `initializeApp` 里先于本函数 await，
+      // 所以这里读到的已经是持久化的语言，不是默认值。
+      toast.warning(
+        t('initService.lastWorkspaceMissing', useStore.getState().language),
+        missing || undefined,
+      )
     }
 
     startupMetrics.end('restore-workspace')

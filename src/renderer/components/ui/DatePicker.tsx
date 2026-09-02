@@ -8,7 +8,9 @@ export interface DatePickerProps extends Omit<InputHTMLAttributes<HTMLInputEleme
   className?: string
 }
 
-export function DatePicker({ value, onChange, placeholder = '选择日期', className = '', ...props }: DatePickerProps) {
+// 占位文案由调用方给（`ui/` 下的组件一律不碰 store 和 locale 表）。原来这里的默认值是
+// 中文字面量，英文界面下只要有人不传 placeholder 就会漏中文。
+export function DatePicker({ value, onChange, placeholder, className = '', ...props }: DatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleWrapperClick = () => {

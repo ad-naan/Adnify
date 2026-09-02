@@ -1793,6 +1793,10 @@ export const zh = {
   'fileUtils.openedInVeryLarge': '已使用超大文件查看器',
   'fileUtils.someFilesFailedTo': '部分文件打开失败',
 
+  // gitExcludeService
+  'gitExcludeService.notInsideRepository': '所选内容不在 Git 仓库中',
+  'gitExcludeService.writeFailed': '写入 {file} 失败',
+
   // gitView
   'gitView.currentRepository': '当前仓库',
   'gitView.listMode': '列表模式',
@@ -1843,6 +1847,9 @@ export const zh = {
   'indexSettings.switchedToSemantic': '已切换到语义索引模式',
   'indexSettings.switchedToStructural': '已切换到结构化索引模式',
   'indexSettings.zeroConfigLocalBased': '零配置，本地运行，基于代码结构分析',
+
+  // initService
+  'initService.lastWorkspaceMissing': '上次打开的工作区已不存在，请重新选择文件夹',
 
   // interactiveCard
   'interactiveCard.confirm': '确认 ({size})',
@@ -2057,6 +2064,11 @@ export const zh = {
   'messageQueuePanel.remove': '移除',
   'messageQueuePanel.sendNow': '立即发送',
   'messageQueuePanel.sendQueue': '发送队列',
+
+  // modelSelector
+  'modelSelector.noMatchingModels': '无相关模型',
+  'modelSelector.noMatchingProviders': '无相关供应商',
+  'modelSelector.searchModelsOrProviders': '搜索模型或供应商...',
 
   // modeSelector
   'modeSelector.executeDirectly': '直接执行任务',

@@ -34,7 +34,7 @@ import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
-import { gitExcludeService } from '@services/gitExcludeService'
+import { gitExcludeService, gitIgnoreErrorText } from '@services/gitExcludeService'
 
 // 每个节点的高度（像素）
 const ITEM_HEIGHT = 30
@@ -164,7 +164,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     } catch (error) {
       toast.error(
         t('virtualFileTree.failedToUpdate', language, { targetLabel }),
-        error instanceof Error ? error.message : String(error),
+        gitIgnoreErrorText(error, language),
       )
     }
   }, [language, workspacePath])

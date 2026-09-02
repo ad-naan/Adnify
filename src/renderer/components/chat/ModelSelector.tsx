@@ -4,6 +4,7 @@ import { ChevronDown, Check, Search } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { BUILTIN_PROVIDERS, getBuiltinProvider } from '@shared/config/providers'
+import { t } from '@shared/i18n'
 
 interface ModelGroup {
   providerId: string
@@ -17,10 +18,11 @@ interface ModelSelectorProps {
 }
 
 export default function ModelSelector({ className = '', alignLeft = false }: ModelSelectorProps) {
-  const { llmConfig, update, providerConfigs } = useStore(useShallow(s => ({
+  const { llmConfig, update, providerConfigs, language } = useStore(useShallow(s => ({
     llmConfig: s.llmConfig,
     update: s.update,
     providerConfigs: s.providerConfigs,
+    language: s.language,
   })))
   const [isOpen, setIsOpen] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
@@ -237,7 +239,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="搜索模型或供应商..."
+            placeholder={t('modelSelector.searchModelsOrProviders', language)}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted/75 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all custom-scrollbar"
@@ -248,7 +250,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
       <div className="grid grid-cols-[150px_minmax(0,1fr)] min-h-0 flex-1">
         <div className="border-r border-border/50 overflow-y-auto p-1 custom-scrollbar">
           {filteredGroups.length === 0 ? (
-            <div className="py-6 text-center text-xs text-text-muted">无相关供应商</div>
+            <div className="py-6 text-center text-xs text-text-muted">{t('modelSelector.noMatchingProviders', language)}</div>
           ) : (
             filteredGroups.map(group => {
               const isSelectedProvider = visibleProviderGroup?.providerId === group.providerId
@@ -273,7 +275,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
 
         <div className="overflow-y-auto flex-1 p-1 custom-scrollbar">
           {!visibleProviderGroup ? (
-            <div className="py-6 text-center text-xs text-text-muted">无相关模型</div>
+            <div className="py-6 text-center text-xs text-text-muted">{t('modelSelector.noMatchingModels', language)}</div>
           ) : (
             <>
               <div className="px-2 py-1.5 text-[10px] font-bold text-text-muted/80 uppercase tracking-wider flex items-center gap-1.5 sticky top-0 bg-surface z-10 border-b border-border/30">
@@ -283,7 +285,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
                 {visibleProviderGroup.providerName}
               </div>
               {visibleProviderGroup.models.length === 0 ? (
-                <div className="py-6 text-center text-xs text-text-muted">无相关模型</div>
+                <div className="py-6 text-center text-xs text-text-muted">{t('modelSelector.noMatchingModels', language)}</div>
               ) : (
                 visibleProviderGroup.models.map(model => {
                   const isSelected = llmConfig.provider === visibleProviderGroup.providerId && llmConfig.model === model.id

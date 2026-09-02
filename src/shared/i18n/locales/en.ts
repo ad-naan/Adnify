@@ -1792,6 +1792,10 @@ export const en = {
   'fileUtils.openedInVeryLarge': 'Opened in very large file viewer',
   'fileUtils.someFilesFailedTo': 'Some files failed to open',
 
+  // gitExcludeService
+  'gitExcludeService.notInsideRepository': 'The selection is not inside a Git repository',
+  'gitExcludeService.writeFailed': 'Failed to write {file}',
+
   // gitView
   'gitView.currentRepository': 'Current Repository',
   'gitView.listMode': 'List Mode',
@@ -1842,6 +1846,9 @@ export const en = {
   'indexSettings.switchedToSemantic': 'Switched to semantic index mode',
   'indexSettings.switchedToStructural': 'Switched to structural index mode',
   'indexSettings.zeroConfigLocalBased': 'Zero config, local, based on code structure',
+
+  // initService
+  'initService.lastWorkspaceMissing': 'The last workspace no longer exists. Please choose a folder again.',
 
   // interactiveCard
   'interactiveCard.confirm': 'Confirm ({size})',
@@ -2056,6 +2063,11 @@ export const en = {
   'messageQueuePanel.remove': 'Remove',
   'messageQueuePanel.sendNow': 'Send now',
   'messageQueuePanel.sendQueue': 'Send Queue',
+
+  // modelSelector
+  'modelSelector.noMatchingModels': 'No matching models',
+  'modelSelector.noMatchingProviders': 'No matching providers',
+  'modelSelector.searchModelsOrProviders': 'Search models or providers...',
 
   // modeSelector
   'modeSelector.executeDirectly': 'Execute directly',
