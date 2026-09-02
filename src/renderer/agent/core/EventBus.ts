@@ -100,8 +100,15 @@ export type AgentEvent =
   // 休息提醒和情绪文案都只走 `emotion:feedback`：状态栏和编辑器栏都订阅它，
   // 也是唯一带冷却/免打扰的通道。早先另有 `emotion:message`、`break:micro`、
   // `break:suggested` 三个事件，各自带一段中文句子，却没有任何订阅方。
+  //
+  // `emotion:changed` 只由检测引擎发。终端命令失败这类外部证据走
+  // `terminal:failed` 喂给上下文分析器，由引擎在下一个窗口里正常判定 ——
+  // 早先 `terminalWatcher` 直接伪造一个 `emotion:changed` 推上总线，绕过引擎，
+  // 结果引擎的 `currentState` 不知道这回事，UI 会卡在 frustrated 上，
+  // history 里也没有这一条（`frustrationEpisodes` 永远数不到终端失败）。
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
   | { type: 'emotion:feedback'; feedback: import('../types/emotion').EmotionFeedbackPayload }
+  | { type: 'terminal:failed'; terminalId: string }
 
   // Plan 执行事件
   | { type: 'plan:start'; planId: string; sessionId?: string }

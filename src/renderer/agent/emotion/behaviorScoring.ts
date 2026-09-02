@@ -11,7 +11,71 @@
  * 这里只做算术。时间、设置、基线一律由调用方作为参数传进来。
  */
 
-import type { BehaviorMetrics, EmotionFactor, EmotionState } from '../types/emotion'
+import type { BehaviorMetrics, EmotionFactor, EmotionHistory, EmotionState } from '../types/emotion'
+
+/**
+ * 把一串采样快照合成一个窗口的指标。
+ *
+ * `sampleIntervalMs` 是采样间隔：每个快照装的是"上一次采样到这一次"这段时间里的计数
+ * （flush 之后计数器就清零），所以 N 个快照覆盖 N × sampleIntervalMs。
+ *
+ * 原来窗口长度用的是 `last.timestamp - first.timestamp`，那只有 (N-1) 个间隔 ——
+ * 少算一整段，WPM 被系统性放大 N/(N-1) 倍。12 秒窗口通常 3 个快照，也就是虚高 1.5 倍：
+ * 真实 27 WPM 报成 40，正好把人推过"打字算 focused"的门槛。而且 `emotionBaseline`
+ * 记样本时用的是另一个时间基准，两边量纲还对不上。
+ */
+export function aggregateWindow(
+  metrics: BehaviorMetrics[],
+  sampleIntervalMs: number,
+): BehaviorMetrics {
+  const sum = (key: keyof BehaviorMetrics) =>
+    metrics.reduce((acc, m) => acc + (m[key] as number), 0)
+
+  const keystrokes = sum('keystrokes')
+  const backspaces = sum('backspaces')
+  const windowMinutes = Math.max((metrics.length * sampleIntervalMs) / 1000 / 60, 0.01)
+
+  return {
+    timestamp: Date.now(),
+    // 一个"词"按 5 个字符算，这是 WPM 的通用约定。
+    typingSpeed: Math.min((keystrokes / 5) / windowMinutes, 150),
+    errorRate: keystrokes > 0 ? backspaces / keystrokes : 0,
+    activeTypingTime: sum('activeTypingTime'),
+    // 停顿取最后一个快照的值：它是"到现在为止停了多久"，求和没有意义。
+    pauseDuration: metrics[metrics.length - 1].pauseDuration,
+    keystrokes,
+    backspaces,
+    cursorMovement: sum('cursorMovement'),
+    copyPasteCount: sum('copyPasteCount'),
+    fileSwitches: sum('fileSwitches'),
+    testRuns: sum('testRuns'),
+    testFailures: sum('testFailures'),
+  }
+}
+
+/**
+ * 专注时长（分钟）：按**相邻记录之间的实际间隔**累加。
+ *
+ * 原来是"focused/flow 的条数 × 12 秒"，但历史不是每 12 秒一条 —— 广播被
+ * `shouldNotifyStateChange` 挡着，持续专注时每 24 秒才补写一条，每条却按 12 秒计，
+ * 于是少报约一半。原来还叠了一段"当前状态额外时长"的补偿去凑，反而更难说清哪段算了几次。
+ *
+ * `gapCapMs` 挡住"应用关了一夜再打开"和"中间漏了一大段记录"——那段空白不该算成一直在专注。
+ */
+export function focusMinutes(
+  history: EmotionHistory[],
+  now: number,
+  gapCapMs: number,
+): number {
+  let totalMs = 0
+  for (let i = 0; i < history.length; i++) {
+    const entry = history[i]
+    if (entry.state !== 'focused' && entry.state !== 'flow') continue
+    const until = history[i + 1]?.timestamp ?? now
+    totalMs += Math.min(Math.max(until - entry.timestamp, 0), gapCapMs)
+  }
+  return totalMs / 1000 / 60
+}
 
 /** `emotionBaseline.getRelativeMetrics()` 的返回形状。 */
 export interface BaselineDeviation {
@@ -117,7 +181,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
     ? clampScore((relative.typingSpeedDeviation + 1) / 2)
     : normalizeTypingSpeed(metrics.typingSpeed)
   factors.push({
-    type: 'typing_speed', weight: 0.3, value: typingSpeedScore,
+    type: 'typing_speed', value: typingSpeedScore,
     description: relative.calibrated
       ? `${metrics.typingSpeed.toFixed(0)} WPM (${relative.typingSpeedDeviation > 0 ? '+' : ''}${relative.typingSpeedDeviation.toFixed(1)}σ)`
       : `${metrics.typingSpeed.toFixed(0)} WPM`,
@@ -157,7 +221,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
     ? clampScore(metrics.errorRate + relative.backspaceRateDeviation * 0.15)
     : metrics.errorRate
   factors.push({
-    type: 'error_rate', weight: 0.25, value: errorRateScore,
+    type: 'error_rate', value: errorRateScore,
     description: relative.calibrated
       ? `Backspace: ${(metrics.errorRate * 100).toFixed(0)}% (${relative.backspaceRateDeviation > 0 ? '↑' : '→'})`
       : `Backspace: ${(metrics.errorRate * 100).toFixed(0)}%`,
@@ -172,7 +236,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
   //    短停顿（<20s）或刚有过活动 = 在思考/阅读，不算 tired。
   const pauseScore = Math.min(metrics.pauseDuration / 30000, 1)
   factors.push({
-    type: 'pause_duration', weight: 0.15, value: pauseScore,
+    type: 'pause_duration', value: pauseScore,
     description: `Pause: ${(metrics.pauseDuration / 1000).toFixed(0)}s`,
   })
   if (isReading) {
@@ -190,7 +254,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
     ? clampScore(Math.min(metrics.fileSwitches / 3, 1) + relative.fileSwitchDeviation * 0.1)
     : Math.min(metrics.fileSwitches / 3, 1)
   factors.push({
-    type: 'tab_switching', weight: 0.15, value: tabSwitchScore,
+    type: 'tab_switching', value: tabSwitchScore,
     description: `Tab switches: ${metrics.fileSwitches}`,
   })
   if (metrics.fileSwitches >= 4) {
@@ -206,7 +270,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
     ? Math.min((sessionMinutes - 45) / 75, 1)  // 45~120 分钟线性增长
     : 0
   factors.push({
-    type: 'session_duration', weight: 0.1, value: sessionScore,
+    type: 'session_duration', value: sessionScore,
     description: `${sessionMinutes.toFixed(0)}min`,
   })
   scores.tired += sessionScore * 0.4
@@ -218,7 +282,7 @@ export function scoreBehavior(input: BehaviorScoringInput): BehaviorScoring {
   const isUnusualHour = relative.calibrated ? !relative.isActiveHour : (hour < 6 || hour > 22)
   const timeScore = isUnusualHour ? 0.8 : 0
   factors.push({
-    type: 'time_of_day', weight: 0.05, value: timeScore,
+    type: 'time_of_day', value: timeScore,
     description: relative.calibrated
       ? `${hour}:00 ${isUnusualHour ? '(off-hours)' : ''}`
       : `${hour}:00`,

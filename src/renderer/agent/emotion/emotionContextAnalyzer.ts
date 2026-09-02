@@ -26,8 +26,11 @@ interface AIInteractionRecord {
 interface ErrorRecord {
   timestamp: number
   severity: 'error' | 'warning'
-  source: 'diagnostics' | 'tool' | 'llm'
+  source: 'diagnostics' | 'tool' | 'llm' | 'terminal'
 }
+
+/** 终端命令失败之后，多久之内还算"环境有错"。够引擎跑过几个 12 秒窗口。 */
+const TERMINAL_FAILURE_WINDOW = 3 * 60 * 1000
 
 class EmotionContextAnalyzer {
   // ===== 自动采集的历史 =====
@@ -37,6 +40,8 @@ class EmotionContextAnalyzer {
 
   // ===== LLM 回合计时 =====
   private llmStartTime: number | null = null
+  /** 上一次终端命令失败的时间。在 TERMINAL_FAILURE_WINDOW 内算作"环境有错"。 */
+  private lastTerminalFailureAt = 0
 
   // ===== Store 快照缓存（每次 analyzeContext 刷新） =====
   private lastDiagErrorCount = 0
@@ -71,6 +76,12 @@ class EmotionContextAnalyzer {
       EventBus.on('llm:error', () => {
         this.recordError('llm')
         this.llmStartTime = null
+      }),
+      // 终端命令失败：和 LSP 诊断一样，是一条"环境出错了"的证据，交给引擎在下一个
+      // 窗口里正常判定，而不是自己伪造一个状态推上总线。
+      EventBus.on('terminal:failed', () => {
+        this.lastTerminalFailureAt = Date.now()
+        this.recordError('terminal')
       }),
     )
 
@@ -174,7 +185,14 @@ class EmotionContextAnalyzer {
       const codeComplexity = this.estimateComplexity(mainState)
 
       // 诊断错误 — 只看当前文件是否有真正的 error（severity === 1），不看全局 warnings
-      const { hasErrors, errorType } = this.checkCurrentFileErrors(diagState.diagnostics, currentFile)
+      const fileErrors = this.checkCurrentFileErrors(diagState.diagnostics, currentFile)
+      // 终端命令刚失败过也算"环境有错"。当前文件自己的诊断更具体，优先用它。
+      const terminalFailedRecently = Date.now() - this.lastTerminalFailureAt < TERMINAL_FAILURE_WINDOW
+      const { hasErrors, errorType } = fileErrors.hasErrors
+        ? fileErrors
+        : terminalFailedRecently
+          ? { hasErrors: true, errorType: 'runtime' as const }
+          : fileErrors
 
       // Git 状态
       const gitStatus = this.readGitStatus(mainState.gitStatus)
@@ -208,18 +226,29 @@ class EmotionContextAnalyzer {
   /**
    * 基于上下文增强情绪检测
    */
+  /**
+   * 用真实上下文（诊断 / 工具失败 / Git / AI 对话）修正行为层的判定。
+   *
+   * `baseConfidence` 是行为层算出来的置信度，这里只**在它之上加**上下文带来的增量。
+   * 原来不是这样：无论行为层算出什么，这里都直接覆盖成固定的 0.5（无上下文）或 0.75
+   * （有上下文）再往上加 —— 也就是说行为层那句
+   * `min(factors/4,1) * (0.4 + intensity*0.4)` 算完就被丢掉，因子多少、强度高低对
+   * 最终 confidence 毫无影响，而界面和后续逻辑都在读这个值。
+   */
   enhanceEmotionDetection(
     baseState: EmotionState,
     baseIntensity: number,
+    baseConfidence: number,
     context: CodeContext | null
   ): { state: EmotionState; intensity: number; confidence: number; suggestions: TranslationKey[] } {
     if (!context) {
-      return { state: baseState, intensity: baseIntensity, confidence: 0.5, suggestions: [] }
+      return { state: baseState, intensity: baseIntensity, confidence: baseConfidence, suggestions: [] }
     }
 
     let adjustedState = baseState
     let adjustedIntensity = baseIntensity
-    let confidence = 0.75
+    // 有上下文本身就是一份佐证，给一点底；剩下的按命中的规则逐条加。
+    let confidence = baseConfidence + 0.05
     // 存键不存句子：这里没有 `language`，句子由状态栏组件翻译。
     const suggestions: TranslationKey[] = []
 
@@ -230,6 +259,12 @@ class EmotionContextAnalyzer {
         adjustedState = this.nudgeState(adjustedState, 'frustrated', 0.6)
         adjustedIntensity = Math.min(adjustedIntensity + errorBoost, 1)
         suggestions.push('emotion.suggestion.syntaxError')
+      } else if (context.errorType === 'runtime') {
+        // 终端命令失败（构建/测试/脚本报错）。和语法错误同权重：两者都是"刚刚有东西
+        // 明确坏掉了"，比类型错误更硬。
+        adjustedState = this.nudgeState(adjustedState, 'frustrated', 0.6)
+        adjustedIntensity = Math.min(adjustedIntensity + errorBoost, 1)
+        suggestions.push('emotion.suggestion.terminalError')
       } else if (context.errorType === 'type') {
         adjustedState = this.nudgeState(adjustedState, 'stressed', 0.5)
         adjustedIntensity = Math.min(adjustedIntensity + errorBoost, 1)

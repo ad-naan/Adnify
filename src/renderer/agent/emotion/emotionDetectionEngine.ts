@@ -10,7 +10,7 @@ import { logger } from '@utils/Logger'
 import { EventBus } from '../core/EventBus'
 import { emotionContextAnalyzer } from './emotionContextAnalyzer'
 import { emotionBaseline } from './emotionBaseline'
-import { scoreBehavior, smoothState, type StateSmoothing } from './behaviorScoring'
+import { aggregateWindow, focusMinutes, scoreBehavior, smoothState, type StateSmoothing } from './behaviorScoring'
 import { loadEmotionPanelSettings } from './panelSettings'
 import type {
   EmotionDetection,
@@ -24,6 +24,13 @@ const DETECTION_WINDOW = 12000   // 12秒分析窗口（比15s更快响应）
 const SAMPLE_INTERVAL = 4000     // 每4秒采样一次指标
 const METRICS_BUFFER_SIZE = 100
 const HISTORY_LIMIT = 1440       // 保存24小时的历史
+/**
+ * 相邻两条历史之间最多按多少算进 Focus Time。
+ *
+ * 持续专注时每 24 秒补一条记录，所以正常间隔在 12~24 秒；60 秒的上限只挡异常情况 ——
+ * 应用关了一夜再开、或者中间整段没写记录，那段空白不该算成"一直在专注"。
+ */
+const FOCUS_GAP_CAP = 60_000
 
 class EmotionDetectionEngine {
   private metricsBuffer: BehaviorMetrics[] = []
@@ -158,33 +165,16 @@ class EmotionDetectionEngine {
   } {
     const dayHistory = this.getHistory(24 * 60 * 60 * 1000)
 
-    // 计算历史记录中的 Focus Time（每个记录代表一个检测窗口，约12秒）
-    const historyFocusTime = dayHistory.filter(h =>
-      h.state === 'focused' || h.state === 'flow'
-    ).length * (DETECTION_WINDOW / 1000 / 60)
-
-    // 如果当前状态是 focused 或 flow，加上当前状态的持续时间
-    // 历史记录只在状态变化或强度变化较大时记录，所以需要加上当前状态的持续时间
-    let currentStateFocusTime = 0
-    if (this.currentState && (this.currentState.state === 'focused' || this.currentState.state === 'flow')) {
-      // 找到历史记录中最后一条 focused/flow 记录的时间戳
-      const lastFocusRecord = dayHistory
-        .filter(h => h.state === 'focused' || h.state === 'flow')
-        .sort((a, b) => b.timestamp - a.timestamp)[0]
-      
-      // 如果最后一条记录的时间戳早于 stateStartTime，说明状态已经变化了，从 stateStartTime 开始计算
-      // 否则，从最后一条记录的时间戳开始计算（避免重复计算）
-      const startTime = lastFocusRecord && lastFocusRecord.timestamp >= this.stateStartTime
-        ? lastFocusRecord.timestamp
-        : this.stateStartTime
-      
-      const currentStateDuration = Date.now() - startTime
-      // 只计算超过一个检测窗口的时间（避免与历史记录重复）
-      const extraTime = Math.max(0, currentStateDuration - DETECTION_WINDOW)
-      currentStateFocusTime = extraTime / 1000 / 60 // 转换为分钟
-    }
-
-    const focusTime = historyFocusTime + currentStateFocusTime
+    // Focus Time 按**相邻记录之间的实际间隔**累加，不按记录条数乘一个常数。
+    //
+    // 原来是 `focused/flow 的条数 × 12 秒`，但历史不是每 12 秒一条：广播被
+    // `shouldNotifyStateChange` 挡着，持续专注时靠 `_focusRecordTicker >= 2` 每 24 秒
+    // 才补写一条 —— 每条按 12 秒计，于是专注时间少报约一半。再叠一段"当前状态额外时长"
+    // 的补偿逻辑去凑，反而更难说清哪段被算了几次。
+    //
+    // 现在每条记录算到下一条为止，最后一条算到现在。间隔上限挡住"应用关了几小时"
+    // 和"中间漏了一大段记录"这两种情况整段被计进去。
+    const focusTime = focusMinutes(dayHistory, Date.now(), FOCUS_GAP_CAP)
 
     let flowSessions = 0
     let inFlowSession = false
@@ -251,10 +241,12 @@ class EmotionDetectionEngine {
       timestamp: Date.now(),
       typingSpeed: 0,
       errorRate: 0,
-      activeTypingTime: this.isTyping ? Date.now() : 0,
+      // 这一个采样间隔里在打字就记满这段时长。原来存的是 `Date.now()` —— 一个绝对
+      // 时间戳存进"连续打字时长(ms)"字段，然后被 aggregate 求和，加出来是天文数字。
+      activeTypingTime: this.isTyping ? SAMPLE_INTERVAL : 0,
       pauseDuration: this.getCurrentPauseDuration(),
       keystrokes: this.liveCounters.keystrokes,
-      backspaceRate: this.liveCounters.backspaces,
+      backspaces: this.liveCounters.backspaces,
       cursorMovement: this.liveCounters.cursorMoves,
       copyPasteCount: this.liveCounters.copyPastes,
       fileSwitches: this.liveCounters.fileSwitches,
@@ -321,7 +313,6 @@ class EmotionDetectionEngine {
       duration: 0,
       factors: [{
         type: 'session_duration',
-        weight: 1,
         value: 0,
         description: 'Session just started',
       }],
@@ -354,6 +345,7 @@ class EmotionDetectionEngine {
     const enhanced = emotionContextAnalyzer.enhanceEmotionDetection(
       baseDetection.state,
       baseDetection.intensity,
+      baseDetection.confidence,
       context
     )
 
@@ -425,7 +417,6 @@ class EmotionDetectionEngine {
       const diagErrors = emotionContextAnalyzer.getRecentDiagnosticErrors(15 * 60 * 1000)
       factors.push({
         type: 'error_context',
-        weight: 0.3,
         value: Math.min(diagErrors.errors / 5, 1),
         description: `${diagErrors.errors} errors, ${diagErrors.warnings} warnings (LSP)`,
       })
@@ -435,7 +426,6 @@ class EmotionDetectionEngine {
     if (context.aiInteractions.count > 0) {
       factors.push({
         type: 'ai_interaction_pattern',
-        weight: 0.2,
         value: Math.min(context.aiInteractions.count / 10, 1),
         description: `${context.aiInteractions.count} AI interactions, avg ${(context.aiInteractions.avgResponseTime / 1000).toFixed(1)}s`,
       })
@@ -445,7 +435,6 @@ class EmotionDetectionEngine {
     if (context.gitStatus && context.gitStatus !== 'clean') {
       factors.push({
         type: 'git_activity',
-        weight: context.gitStatus === 'conflict' ? 0.35 : 0.15,
         value: context.gitStatus === 'conflict' ? 1.0 : 0.5,
         description: `Git: ${context.gitStatus}`,
       })
@@ -454,7 +443,6 @@ class EmotionDetectionEngine {
     // 文件类型因子
     factors.push({
       type: 'file_type_pattern',
-      weight: 0.1,
       value: context.fileType === 'test' ? 0.7 : context.fileType === 'config' ? 0.5 : 0.3,
       description: `File: ${context.fileType} (${context.currentFile.split('/').pop()})`,
     })
@@ -463,7 +451,6 @@ class EmotionDetectionEngine {
     if (context.searchQueries > 3) {
       factors.push({
         type: 'search_pattern',
-        weight: 0.15,
         value: Math.min(context.searchQueries / 10, 1),
         description: `${context.searchQueries} file switches (15min)`,
       })
@@ -473,7 +460,6 @@ class EmotionDetectionEngine {
     if (context.codeComplexity > 0.3) {
       factors.push({
         type: 'code_complexity',
-        weight: 0.15,
         value: context.codeComplexity,
         description: `Complexity: ${(context.codeComplexity * 100).toFixed(0)}%`,
       })
@@ -483,46 +469,15 @@ class EmotionDetectionEngine {
   }
 
   private aggregateMetrics(metrics: BehaviorMetrics[]): BehaviorMetrics {
-    if (metrics.length === 0) {
-      return this.createEmptyMetrics()
-    }
-
-    const sum = (key: keyof BehaviorMetrics) =>
-      metrics.reduce((acc, m) => acc + (m[key] as number), 0)
-
-    const totalKeystrokes = sum('keystrokes')
-    const timeSpanMs = metrics.length > 1
-      ? metrics[metrics.length - 1].timestamp - metrics[0].timestamp
-      : SAMPLE_INTERVAL
-    const timeSpanMin = Math.max(timeSpanMs / 1000 / 60, 0.01)
-    const typingSpeed = (totalKeystrokes / 5) / timeSpanMin
-
-    const totalBackspaces = sum('backspaceRate')
-    const errorRate = totalKeystrokes > 0 ? totalBackspaces / totalKeystrokes : 0
-
-    const lastPause = metrics[metrics.length - 1].pauseDuration
-
-    return {
-      timestamp: Date.now(),
-      typingSpeed: Math.min(typingSpeed, 150),
-      errorRate,
-      activeTypingTime: sum('activeTypingTime'),
-      pauseDuration: lastPause,
-      keystrokes: totalKeystrokes,
-      backspaceRate: totalBackspaces,
-      cursorMovement: sum('cursorMovement'),
-      copyPasteCount: sum('copyPasteCount'),
-      fileSwitches: sum('fileSwitches'),
-      testRuns: sum('testRuns'),
-      testFailures: sum('testFailures'),
-    }
+    if (metrics.length === 0) return this.createEmptyMetrics()
+    return aggregateWindow(metrics, SAMPLE_INTERVAL)
   }
 
   private createEmptyMetrics(): BehaviorMetrics {
     return {
       timestamp: Date.now(), typingSpeed: 0, errorRate: 0,
       activeTypingTime: 0, pauseDuration: 0, keystrokes: 0,
-      backspaceRate: 0, cursorMovement: 0, copyPasteCount: 0,
+      backspaces: 0, cursorMovement: 0, copyPasteCount: 0,
       fileSwitches: 0, testRuns: 0, testFailures: 0,
     }
   }

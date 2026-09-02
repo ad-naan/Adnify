@@ -68,29 +68,24 @@ class TerminalWatcher {
             const lastAlert = this.lastAlertTimes.get(id) || 0
 
             if (now - lastAlert > this.ALERT_COOLDOWN) {
-                this.triggerDiagnosticAlert()
+                this.triggerDiagnosticAlert(id)
                 this.lastAlertTimes.set(id, now)
             }
         }
     }
 
-    private triggerDiagnosticAlert() {
-        // 1. 触发 AI 情绪环境改变（如：变得警觉/关注，并推送消息）
-        setTimeout(() => {
-            EventBus.emit({
-                type: 'emotion:changed',
-                emotion: {
-                    state: 'frustrated',
-                    intensity: 0.8,
-                    confidence: 0.9,
-                    triggeredAt: Date.now(),
-                    duration: 0,
-                    // description 是诊断字段，只进日志，所以固定英文；suggestions 是给用户看的，存键。
-                    factors: [{ type: 'error_rate', value: 1, weight: 1, description: 'Terminal command failed' }],
-                    suggestions: ['emotion.suggestion.terminalError']
-                }
-            })
-        }, 100)
+    private triggerDiagnosticAlert(id: string) {
+        // 1. 把"终端命令失败"作为一条上下文证据交给情绪系统。
+        //
+        // 原来这里直接伪造一个 `emotion:changed` 推上总线（frustrated / 0.8 / 0.9），
+        // 绕过检测引擎。三个后果：引擎的 `currentState` 不知道这回事，所以下一个窗口
+        // 只要重算出同一个状态就不会再广播，UI 卡在 frustrated 上直到状态真的变；
+        // 这一条不进 history，`getProductivityReport().frustrationEpisodes` 永远数不到
+        // 终端失败；intensity 和 confidence 是拍出来的常数，和别处的量纲不一致。
+        //
+        // 现在只报事实，判定交给引擎 —— 它会在下一个窗口（≤12 秒）把这条证据算进去，
+        // 走正常的平滑、history、广播。用户看到的即时反馈是下面那条 toast，不依赖情绪状态。
+        EventBus.emit({ type: 'terminal:failed', terminalId: id })
 
         // 2. 抛出 UI Toast 给用户提示
         // 服务层没有 props，按渲染层惯例直接从 store 取当前语言。

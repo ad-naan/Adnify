@@ -41,10 +41,16 @@ export interface EmotionDetection {
   }[]
 }
 
-/** 影响情绪的因素 */
+/**
+ * 影响情绪的因素。
+ *
+ * 只是"给人看的解释"，不参与打分 —— 曾经还有一个 `weight` 字段（0.3 / 0.25 / 0.15 …），
+ * 从来没有被乘进 `scores`：真正的系数是 `behaviorScoring.ts` 里另一套内联字面量
+ * （0.7 / 0.9 / 0.8 …）。两套互不同步的魔数放在一起，改 weight 不影响任何判定，
+ * 而读代码的人会以为改了。2026-09-02 删掉，系数只保留生效的那一套。
+ */
 export interface EmotionFactor {
   type: EmotionFactorType
-  weight: number      // 对当前情绪的影响权重
   value: number       // 具体数值
   description: string
 }
@@ -178,7 +184,8 @@ export interface BehaviorMetrics {
   activeTypingTime: number   // 连续打字时长(ms)
   pauseDuration: number      // 当前停顿时长(ms)
   keystrokes: number         // 按键次数
-  backspaceRate: number      // 退格率
+  /** 退格/删除次数。是**计数**不是比率 —— 比率在 `errorRate`（退格 / 总按键）。 */
+  backspaces: number
   cursorMovement: number     // 光标移动次数
   copyPasteCount: number     // 复制粘贴次数
   fileSwitches: number       // 文件切换次数

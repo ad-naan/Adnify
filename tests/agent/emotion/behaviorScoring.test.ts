@@ -11,6 +11,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  aggregateWindow,
+  focusMinutes,
   scoreBehavior,
   smoothState,
   STATE_CONFIRM_TICKS,
@@ -37,7 +39,7 @@ function metrics(overrides: Partial<BehaviorMetrics> = {}): BehaviorMetrics {
     activeTypingTime: 0,
     pauseDuration: 0,
     keystrokes: 0,
-    backspaceRate: 0,
+    backspaces: 0,
     cursorMovement: 0,
     copyPasteCount: 0,
     fileSwitches: 0,
@@ -196,5 +198,79 @@ describe('smoothState', () => {
 
   it('keeps reporting the same state when nothing changes', () => {
     expect(run(fresh('flow'), ['flow', 'flow', 'flow'])).toEqual(['flow', 'flow', 'flow'])
+  })
+})
+
+describe('aggregateWindow', () => {
+  const SAMPLE = 4_000
+
+  /** 一个快照 = 这一段采样间隔里累积的计数（flush 之后计数器清零）。 */
+  const snapshot = (keystrokes: number, backspaces = 0): BehaviorMetrics =>
+    metrics({ keystrokes, backspaces, activeTypingTime: SAMPLE })
+
+  it('measures the window as N intervals, not N-1', () => {
+    // 3 个快照 × 4 秒 = 12 秒 = 0.2 分钟；60 次按键 = 12 个"词"（5 字符一个）→ 60 WPM。
+    // 旧算法用 last-first = 8 秒做除数，同样的输入会报 90 WPM —— 虚高正好 1.5 倍。
+    const window = aggregateWindow([snapshot(20), snapshot(20), snapshot(20)], SAMPLE)
+    expect(window.typingSpeed).toBeCloseTo(60, 5)
+  })
+
+  it('does not blow up on a single snapshot', () => {
+    // 单个快照时旧算法退化成 `SAMPLE_INTERVAL`，新算法就是 1 × SAMPLE，结果一致。
+    expect(aggregateWindow([snapshot(20)], SAMPLE).typingSpeed).toBeCloseTo(60, 5)
+  })
+
+  it('turns backspace counts into a rate over the same window', () => {
+    const window = aggregateWindow([snapshot(30, 3), snapshot(30, 9)], SAMPLE)
+    expect(window.keystrokes).toBe(60)
+    expect(window.backspaces).toBe(12)
+    expect(window.errorRate).toBeCloseTo(0.2, 5)
+  })
+
+  it('sums typing time instead of summing timestamps', () => {
+    // `activeTypingTime` 以前存的是 `Date.now()`，求和之后是个天文数字。
+    const window = aggregateWindow([snapshot(10), snapshot(10), snapshot(10)], SAMPLE)
+    expect(window.activeTypingTime).toBe(3 * SAMPLE)
+  })
+
+  it('takes the latest pause rather than adding them up', () => {
+    const window = aggregateWindow(
+      [metrics({ pauseDuration: 1_000 }), metrics({ pauseDuration: 9_000 })],
+      SAMPLE,
+    )
+    expect(window.pauseDuration).toBe(9_000)
+  })
+})
+
+describe('focusMinutes', () => {
+  const GAP_CAP = 60_000
+  const at = (minute: number, state: EmotionState) =>
+    ({ timestamp: minute * 60_000, state, intensity: 0.6, project: '', file: '' })
+
+  it('credits the real gap between records, not a fixed constant per record', () => {
+    // 三条记录，间隔 24 秒 —— 持续专注时引擎就是每 24 秒补一条。
+    // 旧算法按"条数 × 12 秒"算成 0.6 分钟，实际是 0.8 分钟（24+24 秒 + 尾巴）。
+    const history = [
+      { timestamp: 0, state: 'focused' as EmotionState, intensity: 0.6, project: '', file: '' },
+      { timestamp: 24_000, state: 'focused' as EmotionState, intensity: 0.6, project: '', file: '' },
+      { timestamp: 48_000, state: 'focused' as EmotionState, intensity: 0.6, project: '', file: '' },
+    ]
+    expect(focusMinutes(history, 60_000, GAP_CAP)).toBeCloseTo(1, 5)
+  })
+
+  it('ignores stretches spent in other states', () => {
+    const history = [at(0, 'focused'), at(1, 'frustrated'), at(2, 'flow')]
+    // focused 0→1 分钟算 1 分钟；frustrated 那段不算；flow 从 2 分钟到 now(3) 算 1 分钟。
+    expect(focusMinutes(history, 3 * 60_000, GAP_CAP)).toBeCloseTo(2, 5)
+  })
+
+  it('caps a gap so an overnight shutdown is not counted as focus', () => {
+    // 一条 focused 之后八小时没有任何记录 —— 不能算成专注了八小时。
+    const history = [at(0, 'focused')]
+    expect(focusMinutes(history, 8 * 60 * 60_000, GAP_CAP)).toBeCloseTo(1, 5)
+  })
+
+  it('is zero for an empty history', () => {
+    expect(focusMinutes([], Date.now(), GAP_CAP)).toBe(0)
   })
 })
