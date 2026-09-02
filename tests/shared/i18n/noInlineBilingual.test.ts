@@ -43,19 +43,14 @@ const BUDGET: Record<string, number> = {
   //      语言代码），要先改数据结构才能进 locale ----
   'src/renderer/components/agent/ChatMessage.tsx': 1,
   'src/renderer/components/agent/ChatPanel.tsx': 1,
-  'src/renderer/components/layout/FileFormatControls.tsx': 2,
-  'src/renderer/components/layout/SkinPanel.tsx': 2,
   'src/renderer/components/mascot/MascotIP.tsx': 1,
-  'src/renderer/components/plan/workbench/PlanWorkbenchProcessing.tsx': 2,
   'src/renderer/components/settings/SettingsModal.tsx': 1,
   'src/renderer/components/settings/tabs/AgentSettings.tsx': 1,
   'src/renderer/components/settings/tabs/IndexSettings.tsx': 1,
   'src/renderer/components/settings/tabs/McpAddServerModal.tsx': 7,
   'src/renderer/components/settings/tabs/McpSettings.tsx': 2,
-  'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 4,
-  'src/renderer/components/welcome/poster/workPosterData.ts': 1,
+  'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 1,
   'src/renderer/components/welcome/poster/workPosterRenderer.ts': 1,
-  'src/renderer/hooks/useFileSave.ts': 1,
   'src/renderer/services/lspProviders.ts': 1,
   'src/renderer/shell/components/RemoteFileBrowser.tsx': 3,
 }
@@ -142,12 +137,6 @@ describe('inline bilingual text', () => {
       'src/renderer/components/settings/settingsSearchIndex.ts': 71,
       'src/shared/config/mcpPresets.ts': 9,
 
-      // ---- 和 LspSettings 拆掉的那张同一种：组件自己带的文案表 ----
-      'src/renderer/components/layout/SkinPanel.tsx': 3,
-      'src/renderer/components/plan/workbench/PlanWorkbenchProcessing.tsx': 8,
-      'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 12,
-      'src/renderer/components/settings/tabs/ProviderSettings.tsx': 9,
-
       // ---- ErrorCode → 文案，键已经是稳定的枚举值，搬进 locale 基本是机械替换
       //      （读它的 `getErrorMessage` 只有渲染进程在用，不涉及主进程拿不到 locale 的问题）----
       'src/shared/utils/errorHandler.ts': 24,
@@ -179,10 +168,6 @@ describe('inline bilingual text', () => {
       // ---- 数据表整张是双语的：描述、用法示例、环境变量标签 ----
       'src/shared/config/mcpPresets.ts': 113,
       'src/renderer/agent/prompts/promptTemplates.ts': 16,
-
-      // ---- 这两个两半都带后缀（`descriptionZh` + `descriptionEn`），所以数字是对数的两倍 ----
-      'src/renderer/components/layout/FileFormatControls.tsx': 12,
-      'src/renderer/components/layout/SkinPanel.tsx': 6,
     }
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), SUFFIXED_FIELD, found, { gates: GATES })

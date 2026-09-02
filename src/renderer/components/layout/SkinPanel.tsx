@@ -7,15 +7,16 @@ import { saveEditorConfig } from '@renderer/settings'
 import { themeManager } from '@renderer/config/themeConfig'
 import { api } from '@/renderer/services/electronAPI'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
-import { t } from '@shared/i18n'
+import { t, type TranslationKey } from '@shared/i18n'
 
 const SCALE_PRESETS = [0.8, 0.9, 1, 1.1, 1.25] as const
 
+// `id` 是持久化的 `layoutDensity` 取值，所以 `as const` 的窄化要保住 —— 只有文案换成键。
 const LAYOUT_PRESETS = [
-  { id: 'compact', zh: '紧凑', en: 'Compact', descZh: '信息更密集，适合小屏', descEn: 'Denser spacing for smaller screens' },
-  { id: 'comfortable', zh: '标准', en: 'Comfortable', descZh: '默认平衡布局', descEn: 'Balanced default spacing' },
-  { id: 'expanded', zh: '宽松', en: 'Expanded', descZh: '留白更充足，阅读更轻松', descEn: 'More breathing room and softer spacing' },
-] as const
+  { id: 'compact', nameKey: 'skinPanel.density.compact', detailKey: 'skinPanel.density.compactDetail' },
+  { id: 'comfortable', nameKey: 'skinPanel.density.comfortable', detailKey: 'skinPanel.density.comfortableDetail' },
+  { id: 'expanded', nameKey: 'skinPanel.density.expanded', detailKey: 'skinPanel.density.expandedDetail' },
+] as const satisfies ReadonlyArray<{ id: string, nameKey: TranslationKey, detailKey: TranslationKey }>
 
 export default function SkinPanel() {
   const {
@@ -200,10 +201,10 @@ export default function SkinPanel() {
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="text-sm font-semibold text-text-primary">
-                                  {language === 'zh' ? item.zh : item.en}
+                                  {t(item.nameKey, language)}
                                 </div>
                                 <div className="mt-1 text-[11px] text-text-muted leading-5">
-                                  {language === 'zh' ? item.descZh : item.descEn}
+                                  {t(item.detailKey, language)}
                                 </div>
                               </div>
                               {active && (

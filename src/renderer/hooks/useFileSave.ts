@@ -8,34 +8,30 @@ import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { toast } from '@renderer/components/common/ToastProvider'
-import { t } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
-import type { FileMutationResult } from '@shared/types/fileMutation'
+import type { FileMutationErrorCode, FileMutationResult } from '@shared/types/fileMutation'
 import { commitEditorBufferSnapshot, getEditorBufferContent, isWritableDocumentKind } from '@renderer/services/editorBufferService'
 
-function getSaveErrorMessage(result: FileMutationResult, language: 'zh' | 'en'): string {
+/**
+ * 写入失败码 → 文案键。穷尽 `Record` 而不是 `` t(`useFileSave.error.${code}`) ``：
+ * 码是 snake_case，模板字面量拼不出 `TranslationKey`（同 `privilegeCapabilities.ts`）。
+ */
+const SAVE_ERROR_KEYS: Record<FileMutationErrorCode, TranslationKey> = {
+  permission_denied: 'useFileSave.error.permissionDenied',
+  policy_denied: 'useFileSave.error.policyDenied',
+  invalid_request: 'useFileSave.error.invalidRequest',
+  not_found: 'useFileSave.error.notFound',
+  locked: 'useFileSave.error.locked',
+  disk_full: 'useFileSave.error.diskFull',
+  io_error: 'useFileSave.error.ioError',
+}
+
+function getSaveErrorMessage(result: FileMutationResult, language: Language): string {
   if (result.success) return ''
-  const messages = language === 'zh'
-    ? {
-        permission_denied: '系统拒绝写入此文件',
-        policy_denied: '安全策略不允许写入此路径',
-        invalid_request: '保存请求无效',
-        not_found: '文件或父目录不存在',
-        locked: '文件正被其他程序占用',
-        disk_full: '磁盘空间不足',
-        io_error: '发生文件系统错误',
-      }
-    : {
-        permission_denied: 'The system denied writing to this file',
-        policy_denied: 'Security policy does not allow writing to this path',
-        invalid_request: 'The save request is invalid',
-        not_found: 'The file or parent directory does not exist',
-        locked: 'The file is being used by another program',
-        disk_full: 'The disk is full',
-        io_error: 'A file system error occurred',
-      }
-  return result.error.message || messages[result.error.code]
+  // 主进程给的具体原因优先，没有才退回按码取的通用文案。
+  return result.error.message || t(SAVE_ERROR_KEYS[result.error.code], language)
 }
 
 /** 获取文件对应的 Monaco model 版本号 */

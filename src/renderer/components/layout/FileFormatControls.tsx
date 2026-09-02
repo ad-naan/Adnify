@@ -4,22 +4,24 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
 import { globalConfirm } from '../common/ConfirmDialog'
-import { t, type Language } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 
+// 换行符的说明是平台名，两种语言逐字相同（和 `label` 一样），所以是字面量而不是文案键 ——
+// 进 locale 表只会多出两个 en/zh 相同的键要在平价棘轮里豁免。
 const EOL_OPTIONS = [
-  { id: 'LF', label: 'LF', descriptionZh: 'Unix / macOS', descriptionEn: 'Unix / macOS' },
-  { id: 'CRLF', label: 'CRLF', descriptionZh: 'Windows', descriptionEn: 'Windows' },
+  { id: 'LF', label: 'LF', description: 'Unix / macOS' },
+  { id: 'CRLF', label: 'CRLF', description: 'Windows' },
 ] as const
 
-const ENCODING_OPTIONS = [
-  { id: 'utf-8', label: 'UTF-8', descriptionZh: '默认 Unicode 编码', descriptionEn: 'Default Unicode encoding' },
-  { id: 'utf-8-bom', label: 'UTF-8 BOM', descriptionZh: '带 BOM 的 UTF-8', descriptionEn: 'UTF-8 with BOM' },
-  { id: 'gbk', label: 'GBK', descriptionZh: '简体中文常用编码', descriptionEn: 'Common Simplified Chinese encoding' },
-  { id: 'gb18030', label: 'GB18030', descriptionZh: '完整中文字符集编码', descriptionEn: 'Full Chinese character set encoding' },
-] as const
+const ENCODING_OPTIONS: ReadonlyArray<{ id: string, label: string, descriptionKey: TranslationKey }> = [
+  { id: 'utf-8', label: 'UTF-8', descriptionKey: 'fileFormatControls.encoding.utf8' },
+  { id: 'utf-8-bom', label: 'UTF-8 BOM', descriptionKey: 'fileFormatControls.encoding.utf8Bom' },
+  { id: 'gbk', label: 'GBK', descriptionKey: 'fileFormatControls.encoding.gbk' },
+  { id: 'gb18030', label: 'GB18030', descriptionKey: 'fileFormatControls.encoding.gb18030' },
+]
 
 function MenuListButton({
   active,
@@ -120,7 +122,7 @@ export default function FileFormatControls() {
               active={currentEol === option.id}
               onClick={() => handleEolChange(option.id)}
               title={option.label}
-              description={language === 'zh' ? option.descriptionZh : option.descriptionEn}
+              description={option.description}
             />
           ))}
         </div>
@@ -145,7 +147,7 @@ export default function FileFormatControls() {
               active={currentEncoding === option.id}
               onClick={() => handleEncodingChange(option.id)}
               title={option.label}
-              description={language === 'zh' ? option.descriptionZh : option.descriptionEn}
+              description={t(option.descriptionKey, language)}
             />
           ))}
         </div>

@@ -1,15 +1,30 @@
 import { CheckCircle2, Circle, LoaderCircle, Sparkles } from 'lucide-react'
 import type { PlanActivityItem, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import type { PlanPlanningState } from '@/renderer/agent/plan/planWorkflowGuard'
-import { t, type Language } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
-const phaseCopy: Record<PlanPlanningState, { zh: string, en: string, zhDetail: string, enDetail: string }> = {
-  needs_clarification: { zh: '正在梳理需求与项目上下文', en: 'Reviewing requirements and project context', zhDetail: '正在识别目标、约束和需要确认的关键决策', enDetail: 'Identifying goals, constraints, and decisions that need confirmation' },
-  waiting_for_answer: { zh: '等待你确认关键需求', en: 'Waiting for requirement confirmation', zhDetail: '收到回答后会继续生成结构化计划', enDetail: 'The structured plan will continue after your response' },
-  ready_to_create: { zh: '正在生成结构化计划', en: 'Creating the structured plan', zhDetail: '正在组织任务、依赖关系、角色模型与验收标准', enDetail: 'Organizing tasks, dependencies, role assignments, and acceptance criteria' },
-  revision_requested: { zh: '正在分析计划调整范围', en: 'Analyzing the requested revision', zhDetail: '正在定位受影响的任务、依赖和阶段内容', enDetail: 'Locating affected tasks, dependencies, and stage content' },
-  ready_to_update: { zh: '正在更新计划版本', en: 'Updating the plan version', zhDetail: '正在合并确认结果并重建受影响的计划内容', enDetail: 'Merging confirmed changes and rebuilding affected plan content' },
-  plan_created: { zh: '计划已经生成', en: 'Plan created', zhDetail: '正在同步计划看板与审阅信息', enDetail: 'Synchronizing the plan board and review details' },
+interface ProcessingCopy {
+  title: TranslationKey
+  detail: TranslationKey
+}
+
+/** 需求阶段的文案跟着 `planningState` 走。 */
+const PHASE_COPY: Record<PlanPlanningState, ProcessingCopy> = {
+  needs_clarification: { title: 'planWorkbenchProcessing.needsClarification', detail: 'planWorkbenchProcessing.needsClarificationDetail' },
+  waiting_for_answer: { title: 'planWorkbenchProcessing.waitingForAnswer', detail: 'planWorkbenchProcessing.waitingForAnswerDetail' },
+  ready_to_create: { title: 'planWorkbenchProcessing.readyToCreate', detail: 'planWorkbenchProcessing.readyToCreateDetail' },
+  revision_requested: { title: 'planWorkbenchProcessing.revisionRequested', detail: 'planWorkbenchProcessing.revisionRequestedDetail' },
+  ready_to_update: { title: 'planWorkbenchProcessing.readyToUpdate', detail: 'planWorkbenchProcessing.readyToUpdateDetail' },
+  plan_created: { title: 'planWorkbenchProcessing.planCreated', detail: 'planWorkbenchProcessing.planCreatedDetail' },
+}
+
+/**
+ * 执行、验收两个阶段不看 `planningState`（那是需求阶段的状态机），所以按 stage 覆盖。
+ * `requirements` 故意缺席 —— 缺的那一格就是"回退到 PHASE_COPY"。
+ */
+const STAGE_COPY: Partial<Record<PlanWorkbenchStage, ProcessingCopy>> = {
+  execution: { title: 'planWorkbenchProcessing.execution', detail: 'planWorkbenchProcessing.executionDetail' },
+  validation: { title: 'planWorkbenchProcessing.validation', detail: 'planWorkbenchProcessing.validationDetail' },
 }
 
 function activityIcon(status: PlanActivityItem['status']) {
@@ -25,11 +40,7 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
   elapsedSeconds: number
   language: Language
 }) {
-  const copy = stage === 'execution'
-    ? { zh: '正在执行计划任务', en: 'Executing plan tasks', zhDetail: '任务状态、工具动作、子代理与审批请求会持续更新', enDetail: 'Task state, tool activity, sub-agents, and approvals update continuously' }
-    : stage === 'validation'
-      ? { zh: '正在整理验收结果', en: 'Preparing validation results', zhDetail: '正在汇总任务结果、产出物、失败项与验证结论', enDetail: 'Collecting task results, artifacts, failures, and validation findings' }
-      : phaseCopy[planningState]
+  const copy = STAGE_COPY[stage] ?? PHASE_COPY[planningState]
   const recent = activities.filter(activity => activity.stage === stage).slice(-4)
   const waiting = stage === 'requirements' && planningState === 'waiting_for_answer'
 
@@ -42,10 +53,10 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <h2 className={`text-[12px] font-semibold text-text-primary ${waiting ? '' : 'tool-text-shimmer'}`}>{language === 'zh' ? copy.zh : copy.en}</h2>
+          <h2 className={`text-[12px] font-semibold text-text-primary ${waiting ? '' : 'tool-text-shimmer'}`}>{t(copy.title, language)}</h2>
           <time className="shrink-0 text-[11px] tabular-nums text-text-muted">{elapsedSeconds}s</time>
         </div>
-        <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{language === 'zh' ? copy.zhDetail : copy.enDetail}</p>
+        <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{t(copy.detail, language)}</p>
       </div>
     </div>
 

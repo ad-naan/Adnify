@@ -49,24 +49,6 @@ export function buildWorkPosterData({
     + data.overview.activeHours.rawValue * 12
   ))
 
-  const labels = language === 'zh'
-    ? {
-      files: '文件变更',
-      commits: '代码提交',
-      sessions: '会话次数',
-      active: '活跃时长',
-      ai: 'AI 代码占比',
-      score: '节奏评分',
-    }
-    : {
-      files: 'File Changes',
-      commits: 'Commits',
-      sessions: 'Sessions',
-      active: 'Active Time',
-      ai: 'AI Share',
-      score: 'Rhythm Score',
-    }
-
   return {
     language,
     timeRange,
@@ -79,12 +61,12 @@ export function buildWorkPosterData({
     peak,
     aiShare: formatSharePercent(data.ai.overview.aiAssistedShare),
     metrics: [
-      { label: labels.files, value: String(data.overview.fileChanges.value), tone: 'blue' },
-      { label: labels.commits, value: String(data.overview.commits.value), tone: 'green' },
-      { label: labels.sessions, value: String(data.overview.sessions.value), tone: 'blue' },
-      { label: labels.active, value: `${data.overview.activeHours.value}h`, tone: 'green' },
-      { label: labels.ai, value: formatSharePercent(data.ai.overview.aiAssistedShare), tone: 'blue' },
-      { label: labels.score, value: `${score}/100`, tone: 'green' },
+      { label: t('workPosterData.metric.fileChanges', language), value: String(data.overview.fileChanges.value), tone: 'blue' },
+      { label: t('workPosterData.metric.commits', language), value: String(data.overview.commits.value), tone: 'green' },
+      { label: t('workPosterData.metric.sessions', language), value: String(data.overview.sessions.value), tone: 'blue' },
+      { label: t('workPosterData.metric.activeTime', language), value: `${data.overview.activeHours.value}h`, tone: 'green' },
+      { label: t('workPosterData.metric.aiShare', language), value: formatSharePercent(data.ai.overview.aiAssistedShare), tone: 'blue' },
+      { label: t('workPosterData.metric.rhythmScore', language), value: `${score}/100`, tone: 'green' },
     ],
     fileBaseName: `adnify-report-${selectedDate}-${timeRange}`,
   }

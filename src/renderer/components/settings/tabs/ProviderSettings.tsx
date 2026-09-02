@@ -19,7 +19,7 @@ import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t, toLocaleTag } from '@shared/i18n'
+import { t, toLocaleTag, type TranslationKey } from '@shared/i18n'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -56,18 +56,13 @@ type OpenAIResponsesProviderOption =
   | 'serviceTier'
   | 'textVerbosity'
 
+// `value` 是持久化的 `openAICompatibilityProfile` 取值，只有 label 换成文案键。
 const OPENAI_COMPATIBILITY_PROFILE_OPTIONS: Array<{
   value: OpenAICompatibilityProfile
-  label: { en: string; zh: string }
+  labelKey: TranslationKey
 }> = [
-    {
-      value: 'compatible',
-      label: { en: 'Compatible (Safe)', zh: '兼容模式（安全）' },
-    },
-    {
-      value: 'full',
-      label: { en: 'Full OpenAI', zh: '完整 OpenAI' },
-    },
+    { value: 'compatible', labelKey: 'providerSettings.compatibilityProfile.compatible' },
+    { value: 'full', labelKey: 'providerSettings.compatibilityProfile.full' },
   ]
 
 function getReasoningEffortOptions(
@@ -77,14 +72,16 @@ function getReasoningEffortOptions(
   supportsExtendedCompatibleEffort: boolean,
   language: 'en' | 'zh',
 ): Array<{ value: ReasoningEffortValue; label: string }> {
-  const optionLabels: Record<ReasoningEffortValue, { en: string; zh: string }> = {
-    none: { en: 'None', zh: '关闭' },
-    minimal: { en: 'Minimal', zh: '极低' },
-    low: { en: 'Low', zh: '低' },
-    medium: { en: 'Medium', zh: '中' },
-    high: { en: 'High', zh: '高' },
-    xhigh: { en: 'X-High', zh: '极高' },
-    max: { en: 'Max', zh: '最高' },
+  // 穷尽 `Record` 而不是 `` t(`providerSettings.effort.${value}`) ``：模板字面量拼不出
+  // `TranslationKey`（同 `privilegeCapabilities.ts`）。
+  const optionLabelKeys: Record<ReasoningEffortValue, TranslationKey> = {
+    none: 'providerSettings.effort.none',
+    minimal: 'providerSettings.effort.minimal',
+    low: 'providerSettings.effort.low',
+    medium: 'providerSettings.effort.medium',
+    high: 'providerSettings.effort.high',
+    xhigh: 'providerSettings.effort.xhigh',
+    max: 'providerSettings.effort.max',
   }
 
   const supportedValues: ReasoningEffortValue[] =
@@ -100,7 +97,7 @@ function getReasoningEffortOptions(
 
   return supportedValues.map(value => ({
     value,
-    label: optionLabels[value][language],
+    label: t(optionLabelKeys[value], language),
   }))
 }
 
@@ -1075,7 +1072,7 @@ export function ProviderSettings({
   const openAICompatibilityProfileOptions = useMemo(
     () => OPENAI_COMPATIBILITY_PROFILE_OPTIONS.map(option => ({
       value: option.value,
-      label: option.label[language],
+      label: t(option.labelKey, language),
     })),
     [language],
   )

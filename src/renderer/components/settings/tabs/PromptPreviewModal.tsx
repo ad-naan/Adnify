@@ -10,26 +10,35 @@ import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
-import { t } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
 type PreviewView = 'layers' | 'raw'
 
-const SECTION_LABELS: Record<string, { zh: string; en: string }> = {
-    role: { zh: '身份与人格', en: 'Identity & personality' },
-    'operating-contract': { zh: '执行契约', en: 'Operating contract' },
-    'mode-contract': { zh: '当前模式', en: 'Active mode' },
-    'tool-routing': { zh: '工具路由', en: 'Tool routing' },
-    'response-contract': { zh: '回复规范', en: 'Response contract' },
-    'plan-providers': { zh: '计划能力', en: 'Planning providers' },
-    'project-context': { zh: '项目上下文', en: 'Project context' },
-    'runtime-context': { zh: '运行时环境', en: 'Runtime environment' },
+/**
+ * 段 id → 文案键。表里没有的 id 原样显示 —— PromptBuilder 加了新段而这里还没跟上时，
+ * 界面上至少能看出是哪一段。
+ */
+const SECTION_LABEL_KEYS: Record<string, TranslationKey> = {
+    role: 'promptPreviewModal.section.role',
+    'operating-contract': 'promptPreviewModal.section.operatingContract',
+    'mode-contract': 'promptPreviewModal.section.modeContract',
+    'tool-routing': 'promptPreviewModal.section.toolRouting',
+    'response-contract': 'promptPreviewModal.section.responseContract',
+    'plan-providers': 'promptPreviewModal.section.planProviders',
+    'project-context': 'promptPreviewModal.section.projectContext',
+    'runtime-context': 'promptPreviewModal.section.runtimeContext',
 }
 
-const GROUP_LABELS: Record<SystemPromptSectionGroup, { zh: string; en: string }> = {
-    core: { zh: '稳定核心', en: 'Stable core' },
-    mode: { zh: '行为与路由', en: 'Behavior & routing' },
-    project: { zh: '项目注入', en: 'Project injection' },
-    runtime: { zh: '运行时', en: 'Runtime' },
+const GROUP_LABEL_KEYS: Record<SystemPromptSectionGroup, TranslationKey> = {
+    core: 'promptPreviewModal.group.core',
+    mode: 'promptPreviewModal.group.mode',
+    project: 'promptPreviewModal.group.project',
+    runtime: 'promptPreviewModal.group.runtime',
+}
+
+function sectionLabel(sectionId: string, language: Language): string {
+    const key = SECTION_LABEL_KEYS[sectionId]
+    return key ? t(key, language) : sectionId
 }
 
 function escapeRegExp(value: string): string {
@@ -89,13 +98,10 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
         if (!preview) return []
         const query = searchQuery.trim().toLocaleLowerCase()
         if (!query) return preview.sections
-        return preview.sections.filter((section) => {
-            const label = SECTION_LABELS[section.id]
-            return section.content.toLocaleLowerCase().includes(query)
-                || label?.zh.toLocaleLowerCase().includes(query)
-                || label?.en.toLocaleLowerCase().includes(query)
-        })
-    }, [preview, searchQuery])
+        // 只匹配当前语言的层名（原来两种语言都匹配）—— 和设置搜索保持同一语义。
+        return preview.sections.filter((section) => section.content.toLocaleLowerCase().includes(query)
+            || sectionLabel(section.id, language).toLocaleLowerCase().includes(query))
+    }, [preview, searchQuery, language])
 
     const promptTokens = useMemo(() => preview ? estimateTokens(preview.content) : 0, [preview])
     const stableTokens = useMemo(() => preview
@@ -178,14 +184,13 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
 
                         <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={t('promptPreviewModal.promptLayers', language)}>
                             {visibleSections.map((section, index) => {
-                                const label = SECTION_LABELS[section.id]
                                 const previousGroup = visibleSections[index - 1]?.group
                                 return (
                                     <div key={section.id}>
                                         {section.group !== previousGroup && (
                                             <div className="mb-1 mt-3 flex items-center gap-2 px-2 first:mt-1">
                                                 <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
-                                                    {language === 'zh' ? GROUP_LABELS[section.group].zh : GROUP_LABELS[section.group].en}
+                                                    {t(GROUP_LABEL_KEYS[section.group], language)}
                                                 </span>
                                                 <div className="h-px flex-1 bg-border-subtle" />
                                             </div>
@@ -199,7 +204,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                                 }`}
                                         >
                                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${section.stable ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                                            <span className="min-w-0 flex-1 truncate">{label ? (language === 'zh' ? label.zh : label.en) : section.id}</span>
+                                            <span className="min-w-0 flex-1 truncate">{sectionLabel(section.id, language)}</span>
                                             <ChevronRight className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
                                         </button>
                                     </div>
@@ -280,13 +285,12 @@ function PromptSectionCard({
     onCopy,
 }: {
     section: SystemPromptSection
-    language: 'zh' | 'en'
+    language: Language
     query: string
     copied: boolean
     onCopy: () => void
 }) {
-    const label = SECTION_LABELS[section.id]
-    const title = label ? (language === 'zh' ? label.zh : label.en) : section.id
+    const title = sectionLabel(section.id, language)
     return (
         <section id={`prompt-section-${section.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-border-subtle bg-surface/20">
             <header className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
