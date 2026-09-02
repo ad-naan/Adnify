@@ -1483,11 +1483,15 @@ export const zh = {
   'chatMessage.skillReferenced': '引用技能',
   'chatMessage.sources': '来源',
   'chatMessage.thinking': '思考',
+  'chatMessage.toolCall': '{count} 个工具',
+  'chatMessage.toolCalls': '{count} 个工具',
   'chatMessage.viewProcess': '查看过程',
   'chatMessage.viewSkill': '查看技能: {skillId}',
 
   // chatPanel
   'chatPanel.addedToSendQueue': '已加入发送队列',
+  'chatPanel.agentTasks': 'Agent 任务',
+  'chatPanel.agentTasksNeedAttention': 'Agent 任务 · {count} 个需要关注',
   'chatPanel.branchCreated': '已创建新分支',
   'chatPanel.couldNotImprovePrompt': '提示词优化失败',
   'chatPanel.dropFilesToAdd': '释放以添加文件',
@@ -1836,6 +1840,8 @@ export const zh = {
   'indexSettings.startIndexing': '开始索引',
   'indexSettings.structural': '结构化索引',
   'indexSettings.structural2': '结构化',
+  'indexSettings.switchedToSemantic': '已切换到语义索引模式',
+  'indexSettings.switchedToStructural': '已切换到结构化索引模式',
   'indexSettings.zeroConfigLocalBased': '零配置，本地运行，基于代码结构分析',
 
   // interactiveCard
@@ -1869,6 +1875,10 @@ export const zh = {
 
   // loop
   'loop.toolCallErrorPlease': '工具调用出错: {error}\n\n请修正后重试，并确保：\n1. 已提供所有必填参数\n2. 参数类型正确\n3. 参数名完全匹配\n\n请基于修正后的工具调用继续。',
+
+  // lspProviders
+  'lspProviders.formatterFailed': '{formatter}执行失败',
+  'lspProviders.projectFormatter': '项目格式化工具',
 
   // lspSettings
   'lspSettings.apply': '应用',
@@ -1920,6 +1930,10 @@ export const zh = {
   'lspServer.note.needsJdk21': '需要 JDK 21+',
   'lspServer.note.preinstalled': '需要自行安装',
   'lspServer.note.viaNpm': '通过 npm 安装',
+
+  // mascotIP
+  'mascotIP.closeAiAssistant': '关闭 AI 助手',
+  'mascotIP.openAiAssistant': '打开 AI 助手',
 
   // mcpAddServerModal
   'mcpAddServerModal.addCustomServer': '手动添加服务器',
@@ -1986,6 +2000,8 @@ export const zh = {
   'mcpSettings.createAdnifySettingsMcp': '在项目根目录下创建 .adnify/settings/mcp.json 可启用项目级配置。',
   'mcpSettings.deleteFailedCouldNot': '删除失败：未能从来源配置中找到或移除 {id}。请检查文件权限。',
   'mcpSettings.deleteFailedTheSource': '删除失败，请检查来源配置文件是否只读。',
+  'mcpSettings.deleteOnlyAdnifyCopy': '只删除 Adnify 保存的副本。此操作会直接修改下面的文件。',
+  'mcpSettings.deleteOnlyAdnifyCopyKeepsOriginal': '只删除 Adnify 保存的副本，不会修改 {provider} 中的原始配置。此操作会直接修改下面的文件。',
   'mcpSettings.deleteTheAdnifyConfig': '删除 Adnify 中的配置？',
   'mcpSettings.disconnect': '断开连接',
   'mcpSettings.disconnected': '未连接',
@@ -2461,7 +2477,11 @@ export const zh = {
   'remoteFileBrowser.directoryIsEmpty': '当前目录为空',
   'remoteFileBrowser.download': '下载',
   'remoteFileBrowser.downloadCompleted': '下载完成',
+  'remoteFileBrowser.downloadedFilesTo': '已下载 {count} 个文件到 {target}',
+  'remoteFileBrowser.downloadedFilesToSkippedSymlinks': '已下载 {count} 个文件到 {target}（跳过 {skipped} 个符号链接）',
   'remoteFileBrowser.downloadFailed': '下载失败',
+  'remoteFileBrowser.downloadFile': '下载文件',
+  'remoteFileBrowser.downloadFolder': '下载目录',
   'remoteFileBrowser.downloading': '正在下载…',
   'remoteFileBrowser.downloading2': '下载中…',
   'remoteFileBrowser.enterFileName': '输入文件名',
@@ -2488,6 +2508,8 @@ export const zh = {
   'remoteFileBrowser.testConnection': '测试连接',
   'remoteFileBrowser.up': '上级目录',
   'remoteFileBrowser.uploadCompleted': '上传成功',
+  'remoteFileBrowser.uploadedFilesTo': '已上传 {count} 个文件到 {target}',
+  'remoteFileBrowser.uploadedFilesToSkippedSymlinks': '已上传 {count} 个文件到 {target}（跳过 {skipped} 个符号链接）',
   'remoteFileBrowser.uploadFailed': '上传失败',
   'remoteFileBrowser.uploadFiles': '上传文件',
   'remoteFileBrowser.uploadFolder': '上传目录',

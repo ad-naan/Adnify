@@ -247,9 +247,13 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
       const count = result.uploadedCount ?? result.uploaded.length
       if (count > 0 || result.uploaded.length > 0) {
         const detail = result.isDirectory
-          ? (language === 'zh'
-            ? `已上传 ${count} 个文件到 ${result.uploaded[0] || currentPath}${result.skippedSymlinks ? `（跳过 ${result.skippedSymlinks} 个符号链接）` : ''}`
-            : `Uploaded ${count} file(s) to ${result.uploaded[0] || currentPath}${result.skippedSymlinks ? ` (${result.skippedSymlinks} symlink(s) skipped)` : ''}`)
+          ? (result.skippedSymlinks
+            ? t('remoteFileBrowser.uploadedFilesToSkippedSymlinks', language, {
+              count,
+              target: result.uploaded[0] || currentPath,
+              skipped: result.skippedSymlinks,
+            })
+            : t('remoteFileBrowser.uploadedFilesTo', language, { count, target: result.uploaded[0] || currentPath }))
           : (t('remoteFileBrowser.fileSUploadedTo', language, { count }))
         toast.success(
           t('remoteFileBrowser.uploadCompleted', language),
@@ -271,9 +275,16 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
       const result = await api.remoteShell.download(server, entry.path)
       if (result.canceled) return
       const detail = result.isDirectory
-        ? (language === 'zh'
-          ? `已下载 ${result.downloadedCount ?? 0} 个文件到 ${result.localPath || ''}${result.skippedSymlinks ? `（跳过 ${result.skippedSymlinks} 个符号链接）` : ''}`
-          : `Downloaded ${result.downloadedCount ?? 0} file(s) to ${result.localPath || ''}${result.skippedSymlinks ? ` (${result.skippedSymlinks} symlink(s) skipped)` : ''}`)
+        ? (result.skippedSymlinks
+          ? t('remoteFileBrowser.downloadedFilesToSkippedSymlinks', language, {
+            count: result.downloadedCount ?? 0,
+            target: result.localPath || '',
+            skipped: result.skippedSymlinks,
+          })
+          : t('remoteFileBrowser.downloadedFilesTo', language, {
+            count: result.downloadedCount ?? 0,
+            target: result.localPath || '',
+          }))
         : result.localPath || undefined
       toast.success(
         t('remoteFileBrowser.downloadCompleted', language),
@@ -366,9 +377,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
                   title={
                     downloading
                       ? (t('remoteFileBrowser.downloading', language))
-                      : language === 'zh'
-                        ? (entry.isDirectory ? '下载目录' : '下载文件')
-                        : (entry.isDirectory ? 'Download folder' : 'Download file')
+                      : t(entry.isDirectory ? 'remoteFileBrowser.downloadFolder' : 'remoteFileBrowser.downloadFile', language)
                   }
                 >
                       <Download className={`h-3.5 w-3.5 ${downloading ? 'animate-pulse' : ''}`} />

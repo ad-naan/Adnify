@@ -10,6 +10,7 @@ import { lspUriToPath } from '@shared/utils/uriUtils'
 import { api } from '@renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
 import { useStore } from '@store'
+import { t } from '@shared/i18n'
 
 // 扩展 CompletionItem 类型以支持 LSP data 字段
 interface CompletionItemWithData extends Monaco.languages.CompletionItem {
@@ -460,7 +461,9 @@ export function registerLspProviders(monaco: typeof Monaco) {
         const language = useStore.getState().language
         logger.lsp.warn('[Formatter] Project formatter failed', projectResult)
         toast.error(
-          language === 'zh' ? `${projectResult.formatter || '项目格式化工具'}执行失败` : `${projectResult.formatter || 'Project formatter'} failed`,
+          t('lspProviders.formatterFailed', language, {
+            formatter: projectResult.formatter || t('lspProviders.projectFormatter', language),
+          }),
           projectResult.message,
         )
         return []

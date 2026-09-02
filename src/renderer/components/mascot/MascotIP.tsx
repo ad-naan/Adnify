@@ -4,6 +4,7 @@ import { useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import ModeSelector from '@/renderer/components/chat/ModeSelector'
+import { t } from '@shared/i18n'
 
 export function MascotIP() {
   const { chatVisible, setChatVisible, language } = useStore(useShallow(s => ({
@@ -31,7 +32,7 @@ export function MascotIP() {
         <motion.button
           className={`relative z-[2] flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background shadow-[0_4px_14px_rgba(15,23,42,0.12)] transition-all ${chatVisible ? 'border-accent/30 ring-2 ring-accent/10' : 'border-border/55 hover:border-accent/25'}`}
           onClick={handleToggle}
-          aria-label={language === 'zh' ? (chatVisible ? '关闭 AI 助手' : '打开 AI 助手') : (chatVisible ? 'Close AI Assistant' : 'Open AI Assistant')}
+          aria-label={t(chatVisible ? 'mascotIP.closeAiAssistant' : 'mascotIP.openAiAssistant', language)}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >

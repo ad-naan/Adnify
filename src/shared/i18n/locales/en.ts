@@ -1482,11 +1482,15 @@ export const en = {
   'chatMessage.skillReferenced': 'Skill Referenced',
   'chatMessage.sources': 'Sources',
   'chatMessage.thinking': 'Thinking',
+  'chatMessage.toolCall': '{count} tool',
+  'chatMessage.toolCalls': '{count} tools',
   'chatMessage.viewProcess': 'View process',
   'chatMessage.viewSkill': 'View skill: {skillId}',
 
   // chatPanel
   'chatPanel.addedToSendQueue': 'Added to send queue',
+  'chatPanel.agentTasks': 'Agent tasks',
+  'chatPanel.agentTasksNeedAttention': 'Agent tasks · {count} need attention',
   'chatPanel.branchCreated': 'Branch created',
   'chatPanel.couldNotImprovePrompt': 'Could not improve prompt',
   'chatPanel.dropFilesToAdd': 'Drop files to add context',
@@ -1835,6 +1839,8 @@ export const en = {
   'indexSettings.startIndexing': 'Start Indexing',
   'indexSettings.structural': 'Structural',
   'indexSettings.structural2': 'Structural',
+  'indexSettings.switchedToSemantic': 'Switched to semantic index mode',
+  'indexSettings.switchedToStructural': 'Switched to structural index mode',
   'indexSettings.zeroConfigLocalBased': 'Zero config, local, based on code structure',
 
   // interactiveCard
@@ -1868,6 +1874,10 @@ export const en = {
 
   // loop
   'loop.toolCallErrorPlease': 'Tool call error: {error}\n\nPlease fix the tool call and try again. Make sure:\n1. All required parameters are provided\n2. Parameter types are correct\n3. Parameter names match exactly\n\nTry again with the corrected tool call.',
+
+  // lspProviders
+  'lspProviders.formatterFailed': '{formatter} failed',
+  'lspProviders.projectFormatter': 'Project formatter',
 
   // lspSettings
   'lspSettings.apply': 'Apply',
@@ -1919,6 +1929,10 @@ export const en = {
   'lspServer.note.needsJdk21': 'requires JDK 21+',
   'lspServer.note.preinstalled': 'must be installed manually',
   'lspServer.note.viaNpm': 'installed through npm',
+
+  // mascotIP
+  'mascotIP.closeAiAssistant': 'Close AI Assistant',
+  'mascotIP.openAiAssistant': 'Open AI Assistant',
 
   // mcpAddServerModal
   'mcpAddServerModal.addCustomServer': 'Add Custom Server',
@@ -1985,6 +1999,8 @@ export const en = {
   'mcpSettings.createAdnifySettingsMcp': 'Create .adnify/settings/mcp.json in your workspace root to enable project-level config.',
   'mcpSettings.deleteFailedCouldNot': 'Delete failed: {id} could not be removed from its source config. Check file permissions.',
   'mcpSettings.deleteFailedTheSource': 'Delete failed. The source config may be read-only.',
+  'mcpSettings.deleteOnlyAdnifyCopy': 'Only the Adnify copy is removed. The file below will be modified.',
+  'mcpSettings.deleteOnlyAdnifyCopyKeepsOriginal': 'Only the Adnify copy is removed; the original {provider} config is untouched. The file below will be modified.',
   'mcpSettings.deleteTheAdnifyConfig': 'Delete the Adnify config?',
   'mcpSettings.disconnect': 'Disconnect',
   'mcpSettings.disconnected': 'Disconnected',
@@ -2460,7 +2476,11 @@ export const en = {
   'remoteFileBrowser.directoryIsEmpty': 'Directory is empty',
   'remoteFileBrowser.download': 'Download',
   'remoteFileBrowser.downloadCompleted': 'Download completed',
+  'remoteFileBrowser.downloadedFilesTo': 'Downloaded {count} file(s) to {target}',
+  'remoteFileBrowser.downloadedFilesToSkippedSymlinks': 'Downloaded {count} file(s) to {target} ({skipped} symlink(s) skipped)',
   'remoteFileBrowser.downloadFailed': 'Download failed',
+  'remoteFileBrowser.downloadFile': 'Download file',
+  'remoteFileBrowser.downloadFolder': 'Download folder',
   'remoteFileBrowser.downloading': 'Downloading…',
   'remoteFileBrowser.downloading2': 'Downloading…',
   'remoteFileBrowser.enterFileName': 'Enter file name',
@@ -2487,6 +2507,8 @@ export const en = {
   'remoteFileBrowser.testConnection': 'Test connection',
   'remoteFileBrowser.up': 'Up',
   'remoteFileBrowser.uploadCompleted': 'Upload completed',
+  'remoteFileBrowser.uploadedFilesTo': 'Uploaded {count} file(s) to {target}',
+  'remoteFileBrowser.uploadedFilesToSkippedSymlinks': 'Uploaded {count} file(s) to {target} ({skipped} symlink(s) skipped)',
   'remoteFileBrowser.uploadFailed': 'Upload failed',
   'remoteFileBrowser.uploadFiles': 'Upload files',
   'remoteFileBrowser.uploadFolder': 'Upload folder',

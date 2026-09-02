@@ -9,7 +9,7 @@ import { Eye, EyeOff, AlertTriangle, Database, Settings2, Zap, Brain } from 'luc
 import { useStore } from '@store'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
-import { Language, t } from '@shared/i18n'
+import { Language, t, type TranslationKey } from '@shared/i18n'
 import { loadIndexPreference, saveIndexPreference } from '@/renderer/settings/indexPreference'
 import type { EmbeddingConfigInput, IndexStatus } from '@renderer/types/electron'
 
@@ -18,6 +18,15 @@ interface IndexSettingsProps {
 }
 
 type IndexMode = 'structural' | 'semantic'
+
+/**
+ * 切换成功的提示语整句一键，而不是把模式名插进句子 —— 原来英文分支直接把 `mode` 的
+ * 原始 id 塞进句子（'Switched to structural…'），中文分支却把它译了，两边并不对等。
+ */
+const MODE_SWITCHED_KEYS: Record<IndexMode, TranslationKey> = {
+  structural: 'indexSettings.switchedToStructural',
+  semantic: 'indexSettings.switchedToSemantic',
+}
 
 interface EmbeddingConfigState {
   provider: string
@@ -101,9 +110,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
     if (workspacePath) {
       await api.index.setMode(workspacePath, mode)
     }
-    toast.success(language === 'zh'
-      ? `已切换到${mode === 'structural' ? '结构化' : '语义'}索引模式`
-      : `Switched to ${mode} index mode`)
+    toast.success(t(MODE_SWITCHED_KEYS[mode], language))
   }, [workspacePath, language])
 
   // 保存 Embedding 配置

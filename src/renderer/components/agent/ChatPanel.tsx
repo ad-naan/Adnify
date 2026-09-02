@@ -1367,9 +1367,9 @@ export default function ChatPanel() {
                 setSidebarTab('history')
                 setSidebarOpen(true)
               }}
-              title={language === 'zh'
-                ? `Agent 任务${taskAttentionCount > 0 ? ` · ${taskAttentionCount} 个需要关注` : ''}`
-                : `Agent tasks${taskAttentionCount > 0 ? ` · ${taskAttentionCount} need attention` : ''}`}
+              title={taskAttentionCount > 0
+                ? t('chatPanel.agentTasksNeedAttention', language, { count: taskAttentionCount })
+                : t('chatPanel.agentTasks', language)}
               className={`transition-colors ${taskAttentionCount > 0 ? 'bg-accent/[0.1] text-accent hover:bg-accent/[0.14]' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`}
             >
               <ListTree className="w-4 h-4" />

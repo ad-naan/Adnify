@@ -382,9 +382,9 @@ function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh
   const items: string[] = []
 
   if (summary.toolCallCount > 0) {
-    items.push(language === 'zh'
-      ? `${summary.toolCallCount} 个工具`
-      : `${summary.toolCallCount} tool${summary.toolCallCount > 1 ? 's' : ''}`)
+    // 英文要区分单复数，中文两键同文 —— 复数规则留在 locale 表里，调用点只挑键。
+    const key = summary.toolCallCount > 1 ? 'chatMessage.toolCalls' : 'chatMessage.toolCall'
+    items.push(t(key, language, { count: summary.toolCallCount }))
   }
 
   if (summary.hasReasoning) {

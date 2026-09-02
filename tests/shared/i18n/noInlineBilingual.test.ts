@@ -41,18 +41,12 @@ const BUDGET: Record<string, number> = {
 
   // ---- 整段对象或数组是双语的（`? { … } : { … }`、`? 0 : 1` 下标、`? 'zh' : 'en'`
   //      语言代码），要先改数据结构才能进 locale ----
-  'src/renderer/components/agent/ChatMessage.tsx': 1,
-  'src/renderer/components/agent/ChatPanel.tsx': 1,
-  'src/renderer/components/mascot/MascotIP.tsx': 1,
   'src/renderer/components/settings/SettingsModal.tsx': 1,
   'src/renderer/components/settings/tabs/AgentSettings.tsx': 1,
-  'src/renderer/components/settings/tabs/IndexSettings.tsx': 1,
   'src/renderer/components/settings/tabs/McpAddServerModal.tsx': 7,
-  'src/renderer/components/settings/tabs/McpSettings.tsx': 2,
+  'src/renderer/components/settings/tabs/McpSettings.tsx': 1,
   'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 1,
   'src/renderer/components/welcome/poster/workPosterRenderer.ts': 1,
-  'src/renderer/services/lspProviders.ts': 1,
-  'src/renderer/shell/components/RemoteFileBrowser.tsx': 3,
 }
 
 /**

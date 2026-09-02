@@ -456,9 +456,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   {t('mcpSettings.deleteTheAdnifyConfig', language)}
                 </div>
                 <p className="text-xs leading-relaxed text-text-secondary">
-                  {language === 'zh'
-                    ? `只删除 Adnify 保存的副本${server.config.importedFrom ? `，不会修改 ${providerLabel} 中的原始配置` : ''}。此操作会直接修改下面的文件。`
-                    : `Only the Adnify copy is removed${server.config.importedFrom ? `; the original ${providerLabel} config is untouched` : ''}. The file below will be modified.`}
+                  {server.config.importedFrom
+                    ? t('mcpSettings.deleteOnlyAdnifyCopyKeepsOriginal', language, { provider: providerLabel })
+                    : t('mcpSettings.deleteOnlyAdnifyCopy', language)}
                 </p>
                 <div className="break-all rounded-lg border border-red-500/15 bg-black/20 px-2.5 py-2 font-mono text-[11px] text-red-200/80">
                   {server.config.sourcePath || (t('mcpSettings.sourcePathUnavailable', language))}
