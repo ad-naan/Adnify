@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { PlanActivityItem } from '@/renderer/agent/plan/planWorkbenchProjection'
-import { t, type Language } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
-const stageLabel = (stage: PlanActivityItem['stage'], language: Language) => {
-  const labels = {
-    requirements: ['需求', 'Requirements'],
-    plan: ['计划', 'Plan'],
-    execution: ['执行', 'Execution'],
-    validation: ['验收', 'Validation'],
-  } as const
-  return labels[stage][language === 'zh' ? 0 : 1]
+const STAGE_KEYS: Record<PlanActivityItem['stage'], TranslationKey> = {
+  requirements: 'planWorkbenchActivity.stage.requirements',
+  plan: 'planWorkbenchActivity.stage.plan',
+  execution: 'planWorkbenchActivity.stage.execution',
+  validation: 'planWorkbenchActivity.stage.validation',
 }
+
+const stageLabel = (stage: PlanActivityItem['stage'], language: Language) => t(STAGE_KEYS[stage], language)
 
 const dotTone = (status: PlanActivityItem['status']) => {
   if (status === 'blocked') return 'bg-red-400'

@@ -13,7 +13,7 @@ import { ShellManagerDialog } from './ShellManagerDialog'
 import { RemoteFileBrowser } from './RemoteFileBrowser'
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
-import { t, type Language } from '@shared/i18n'
+import { t, toLocaleTag, type Language } from '@shared/i18n'
 
 type Selection =
   | { kind: 'root'; root: string }
@@ -32,7 +32,7 @@ const DEFAULT_INSPECTOR_WIDTH = 320
 const DEFAULT_NAV_WIDTH = 280
 
 function formatTime(timestamp: number, language: Language) {
-  return new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
+  return new Intl.DateTimeFormat(toLocaleTag(language), {
     hour: '2-digit',
     minute: '2-digit',
     month: 'short',

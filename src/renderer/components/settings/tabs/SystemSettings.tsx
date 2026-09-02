@@ -296,9 +296,7 @@ export function SystemSettings({
                 <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div>
-                            <div className="text-sm font-bold text-text-primary">
-                                {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
-                            </div>
+                            <div className="text-sm font-bold text-text-primary">GitHub Token</div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
                                 {t('systemSettings.usedForGithubReleases', language)}
                             </div>

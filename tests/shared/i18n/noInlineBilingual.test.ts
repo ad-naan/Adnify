@@ -35,7 +35,7 @@ const ROOTS = ['src/renderer', 'src/main', 'src/shared']
 /** 文件（相对仓库根）→ 还允许存在的内联双语表达式数量 */
 const BUDGET: Record<string, number> = {
   // ---- 不是文案：语言本身的收敛点，加注释里引用的反例（正是这条测试要禁的写法）----
-  'src/shared/i18n/index.ts': 5,
+  'src/shared/i18n/index.ts': 3,
   'src/shared/config/changelogData.ts': 1,
   'src/renderer/agent/orchestration/laneNoticeText.ts': 1,
 
@@ -46,8 +46,6 @@ const BUDGET: Record<string, number> = {
   'src/renderer/components/layout/FileFormatControls.tsx': 2,
   'src/renderer/components/layout/SkinPanel.tsx': 2,
   'src/renderer/components/mascot/MascotIP.tsx': 1,
-  'src/renderer/components/plan/workbench/PlanHistoryDrawer.tsx': 1,
-  'src/renderer/components/plan/workbench/PlanWorkbenchActivity.tsx': 1,
   'src/renderer/components/plan/workbench/PlanWorkbenchProcessing.tsx': 2,
   'src/renderer/components/settings/SettingsModal.tsx': 1,
   'src/renderer/components/settings/tabs/AgentSettings.tsx': 1,
@@ -55,15 +53,11 @@ const BUDGET: Record<string, number> = {
   'src/renderer/components/settings/tabs/McpAddServerModal.tsx': 7,
   'src/renderer/components/settings/tabs/McpSettings.tsx': 2,
   'src/renderer/components/settings/tabs/PromptPreviewModal.tsx': 4,
-  'src/renderer/components/settings/tabs/ProviderSettings.tsx': 1,
-  'src/renderer/components/settings/tabs/SystemSettings.tsx': 1,
-  'src/renderer/components/sidebar/panels/ProblemsView.tsx': 1,
   'src/renderer/components/welcome/poster/workPosterData.ts': 1,
   'src/renderer/components/welcome/poster/workPosterRenderer.ts': 1,
   'src/renderer/hooks/useFileSave.ts': 1,
   'src/renderer/services/lspProviders.ts': 1,
   'src/renderer/shell/components/RemoteFileBrowser.tsx': 3,
-  'src/renderer/shell/components/ShellStudio.tsx': 1,
 }
 
 /**
@@ -137,6 +131,11 @@ describe('inline bilingual text', () => {
    */
   it('never keeps a local {en, zh} copy table', () => {
     const COPY_TABLE = /\b(en|zh)\s*:\s*('[^']*'|"[^"]*"|`[^`]*`)\s*,\s*(zh|en)\s*:/g
+    // `src/shared/i18n/index.ts` 里的 `LOCALE_TAGS = { en: 'en-US', zh: 'zh-CN' }` 形状上就是
+    // 一张字面量双语表，内容却是 BCP-47 标签而不是文案 —— 而这个文件本来就是"按语言取值"的
+    // 收敛点，加语言时要改的正是它。宁可在这里写一行豁免，也不为了躲自家正则把
+    // `toLocaleTag` 退回成三元（那只是把同一件事挪进另一条守卫的账上）。
+    const GATES = ['src/shared/i18n/index.ts']
     /** 文件（相对仓库根）→ 还允许存在的字面量双语对数量 */
     const COPY_TABLE_BUDGET: Record<string, number> = {
       // ---- 双语标签是数据表的一列：要先给每行定一个键，才谈得上搬进 locale ----
@@ -154,7 +153,7 @@ describe('inline bilingual text', () => {
       'src/shared/utils/errorHandler.ts': 24,
     }
     const found: Record<string, number> = {}
-    for (const root of ROOTS) scan(path.join(REPO_ROOT, root), COPY_TABLE, found)
+    for (const root of ROOTS) scan(path.join(REPO_ROOT, root), COPY_TABLE, found, { gates: GATES })
     expect(found).toEqual(COPY_TABLE_BUDGET)
   })
 
@@ -203,10 +202,7 @@ describe('inline bilingual text', () => {
     const BILINGUAL_TUPLE =
       /\[\s*(?:'[^']*\p{Script=Han}[^']*'|"[^"]*\p{Script=Han}[^"]*")\s*,\s*(?:'[^'\p{Script=Han}]*'|"[^"\p{Script=Han}]*")\s*\]/gu
     /** 文件（相对仓库根）→ 还允许存在的双语元组数 */
-    const TUPLE_BUDGET: Record<string, number> = {
-      'src/renderer/components/plan/workbench/PlanHistoryDrawer.tsx': 9,
-      'src/renderer/components/plan/workbench/PlanWorkbenchActivity.tsx': 4,
-    }
+    const TUPLE_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), BILINGUAL_TUPLE, found)
     expect(found).toEqual(TUPLE_BUDGET)

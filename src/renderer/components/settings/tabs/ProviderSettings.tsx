@@ -19,7 +19,7 @@ import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t } from '@shared/i18n'
+import { t, toLocaleTag } from '@shared/i18n'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -434,7 +434,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
             {status.expiresAt ? (
               <div>
                 {t('providerSettings.tokenExpires', language)}:{' '}
-                {new Date(status.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                {new Date(status.expiresAt).toLocaleString(toLocaleTag(language))}
                 <span className="opacity-60">
                   {t('providerSettings.autoRefreshed', language)}
                 </span>

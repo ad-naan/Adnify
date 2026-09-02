@@ -2080,6 +2080,12 @@ export const zh = {
   'planHistoryDrawer.searchPlanHistory': '搜索计划历史',
   'planHistoryDrawer.separateFromAgentConversations': '独立于 Agent 对话记录',
   'planHistoryDrawer.startANewPlan': '开始新计划',
+  'planHistoryDrawer.status.approved': '待执行',
+  'planHistoryDrawer.status.draft': '待审阅',
+  'planHistoryDrawer.status.paused': '已暂停',
+  'planHistoryDrawer.status.pausing': '暂停中',
+  'planHistoryDrawer.status.stopped': '已停止',
+  'planHistoryDrawer.status.stopping': '停止中',
   'planHistoryDrawer.today': '今天',
   'planHistoryDrawer.tryAnotherSearch': '换一个关键词试试',
 
@@ -2166,6 +2172,10 @@ export const zh = {
 
   // planWorkbenchActivity
   'planWorkbenchActivity.activity': '过程',
+  'planWorkbenchActivity.stage.execution': '执行',
+  'planWorkbenchActivity.stage.plan': '计划',
+  'planWorkbenchActivity.stage.requirements': '需求',
+  'planWorkbenchActivity.stage.validation': '验收',
   'planWorkbenchActivity.toolActions': '个工具动作',
 
   // planWorkbenchEmpty

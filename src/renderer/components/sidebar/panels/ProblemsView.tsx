@@ -160,7 +160,7 @@ export function ProblemsView() {
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] text-text-primary truncate font-medium">{diag.message}</p>
                           <p className="text-[10px] text-text-muted opacity-70 mt-0.5 font-mono">
-                            {language === 'zh' ? 'Ln' : 'Ln'} {diag.range.start.line + 1}
+                            Ln {diag.range.start.line + 1}
                             {diag.source && ` • ${diag.source}`}
                             {diag.code && ` (${diag.code})`}
                           </p>

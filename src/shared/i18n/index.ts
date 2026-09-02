@@ -75,7 +75,7 @@ export function asLanguage(value: string | undefined | null): Language {
  * 写 `language === 'zh' ? a : b` 时，这两件事看起来一模一样，评审时没法区分哪个是漏迁移的。
  */
 export function pickLocalized(pair: { zh: string; en: string }, lang: Language): string {
-  return lang === 'zh' ? pair.zh : pair.en
+  return pair[lang]
 }
 
 /**
@@ -84,6 +84,8 @@ export function pickLocalized(pair: { zh: string; en: string }, lang: Language):
  * 单独收在这里是因为它和 `Language` 不是同一个东西：调用点各自写
  * `language === 'zh' ? 'zh-CN' : 'en-US'` 会在加语言时散落一地，而且容易和文案键混淆。
  */
+const LOCALE_TAGS = { en: 'en-US', zh: 'zh-CN' } as const
+
 export function toLocaleTag(lang: Language): 'zh-CN' | 'en-US' {
-  return lang === 'zh' ? 'zh-CN' : 'en-US'
+  return LOCALE_TAGS[lang]
 }

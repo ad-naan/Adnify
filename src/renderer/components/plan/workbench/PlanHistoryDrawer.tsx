@@ -2,16 +2,28 @@ import { Plus, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t, type Language } from '@shared/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
+
+/**
+ * 状态码 → 文案键。三个状态的文案和 `common.*` 逐字相同，就指过去而不是再造一份。
+ * 未知状态原样显示状态码（后端加了新状态但界面还没跟上时，至少能看出是哪个）。
+ */
+const STATUS_KEYS: Record<string, TranslationKey> = {
+  draft: 'planHistoryDrawer.status.draft',
+  approved: 'planHistoryDrawer.status.approved',
+  executing: 'common.running',
+  pausing: 'planHistoryDrawer.status.pausing',
+  paused: 'planHistoryDrawer.status.paused',
+  stopping: 'planHistoryDrawer.status.stopping',
+  stopped: 'planHistoryDrawer.status.stopped',
+  completed: 'common.completed',
+  failed: 'common.failed',
+}
 
 const statusText = (status: PlanHistoryEntry['status'], language: Language) => {
   if (!status) return t('planHistoryDrawer.conversation', language)
-  const map: Record<string, [string, string]> = {
-    draft: ['待审阅', 'Draft'], approved: ['待执行', 'Ready'], executing: ['执行中', 'Running'],
-    pausing: ['暂停中', 'Pausing'], paused: ['已暂停', 'Paused'], stopping: ['停止中', 'Stopping'],
-    stopped: ['已停止', 'Stopped'], completed: ['已完成', 'Completed'], failed: ['失败', 'Failed'],
-  }
-  return map[status]?.[language === 'zh' ? 0 : 1] || status
+  const key = STATUS_KEYS[status]
+  return key ? t(key, language) : status
 }
 function groupName(timestamp: number, language: Language) {
   const value = new Date(timestamp)

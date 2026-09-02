@@ -2079,6 +2079,12 @@ export const en = {
   'planHistoryDrawer.searchPlanHistory': 'Search plan history',
   'planHistoryDrawer.separateFromAgentConversations': 'Separate from agent conversations',
   'planHistoryDrawer.startANewPlan': 'Start a new plan',
+  'planHistoryDrawer.status.approved': 'Ready',
+  'planHistoryDrawer.status.draft': 'Draft',
+  'planHistoryDrawer.status.paused': 'Paused',
+  'planHistoryDrawer.status.pausing': 'Pausing',
+  'planHistoryDrawer.status.stopped': 'Stopped',
+  'planHistoryDrawer.status.stopping': 'Stopping',
   'planHistoryDrawer.today': 'Today',
   'planHistoryDrawer.tryAnotherSearch': 'Try another search',
 
@@ -2165,6 +2171,10 @@ export const en = {
 
   // planWorkbenchActivity
   'planWorkbenchActivity.activity': 'Activity',
+  'planWorkbenchActivity.stage.execution': 'Execution',
+  'planWorkbenchActivity.stage.plan': 'Plan',
+  'planWorkbenchActivity.stage.requirements': 'Requirements',
+  'planWorkbenchActivity.stage.validation': 'Validation',
   'planWorkbenchActivity.toolActions': 'tool actions',
 
   // planWorkbenchEmpty
