@@ -44,9 +44,20 @@ export interface MajorReleaseGroup {
 /**
  * 这份数据的双语约定：中文在 `x`，英文在可选的 `xEn`（没给就退回中文）。
  *
- * 读取收成下面两个函数，调用点就不用各自写 `language === 'zh' ? a : b` —— 那样和"漏迁移的
+ * 读取收敛到下面两个函数，调用点就不用各自写 `language === 'zh' ? a : b` —— 那样和"漏迁移的
  * 内联文案"长得一模一样，评审时分不出来。分类标签（`labelEn`）和明细条目（`detailsEn`）
  * 就曾经因为没人写那个三元，英文界面下一直显示中文。
+ *
+ * 覆盖率的现状：只有新版本是齐的。**1.7.56 起每个版本都是全双语**（highlight / title /
+ * label / details 一个不缺）；1.7.55 及更早大面积只有中文，英文界面下这些版本读到的是中文原文
+ * —— 因为退回中文是静默的，看起来和"这版本来就这么写"完全一样。这是内容翻译的欠账，不跟着
+ * 代码重构一起动，`tests/shared/i18n/changelogBilingual.test.ts` 把两件事分开钉住：
+ * 1.7.56 及以上漏一个 `xEn` 就红，历史欠账只锁"不许变多"（欠多少以那份测试里的数字为准）。
+ *
+ * 改这份数据时注意：`CHANGELOG_DATA` 数组必须始终是合法 JSON —— 键带双引号、不写注释、
+ * 不留尾随逗号。`scripts/sync-changelog.js` 和 `scripts/generate-release-notes.js` 都是正则
+ * 抠出这个数组再 `JSON.parse`：前者会报错退出，后者把异常 catch 成 `[]`，
+ * RELEASE_BODY.md 会静悄悄只剩下载表格。
  */
 export function releaseText(zh: string, en: string | undefined, lang: Language): string {
   return pickLocalized({ zh, en: en ?? zh }, lang)
