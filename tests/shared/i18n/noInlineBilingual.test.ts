@@ -1,15 +1,15 @@
 /**
- * 内联双语文案的棘轮（ratchet）。
+ * 内联双语文案的守卫。
  *
  * 项目里曾经有 1300+ 处 `language === 'zh' ? '中文' : 'English'`，同一句话散在多个文件、
- * 加语言等于全项目搜索替换。清理之后剩下的都记在下面这份清单里：它们本身就不是文案 ——
- * 语言代码、数组下标、`pickLocalized` 这类按语言选数据结构的分支。
+ * 加语言等于全项目搜索替换。现在文案只存在于 `src/shared/i18n/locales/{en,zh}.ts`，
+ * 界面一律 `t('key', asLanguage(language))` 取 —— 下面这几条守卫就是这句话的可执行版本。
  *
- * 这个测试只做一件事：数量只允许变小。
- * - 新文件里再写内联三元 → 红，请改成 `t('key', asLanguage(language))`
- * - 清单里的文件被清理干净 → 也会红，把对应数字改小/删掉这一行即可
+ * 五种形态**全部归零**，所以每一条都直接断言 `toEqual({})`：任何新增都是红的，包括"就这
+ * 一处、下次一起搬"。唯一的例外是 `STRUCTURAL_TERNARIES`，而它是白名单不是预算 —— 语义是
+ * "只允许这些"，不是"还欠这么多"，所以清单变短不会变红，变长要在评审里说清理由。
  *
- * **一句话文案能藏进代码的五种形态**，每一种都有自己的预算，因为每一种都躲过了前一种的正则：
+ * **一句话文案能藏进代码的五种形态**，每一种都有自己的守卫，因为每一种都躲过了前一种的正则：
  * 1. 三元 `language === 'zh' ? '中文' : 'English'`
  * 2. 本地文案表 `{ en: '…', zh: '…' }`
  * 3. 字段名带语言后缀 `description` / `descriptionZh`
@@ -32,15 +32,27 @@ import path from 'node:path'
 const REPO_ROOT = path.resolve(__dirname, '../../..')
 const ROOTS = ['src/renderer', 'src/main', 'src/shared']
 
-/** 文件（相对仓库根）→ 还允许存在的内联双语表达式数量 */
-const BUDGET: Record<string, number> = {
-  // ---- 不是文案：语言本身的收敛点，加注释里引用的反例（正是这条测试要禁的写法）----
-  'src/shared/i18n/index.ts': 3,
-  'src/shared/config/changelogData.ts': 1,
-  'src/renderer/agent/orchestration/laneNoticeText.ts': 1,
-
-  // ---- 整段对象或数组是双语的（`? { … } : { … }`、`? 0 : 1` 下标、`? 'zh' : 'en'`
-  //      语言代码），要先改数据结构才能进 locale ----
+/**
+ * 三元的永久白名单：文件（相对仓库根）→ 允许存在的**结构性**三元数量。
+ *
+ * 和 `DATA_GATES` / `DEV_ASSERTIONS` 一个意思 —— 不是欠账，是正当例外，所以这里不会
+ * 再变短。区别只在于记的是数量而不是整个文件：一个 300 行的 canvas 渲染器只该有那一处
+ * 例外，整体豁免等于把这个文件的其余部分从守卫里摘出去。
+ *
+ * 只剩一处：canvas 的字体栈。中文标题要 CJK 字族、字号也不同（72px vs 62px），
+ * 它是渲染参数不是文案，locale 表不是它的家。
+ *
+ * 曾经在这份清单里的另外五处是文档注释里引用被禁写法本身（`src/shared/i18n/index.ts`
+ * ×3、`changelogData.ts`、`laneNoticeText.ts`）。它们不是靠豁免文件消失的 —— 是这条守卫
+ * 开了 `stripComments`：注释里在讲"别这么写"，被自己的正则数进来纯属误伤，而为了躲正则
+ * 把注释改得不那么具体只会让文档变差。顺带这几个文件的**代码**仍然在守卫覆盖范围内。
+ *
+ * 一个坑：`asLanguage` 的 `value === 'zh' ? 'zh' : 'en'`（`src/shared/i18n/index.ts`）
+ * 逃过计数只因为参数名叫 `value`。把它改名成 `lang` 就会让这个文件从 0 变 1、守卫变红。
+ * 那时候正确的做法是往这份白名单里加一行并写清理由（它确实是"按语言二选一"，只不过选的
+ * 是语言代码本身），而不是把参数名改回去。
+ */
+const STRUCTURAL_TERNARIES: Record<string, number> = {
   'src/renderer/components/welcome/poster/workPosterRenderer.ts': 1,
 }
 
@@ -60,9 +72,13 @@ const BUDGET: Record<string, number> = {
  */
 const PATTERN = /(?<![.\w])(isZh|isChinese|isEn|isEnglish|zh|en)\s*\?(?![.:?])|(language|lang|locale)\s*(===|!==)\s*['"](zh|en)['"]\s*\?/g
 
-/** `scan` 的可选行为。默认都关着，形态 1 / 2 两条预算的语义不变。 */
+/** `scan` 的可选行为。默认都关着 —— 只有确实需要的守卫才打开。 */
 interface ScanOptions {
-  /** 先去掉注释再匹配。中文注释比中文文案多一个数量级，不去掉的话形态 5 那条守卫直接被淹掉。 */
+  /**
+   * 先去掉注释再匹配。两条守卫都需要，理由不同：
+   * - 形态 5（单语中文）：中文注释比中文文案多一个数量级，不去掉直接被淹掉。
+   * - 形态 1（三元）：解释"别写内联三元"的注释本身就含那个写法，数进来是误伤。
+   */
   stripComments?: boolean
   /** 永久豁免的文件（相对仓库根）。和 `DATA_GATES` 一个意思：不是欠账，是正当例外。 */
   gates?: readonly string[]
@@ -94,11 +110,11 @@ function scan(
 }
 
 describe('inline bilingual text', () => {
-  it('only ever shrinks', () => {
+  it('never picks copy with a language ternary', () => {
     const found: Record<string, number> = {}
-    for (const root of ROOTS) scan(path.join(REPO_ROOT, root), PATTERN, found)
+    for (const root of ROOTS) scan(path.join(REPO_ROOT, root), PATTERN, found, { stripComments: true })
     // toEqual 而不是"小于等于"：清单必须和现状完全一致，否则失败信息里看不出该改哪一行。
-    expect(found).toEqual(BUDGET)
+    expect(found).toEqual(STRUCTURAL_TERNARIES)
   })
 
   /**
@@ -120,20 +136,19 @@ describe('inline bilingual text', () => {
     // 收敛点，加语言时要改的正是它。宁可在这里写一行豁免，也不为了躲自家正则把
     // `toLocaleTag` 退回成三元（那只是把同一件事挪进另一条守卫的账上）。
     const GATES = ['src/shared/i18n/index.ts']
-    /** 文件（相对仓库根）→ 还允许存在的字面量双语对数量 */
-    const COPY_TABLE_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), COPY_TABLE, found, { gates: GATES })
-    expect(found).toEqual(COPY_TABLE_BUDGET)
+    expect(found).toEqual({})
   })
 
   /**
    * 形态 3：把语言写进字段名 —— `description` / `descriptionZh` 这种"英文那半不带后缀"的成对字段。
    *
-   * 量最大的一种（147 处），而前两条正则一处也看不见：它没有 `{ en, zh }` 字面量表的形状，
-   * 读取点写成 `language === 'zh' ? p.descriptionZh : p.description` —— 那个三元在形态 1 里
-   * 被归进"按语言取数据字段"的正当写法，于是整组文案就靠"文案在数据结构里"这个理由躲了过去。
-   * 数据结构里也不行：加一种语言要改的是数据结构而不是语言包，翻译也跟不上 localeParity 的审。
+   * 量最大的一种（`mcpPresets.ts` 一个文件就 113 处），而前两条正则一处也看不见：它没有
+   * `{ en, zh }` 字面量表的形状，读取点写成 `language === 'zh' ? p.descriptionZh : p.description`
+   * —— 那个三元在形态 1 里被归进"按语言取数据字段"的正当写法，于是整组文案就靠"文案在数据
+   * 结构里"这个理由躲了过去。数据结构里也不行：加一种语言要改的是数据结构而不是语言包，
+   * 翻译也跟不上 localeParity 的审。
    *
    * 只数带后缀的那一半，且值必须是字面量或数组 —— 所以 `descriptionZh: v.description`
    * （运行时从 registry 拿到的散文）和 `descriptionZh: string`（类型声明）不算。
@@ -144,18 +159,16 @@ describe('inline bilingual text', () => {
     // 而且那个数组必须是严格 JSON（发布脚本靠 JSON.parse 抠它，键得带引号），搬不进 locale。
     // 它有自己的守卫：changelogBilingual.test.ts。
     const GATES = ['src/shared/config/changelogData.ts']
-    /** 文件（相对仓库根）→ 还允许存在的带语言后缀字段数 */
-    const SUFFIXED_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), SUFFIXED_FIELD, found, { gates: GATES })
-    expect(found).toEqual(SUFFIXED_BUDGET)
+    expect(found).toEqual({})
   })
 
   /**
    * 形态 4：双语元组 `['待审阅', 'Draft']`。
    *
-   * 最阴的一种。读取点是 `map[status]?.[language === 'zh' ? 0 : 1]`，这个三元在形态 1 的清单里
-   * 被归进"数组下标，不是文案"—— 理由本身没错，错的是它索引的那张表恰恰是纯文案。
+   * 最阴的一种。读取点是 `map[status]?.[language === 'zh' ? 0 : 1]`，这个三元当时在形态 1 的
+   * 预算里被归进"数组下标，不是文案"—— 理由本身没错，错的是它索引的那张表恰恰是纯文案。
    *
    * 判据是"第一项含汉字、第二项不含汉字"，而不是"有两项"：`usageExamplesZh: ['搜索…', '查找…']`
    * 两条都是中文，那是示例列表，不是 zh/en 对。
@@ -163,11 +176,9 @@ describe('inline bilingual text', () => {
   it('never pairs the two languages in a tuple', () => {
     const BILINGUAL_TUPLE =
       /\[\s*(?:'[^']*\p{Script=Han}[^']*'|"[^"]*\p{Script=Han}[^"]*")\s*,\s*(?:'[^'\p{Script=Han}]*'|"[^"\p{Script=Han}]*")\s*\]/gu
-    /** 文件（相对仓库根）→ 还允许存在的双语元组数 */
-    const TUPLE_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), BILINGUAL_TUPLE, found)
-    expect(found).toEqual(TUPLE_BUDGET)
+    expect(found).toEqual({})
   })
 
   /**
@@ -202,13 +213,11 @@ describe('inline bilingual text', () => {
     // 写给程序员看的不变量断言：只在"某个调用点把自己嵌进了别人的 set()"时抛，用户永远看不到，
     // 翻译它没有意义 —— 它要传达的信息是"这行代码写错了"，读者是写代码的人。
     const DEV_ASSERTIONS = ['src/renderer/agent/store/storeUpdaterGuard.ts']
-    /** 文件（相对仓库根）→ 还允许存在的单语中文文案数 */
-    const CHINESE_ONLY_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) {
       scan(path.join(REPO_ROOT, root), CHINESE_ONLY, found, { stripComments: true, gates: DEV_ASSERTIONS })
     }
-    expect(found).toEqual(CHINESE_ONLY_BUDGET)
+    expect(found).toEqual({})
   })
 
   it('never branches whole text blocks on the language', () => {
