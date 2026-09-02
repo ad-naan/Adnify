@@ -13,6 +13,7 @@ import type { ApiProtocol } from '@shared/config/providers'
 import { supportsFullOpenAIStyleFeatures } from '@shared/config/providers'
 import { OpenAIAuthService } from '../openai/OpenAIAuthService'
 import { OpenAIUsageStore } from '../openai/OpenAIUsageStore'
+import { providerAuthError } from '@shared/errors/providerAuthError'
 import { logger } from '@shared/utils/Logger'
 
 /** ChatGPT subscription backend — OAuth tokens are ONLY valid here, not api.openai.com. */
@@ -62,11 +63,11 @@ export async function resolveAuthForConfig(config: LLMConfig): Promise<LLMConfig
         }
 
         if (isOAuthProvider) {
-            throw new Error('未登录 ChatGPT 账号，请在“设置 > 服务商”中重新登录。')
+            throw providerAuthError('chatgptNotSignedIn')
         }
 
         if (isOpenAI && !config.apiKey) {
-            throw new Error('未配置 OpenAI API Key，请在“设置 > 服务商”中输入 API Key 或登录 ChatGPT 账号。')
+            throw providerAuthError('openAiKeyMissing')
         }
     }
 
@@ -74,7 +75,9 @@ export async function resolveAuthForConfig(config: LLMConfig): Promise<LLMConfig
     const requiresApiKey = builtinProvider ? builtinProvider.auth.type !== 'none' && builtinProvider.auth.type !== 'oauth' : true
 
     if (!config.apiKey && requiresApiKey) {
-        throw new Error(`未配置 ${builtinProvider?.displayName || config.provider} 的 API Key，请在“设置 > 服务商”中补充配置。`)
+        throw providerAuthError('providerKeyMissing', {
+            provider: builtinProvider?.displayName || config.provider,
+        })
     }
 
     return config

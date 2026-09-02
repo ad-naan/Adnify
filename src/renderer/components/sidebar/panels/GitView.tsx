@@ -11,6 +11,7 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@shared/i18n'
+import { providerAuthErrorText } from '@shared/errors/providerAuthError'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository, type GitFileChange } from '@renderer/services/gitService'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
@@ -1020,7 +1021,7 @@ Commit message:`
                     setCommitMessage(message)
                 }
             } else {
-                toast.error(tt('git.generateFailed'), response?.error)
+                toast.error(tt('git.generateFailed'), providerAuthErrorText(response?.error, language) || undefined)
             }
         } catch (e) {
             logger.ui.error('Failed to generate commit message:', e)

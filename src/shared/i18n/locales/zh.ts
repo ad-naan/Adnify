@@ -2306,6 +2306,13 @@ export const zh = {
   'promptPreviewModal.systemPromptReceivedBy': '模型收到的系统提示词',
   'promptPreviewModal.thisShowsTheFinal': '这里展示最终系统提示词的组成；工具 Schema 由模型接口单独发送。',
 
+  // providerAuthError
+  'providerAuthError.chatgptNotSignedIn': '未登录 ChatGPT 账号，请在“设置 > 服务商”中重新登录。',
+  'providerAuthError.oauthLoginTimeout': 'ChatGPT 登录超时（5 分钟未完成授权），请重试。',
+  'providerAuthError.oauthPortInUse': '端口 {port} 已被占用，无法完成 ChatGPT 登录。请关闭占用该端口的程序（如 Codex CLI 或另一个 Adnify 窗口）后重试。',
+  'providerAuthError.openAiKeyMissing': '未配置 OpenAI API Key，请在“设置 > 服务商”中输入 API Key 或登录 ChatGPT 账号。',
+  'providerAuthError.providerKeyMissing': '未配置 {provider} 的 API Key，请在“设置 > 服务商”中补充配置。',
+
   // providerSettings
   'providerSettings.24Hours': '保留 24 小时',
   'providerSettings.accountId': '账号 ID',

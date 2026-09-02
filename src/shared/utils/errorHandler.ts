@@ -20,6 +20,8 @@ import {
   RetryError,
 } from 'ai'
 
+import { isProviderAuthErrorMessage } from '@shared/errors/providerAuthError'
+
 export enum ErrorCode {
   // 通用错误
   UNKNOWN = 'UNKNOWN',
@@ -411,6 +413,15 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
   }
 
   // 检查错误消息中的关键词（兜底）
+  //
+  // 关键词猜测只对无结构的 message 成立。供应商鉴权那几条错误的原因码是编进 message 的
+  // （主进程没有界面语言，见 `providerAuthError.ts`），而 `oauthLoginTimeout` 这个码名里
+  // 就带 `timeout` —— 一旦在这里猜中，下面 `toAppError` 会用 `getErrorMessage(TIMEOUT)`
+  // 把整条 message 换成"请求超时"，码在到达渲染层之前就没了。有结构的先退出。
+  if (isProviderAuthErrorMessage(originalMessage)) {
+    return { code: ErrorCode.UNKNOWN, originalMessage, retryable: false }
+  }
+
   const msg = originalMessage.toLowerCase()
   if (msg.includes('network') || msg.includes('fetch') || msg.includes('econnrefused')) {
     return {

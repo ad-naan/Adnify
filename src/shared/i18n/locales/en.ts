@@ -2305,6 +2305,13 @@ export const en = {
   'promptPreviewModal.systemPromptReceivedBy': 'System prompt received by the model',
   'promptPreviewModal.thisShowsTheFinal': 'This shows the final system prompt composition. Tool schemas are sent separately.',
 
+  // providerAuthError
+  'providerAuthError.chatgptNotSignedIn': 'Not signed in to ChatGPT. Sign in again under Settings > Providers.',
+  'providerAuthError.oauthLoginTimeout': 'ChatGPT sign-in timed out — authorization was not completed within 5 minutes. Please try again.',
+  'providerAuthError.oauthPortInUse': 'Port {port} is already in use, so the ChatGPT sign-in cannot complete. Close whatever is holding the port (Codex CLI, or another Adnify window) and try again.',
+  'providerAuthError.openAiKeyMissing': 'No OpenAI API key configured. Enter an API key under Settings > Providers, or sign in to ChatGPT.',
+  'providerAuthError.providerKeyMissing': 'No API key configured for {provider}. Add one under Settings > Providers.',
+
   // providerSettings
   'providerSettings.24Hours': '24 hours',
   'providerSettings.accountId': 'Account ID',

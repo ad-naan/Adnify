@@ -30,6 +30,7 @@ import type { ThreadBoundStore } from '../store/AgentStore'
 import type { LLMMessage } from '@shared/types'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 import { t, type Language, type TranslationKey } from '@shared/i18n'
+import { providerAuthErrorText } from '@shared/errors/providerAuthError'
 
 export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
@@ -453,7 +454,8 @@ export async function runLoop(
         if (!context.abortSignal?.aborted) {
           requestMessages = stripImagesFromLatestUserMessage(requestMessages)
           const { language } = useStore.getState()
-          const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
+          const detail = error instanceof Error ? providerAuthErrorText(error.message, language) : ''
+          const reason = detail ? ` ${detail}` : ''
           threadStore.addSystemAlertPart(assistantId, {
             alertType: 'warning',
             title: t('agent.alert.multimodalFallbackTitle', language),

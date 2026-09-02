@@ -8,6 +8,7 @@ import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
 import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
+import { tryProviderAuthErrorText } from '@shared/errors/providerAuthError'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
 import { ToolCallLeakFilter } from '../utils/toolCallLeakFilter'
@@ -305,17 +306,22 @@ export function createStreamProcessor(
 
   // Handle request error.
   const handleError = (err: { message?: string; code?: string } | string) => {
+    const language = useStore.getState().language
+    const rawMessage = typeof err === 'string' ? err : err.message
     let errorMsg: string
 
-    if (typeof err === 'string') {
+    // 供应商鉴权类错误的文案键编在 message 里（主进程没有界面语言），认出来就直接用它：
+    // 它的 code 一路走到这里是 `UNKNOWN`，套上通用前缀只会变成"发生了未知错误: <具体原因>"。
+    const authText = tryProviderAuthErrorText(rawMessage, language)
+    if (authText) {
+      errorMsg = authText
+    } else if (typeof err === 'string') {
       errorMsg = err
     } else {
       if (err.code && err.code in ErrorCode) {
-        const language = useStore.getState().language
         const baseMsg = getErrorMessage(err.code as ErrorCode, language)
         errorMsg = err.message ? `${baseMsg}: ${err.message}` : baseMsg
       } else {
-        const language = useStore.getState().language as 'en' | 'zh'
         errorMsg = err.message || t('error.unknown', language)
       }
     }

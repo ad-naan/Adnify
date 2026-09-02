@@ -220,10 +220,7 @@ describe('inline bilingual text', () => {
     // 翻译它没有意义 —— 它要传达的信息是"这行代码写错了"，读者是写代码的人。
     const DEV_ASSERTIONS = ['src/renderer/agent/store/storeUpdaterGuard.ts']
     /** 文件（相对仓库根）→ 还允许存在的单语中文文案数 */
-    const CHINESE_ONLY_BUDGET: Record<string, number> = {
-      'src/main/services/llm/modelFactory.ts': 3,
-      'src/main/services/openai/OpenAIAuthService.ts': 2,
-    }
+    const CHINESE_ONLY_BUDGET: Record<string, number> = {}
     const found: Record<string, number> = {}
     for (const root of ROOTS) {
       scan(path.join(REPO_ROOT, root), CHINESE_ONLY, found, { stripComments: true, gates: DEV_ASSERTIONS })

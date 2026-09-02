@@ -5,6 +5,7 @@ import {
   type OAuthCredential,
 } from '../credentials/ProviderCredentialStore'
 import { logger } from '@shared/utils/Logger'
+import { providerAuthError } from '@shared/errors/providerAuthError'
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const ISSUER = 'https://auth.openai.com'
@@ -211,10 +212,7 @@ export const OpenAIAuthService = {
         // Report the real cause: the generic mapper turns EADDRINUSE into
         // "An unexpected error occurred", which tells the user nothing.
         if (err.code === 'EADDRINUSE') {
-          finish(new Error(
-            `端口 ${CALLBACK_PORT} 已被占用，无法完成 ChatGPT 登录。` +
-            '请关闭占用该端口的程序（如 Codex CLI 或另一个 Adnify 窗口）后重试。'
-          ))
+          finish(providerAuthError('oauthPortInUse', { port: CALLBACK_PORT }))
           return
         }
         finish(err)
@@ -223,7 +221,7 @@ export const OpenAIAuthService = {
       // Abandoned authorizations (user closes the browser tab) would otherwise
       // keep the port bound forever.
       timeout = setTimeout(() => {
-        finish(new Error('ChatGPT 登录超时（5 分钟未完成授权），请重试。'))
+        finish(providerAuthError('oauthLoginTimeout'))
       }, 5 * 60 * 1000)
 
       server.listen(CALLBACK_PORT, 'localhost', () => {

@@ -20,6 +20,7 @@ import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 import { ProgressiveReveal } from '../ProgressiveReveal'
 import { t, toLocaleTag, type TranslationKey } from '@shared/i18n'
+import { providerAuthErrorText } from '@shared/errors/providerAuthError'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -385,10 +386,10 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
         toast.success(t('providerSettings.signedInToChatgpt', language))
         await refresh()
       } else {
-        toast.error(result.error || (t('providerSettings.signInFailed', language)))
+        toast.error(providerAuthErrorText(result.error, language) || (t('providerSettings.signInFailed', language)))
       }
     } catch (err: any) {
-      toast.error(err?.message || (t('providerSettings.signInFailed', language)))
+      toast.error(providerAuthErrorText(err?.message, language) || (t('providerSettings.signInFailed', language)))
     } finally {
       setBusy(false)
     }
@@ -549,11 +550,11 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
         const message = t('providerSettings.callSuccessLatencyMs', language, { latency: result.latency, content: result.content })
         toast.success(message)
       } else {
-        const errorMsg = result.error || 'Test failed'
+        const errorMsg = providerAuthErrorText(result.error, language) || 'Test failed'
         toast.error(t('providerSettings.callFailed', language, { errorMsg }))
       }
     } catch (err: any) {
-      toast.error(err.message || 'Test failed')
+      toast.error(providerAuthErrorText(err?.message, language) || 'Test failed')
     } finally {
       setTesting(false)
     }
