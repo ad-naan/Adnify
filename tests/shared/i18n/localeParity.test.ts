@@ -39,6 +39,21 @@ describe('i18n locale parity', () => {
     expect(enKeys.filter(key => /[一-龥]/.test(en[key]))).toEqual([])
   })
 
+  /**
+   * 反方向：zh 里留着英文原文。
+   *
+   * 上面那条只查 en 里有没有汉字，漏译的方向查不到 —— 复制一行忘了改中文，两边一模一样，
+   * 键集平价、占位符、非空全都过。
+   *
+   * 不能要求"zh 值必须含汉字"：产品名、`Git`、URL 占位符这类正当的纯 ASCII 值本来就存在。
+   * 所以按棘轮来 —— 冻结今天这 5 个两边相同的键，只允许变小。新加的键要么真的翻了，
+   * 要么必须显式写进这份清单，评审时看得见。
+   */
+  it('only ever shrinks the list of keys left identical in both locales', () => {
+    const IDENTICAL = ['app.name', 'git.cloneUrlPlaceholder', 'git.title', 'kb.category.Git', 'welcome.brandName']
+    expect(enKeys.filter(key => zh[key as keyof typeof zh] === en[key]).sort()).toEqual(IDENTICAL)
+  })
+
   it('normalizes unknown store languages to English', () => {
     expect(asLanguage('zh')).toBe('zh')
     expect(asLanguage('en')).toBe('en')
