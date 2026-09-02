@@ -13,6 +13,6 @@ export * from './panelSettings'
 // 核心服务
 export { emotionAdapter } from './emotionAdapter'
 export { emotionDetectionEngine } from './emotionDetectionEngine'
-export { emotionBaseline } from './emotionBaseline'
+export { emotionBaseline, BASELINE_TARGET_SAMPLES } from './emotionBaseline'
 export { emotionContextAnalyzer } from './emotionContextAnalyzer'
 export { emotionFeedback } from './emotionFeedback'

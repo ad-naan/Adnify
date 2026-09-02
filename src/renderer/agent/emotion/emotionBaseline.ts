@@ -17,7 +17,8 @@
 import { isEmotionPrivacyMode, loadEmotionPanelSettings, subscribeEmotionPanelSettings } from './panelSettings'
 
 const STORAGE_KEY = 'adnify_emotion_baseline'
-const LEARNING_SAMPLES = 50   // 至少 50 个样本后基线才生效
+/** 至少这么多样本之后基线才生效。面板上的校准进度也用它做分母。 */
+export const BASELINE_TARGET_SAMPLES = 50
 const MAX_SAMPLES = 500       // 最多保留 500 个样本
 
 interface BaselineSample {
@@ -118,7 +119,7 @@ class EmotionBaseline {
    * 基线是否已经学习到足够数据
    */
   isCalibrated(): boolean {
-    return this.data.samples.length >= LEARNING_SAMPLES
+    return this.data.samples.length >= BASELINE_TARGET_SAMPLES
   }
 
   /**

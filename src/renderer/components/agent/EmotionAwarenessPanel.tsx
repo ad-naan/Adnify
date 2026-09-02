@@ -21,7 +21,7 @@ import { motion } from 'framer-motion'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
 import { useStore } from '@store'
-import { t, toLocaleTag } from '@shared/i18n'
+import { t, toLocaleTag, type Language } from '@shared/i18n'
 import { useEmotionHistory } from '@/renderer/hooks/useEmotionHistory'
 import {
   EMOTION_COLORS,
@@ -30,6 +30,9 @@ import {
   subscribeEmotionPanelSettings,
   updateEmotionPanelSettings,
   computeInflectionPoints,
+  emotionBaseline,
+  emotionFeedback,
+  BASELINE_TARGET_SAMPLES,
   type InflectionPoint,
 } from '@/renderer/agent/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
@@ -253,6 +256,8 @@ export const EmotionAwarenessPanel: React.FC = () => {
               </div>
             </div>
 
+            <DetectionQuality language={language} />
+
             {emotion && (
               <div className="px-4 pb-4">
                 <EmotionVisualization emotion={emotion} history={history.slice(-30)} />
@@ -388,6 +393,50 @@ const SettingToggle: React.FC<{
     </div>
   </button>
 )
+
+/**
+ * 检测质量：个人基线校准进度 + 用户评价的准确率。
+ *
+ * 这两个数以前算得出来但没人看：`emotionBaseline.getStats()` 的注释写着"用于 UI 展示"、
+ * `emotionFeedback.getAccuracy()` 也是零调用点 —— 状态栏那个赞/踩把数据写进一个没人读的
+ * 账本，用户点了以后什么都不会发生。
+ *
+ * 直接在 render 里读单例、不做 memo：这个面板本来每 10 秒被 `useEmotionHistory` 的轮询
+ * 带着重渲染一次，所以数字最多滞后 10 秒，而 memo 反而会让它一直不更新。
+ */
+const DetectionQuality: React.FC<{ language: Language }> = ({ language }) => {
+  const baseline = emotionBaseline.getStats()
+  const accuracy = emotionFeedback.getAccuracy()
+
+  return (
+    <div className="px-4 pb-4">
+      <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+        {t('emotion.detectionQuality', language)}
+      </h3>
+      <div className="space-y-1.5 rounded-lg border border-white/5 px-3 py-2.5 text-[10px]">
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">{t('emotion.baselineCalibration', language)}</span>
+          <span className="font-mono text-text-secondary">
+            {baseline.calibrated
+              ? t('emotion.baselineReady', language)
+              : t('emotion.baselineSamples', language, {
+                count: baseline.sampleCount,
+                total: BASELINE_TARGET_SAMPLES,
+              })}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-text-muted">{t('emotion.ratingAccuracy', language)}</span>
+          <span className="font-mono text-text-secondary">
+            {accuracy.total > 0
+              ? `${Math.round(accuracy.rate * 100)}% (${accuracy.total})`
+              : t('emotion.ratingNone', language)}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: InflectionPoint[] }> = ({ history, inflectionPoints }) => {
   const language = useStore(s => s.language)
