@@ -5,10 +5,13 @@
  *  1. 持久化存储反馈数据（localStorage）
  *  2. 计算检测准确率
  *  3. 未来用于校准检测引擎权重
+ *
+ * 隐私模式（`emotionPanelSettings.privacyMode`）下：不再写盘，并且把已经存下来的反馈
+ * 一起删掉 —— 只挡新写入的话，旧记录还留在磁盘上，和"不保存行为与学习数据"不符。
  */
 
 import type { EmotionState } from '../types/emotion'
-import { isEmotionPrivacyMode } from './panelSettings'
+import { isEmotionPrivacyMode, loadEmotionPanelSettings, subscribeEmotionPanelSettings } from './panelSettings'
 
 export interface FeedbackRecord {
   timestamp: number
@@ -23,9 +26,28 @@ const MAX_RECORDS = 200
 
 class EmotionFeedbackStore {
   private records: FeedbackRecord[] = []
+  private privacyMode = false
 
   constructor() {
     this.load()
+    // 见 `emotionBaseline` 里同一段注释：构造函数里查 privacyMode 只会拿到默认值，
+    // 真实值靠 hydrate 之后的这次 notify。
+    subscribeEmotionPanelSettings(settings => {
+      const wasPrivate = this.privacyMode
+      this.privacyMode = settings.privacyMode
+      if (settings.privacyMode && !wasPrivate) this.forgetRecords()
+    })
+    void loadEmotionPanelSettings()
+  }
+
+  /** 丢掉全部反馈记录：localStorage 里的和内存里的。 */
+  private forgetRecords(): void {
+    this.records = []
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
   }
 
   /**

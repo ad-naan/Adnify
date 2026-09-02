@@ -5,12 +5,13 @@ import { useShallow } from 'zustand/react/shallow'
 import { t } from '@shared/i18n'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_OTTER_ASSETS, otterAssetSrc } from '@/renderer/components/brand/otterAssets'
-import { EMOTION_COLORS } from '@/renderer/agent/emotion/constants'
+import { EMOTION_COLORS, EMOTION_META } from '@/renderer/agent/emotion/constants'
 import type { EmotionState } from '@/renderer/agent/types/emotion'
 
 /** 情绪状态对应的水獭图片按钮 */
 function EmotionButton({ isActive, onClick, label }: { isActive: boolean; onClick: () => void; label: string }) {
   const emotion = useEmotionState()
+  const language = useStore(state => state.language)
   const state: EmotionState = emotion?.state ?? 'neutral'
   const assetKey = EMOTION_OTTER_ASSETS[state]
   const src = otterAssetSrc(assetKey)
@@ -29,7 +30,7 @@ function EmotionButton({ isActive, onClick, label }: { isActive: boolean; onClic
       >
         <img
           src={src}
-          alt={state}
+          alt={t(EMOTION_META[state].translationKey, language)}
           draggable={false}
           className={`w-7 h-7 object-contain transition-all duration-300 select-none
             ${isActive ? 'scale-110 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'opacity-80 group-hover:opacity-100 group-hover:scale-110'}

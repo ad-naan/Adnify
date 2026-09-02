@@ -21,7 +21,7 @@ import { motion } from 'framer-motion'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
 import { useStore } from '@store'
-import { t } from '@shared/i18n'
+import { t, toLocaleTag } from '@shared/i18n'
 import { useEmotionHistory } from '@/renderer/hooks/useEmotionHistory'
 import {
   EMOTION_COLORS,
@@ -530,10 +530,10 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: I
               {/* Tooltip */}
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
                 <div className="bg-background-secondary border border-white/10 rounded px-2 py-1 text-[9px] text-text-secondary whitespace-nowrap shadow-lg">
-                  {new Date(window.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(window.time).toLocaleTimeString(toLocaleTag(language), { hour: '2-digit', minute: '2-digit' })}
                   {window.count > 0 && (
                     <span className="ml-1" style={{ color }}>
-                      {window.dominant}
+                      {t(EMOTION_META[window.dominant].translationKey, language)}
                     </span>
                   )}
                 </div>

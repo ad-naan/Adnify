@@ -841,7 +841,7 @@ export const en = {
   'emotion.autoAdapt': 'Auto Adapt',
   'emotion.autoAdaptDesc': 'Adjust UI based on emotions',
   'emotion.privacyMode': 'Privacy Mode',
-  'emotion.privacyModeDesc': 'Detect locally only; do not persist behavior or learning data',
+  'emotion.privacyModeDesc': 'Detect in memory only; clears saved behavior data',
   'emotion.sensitivity': 'Detection Sensitivity',
   'emotion.sensitivityLow': 'Low',
   'emotion.sensitivityMedium': 'Medium',

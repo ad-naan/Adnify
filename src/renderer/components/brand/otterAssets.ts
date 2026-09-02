@@ -57,8 +57,12 @@ export const OTTER_ASSET_PATHS: Record<OtterAssetKey, string> = {
   warning: 'brand/ip/otter/faces/worried.webp',
   question: 'brand/ip/otter/fx/question_bubble.webp',
   rest: 'brand/ip/otter/body/sleep_curl.webp',
-  focused: 'brand/ip/otter/faces/curious.webp',
-  frustrated: 'brand/ip/otter/faces/curious.webp',
+  // 情绪状态用的脸。约束有两条：语义相反的状态不能共用一张（focused 和 frustrated
+  // 曾经都指向 curious.webp，界面上"专注"和"受挫"长得一模一样），而每张出厂的 webp
+  // 都必须被注册（`otterAssets.test.ts` 的 "registers every shipped otter asset"）。
+  // focused 和 flow 共用 focused.webp 是有意的 —— 两个都是专注类状态。
+  focused: 'brand/ip/otter/faces/focused.webp',
+  frustrated: 'brand/ip/otter/faces/confused.webp',
   tired: 'brand/ip/otter/faces/tired.webp',
   excited: 'brand/ip/otter/faces/proud.webp',
   bored: 'brand/ip/otter/faces/neutral.webp',
@@ -74,7 +78,9 @@ export const OTTER_ASSET_PATHS: Record<OtterAssetKey, string> = {
   outline: 'brand/ip/otter/props/notebook.webp',
   shell: 'brand/ip/otter/props/terminal.webp',
   logs: 'brand/ip/otter/props/activity_log.webp',
-  searchEmpty: 'brand/ip/otter/faces/confused.webp',
+  // frustrated 拿走了 confused.webp，curious.webp 挪到这里 —— 空搜索结果本来就更像
+  // "在找什么"而不是"没看懂"，而且这张脸必须有人注册，见上面那条注释。
+  searchEmpty: 'brand/ip/otter/faces/curious.webp',
   idea: 'brand/ip/otter/fx/idea_bulb.webp',
   toastSuccess: 'brand/ip/otter/fx/success_stamp.webp',
   toastError: 'brand/ip/otter/fx/warning.webp',

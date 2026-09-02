@@ -840,7 +840,7 @@ export const zh = {
   'emotion.autoAdapt': '自动适配',
   'emotion.autoAdaptDesc': '根据情绪调整 UI',
   'emotion.privacyMode': '隐私模式',
-  'emotion.privacyModeDesc': '仅本地检测，不保存行为与学习数据',
+  'emotion.privacyModeDesc': '仅在内存中检测，并清除已保存的行为数据',
   'emotion.sensitivity': '检测灵敏度',
   'emotion.sensitivityLow': '低',
   'emotion.sensitivityMedium': '中',
