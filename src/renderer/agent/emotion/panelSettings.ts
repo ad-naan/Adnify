@@ -11,8 +11,7 @@ export interface EmotionPanelSettings {
   ambientGlow: boolean
   soundEnabled: boolean
   companionEnabled: boolean
-  autoAdapt: boolean
-  /** 开启后仅内存检测，不写入 baseline / feedback 等 localStorage */
+  /** 开启后仅内存检测，不写入 baseline / feedback 等 localStorage，并清掉已经存下的 */
   privacyMode: boolean
   sensitivity: EmotionPanelSensitivity
   /**
@@ -30,7 +29,6 @@ export const DEFAULT_EMOTION_PANEL_SETTINGS: EmotionPanelSettings = {
   ambientGlow: true,
   soundEnabled: false,
   companionEnabled: true,
-  autoAdapt: true,
   privacyMode: false,
   sensitivity: 'medium',
   decorativeAnimations: true,
@@ -50,7 +48,6 @@ export function normalizeEmotionPanelSettings(value: unknown): EmotionPanelSetti
     ambientGlow: typeof parsed.ambientGlow === 'boolean' ? parsed.ambientGlow : DEFAULT_EMOTION_PANEL_SETTINGS.ambientGlow,
     soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : DEFAULT_EMOTION_PANEL_SETTINGS.soundEnabled,
     companionEnabled: typeof parsed.companionEnabled === 'boolean' ? parsed.companionEnabled : DEFAULT_EMOTION_PANEL_SETTINGS.companionEnabled,
-    autoAdapt: typeof parsed.autoAdapt === 'boolean' ? parsed.autoAdapt : DEFAULT_EMOTION_PANEL_SETTINGS.autoAdapt,
     privacyMode: typeof parsed.privacyMode === 'boolean' ? parsed.privacyMode : DEFAULT_EMOTION_PANEL_SETTINGS.privacyMode,
     sensitivity: isValidSensitivity(parsed.sensitivity) ? parsed.sensitivity : 'medium',
     decorativeAnimations: typeof parsed.decorativeAnimations === 'boolean'

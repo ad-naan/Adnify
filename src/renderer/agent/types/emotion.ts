@@ -68,23 +68,14 @@ export type EmotionFactorType =
   | 'search_pattern'           // 搜索模式（频繁搜索=困惑，少搜索=熟悉）
 
 /** 环境适配配置 */
+/**
+ * 按情绪调整环境。
+ *
+ * 只剩 `sound` 和 `break` 两组 —— `theme` / `ui` / `ai` 三组在 2026-09-02 删掉了，
+ * 理由写在 `emotionAdapter.ts` 的 `DEFAULT_ADAPTATIONS` 上面：前两组写的 CSS 自定义
+ * 属性全仓库没人读，第三组一次都没被读过。
+ */
 export interface EnvironmentAdaptation {
-  theme: {
-    id: string
-    brightness: 'dim' | 'normal' | 'bright'
-    accentColor: string
-  }
-  ui: {
-    notifications: 'minimal' | 'normal' | 'disabled'
-    animationSpeed: 'slow' | 'normal' | 'fast'
-    fontSize: number
-    lineHeight: number
-  }
-  ai: {
-    proactivity: 'passive' | 'suggestive' | 'active'
-    tone: 'encouraging' | 'neutral' | 'direct'
-    suggestionFrequency: 'low' | 'medium' | 'high'
-  }
   sound: {
     enabled: boolean
     volume: number
@@ -129,7 +120,14 @@ export interface EmotionFeedbackPayload {
   cooldownKey?: string
   sourceRule?: string
   dismissible?: boolean
-  channelHints?: Array<'statusBar' | 'editorBar'>
+  /**
+   * 允许在哪些通道上显示。
+   *
+   * 曾经还有 `'editorBar'`，但 `EmotionEditorBar` 从来没有被挂载过（159 行、29 个提交、
+   * 零 import），2026-09-02 连组件带这个取值一起删了。留着单成员联合是因为
+   * `EmotionStatusIndicator` 在读它：没带 hint 的 payload 不该显示。
+   */
+  channelHints?: Array<'statusBar'>
   showFeedback?: boolean
 }
 
@@ -150,41 +148,6 @@ export interface EmotionHistory {
   intensity: number
   project: string
   file: string
-}
-
-/** 情绪感知配置 */
-export interface EmotionAwareConfig {
-  enabled: boolean
-  sensitivity: 'low' | 'medium' | 'high'
-  autoAdapt: boolean
-  privacyMode: boolean  // 是否本地处理，不上传数据
-  workHours: {
-    start: number  // 0-23
-    end: number
-  }
-  adaptations: Record<EmotionState, EnvironmentAdaptation>
-  customTriggers: CustomTrigger[]
-}
-
-/** 自定义触发器 */
-export interface CustomTrigger {
-  id: string
-  name: string
-  condition: TriggerCondition
-  action: TriggerAction
-  enabled: boolean
-}
-
-export interface TriggerCondition {
-  type: EmotionFactorType | 'emotion_state'
-  operator: '>' | '<' | '==' | '!=' | '>=' | '<='
-  value: number | string
-  duration?: number  // 持续时间(ms)
-}
-
-export interface TriggerAction {
-  type: 'notification' | 'theme_change' | 'sound' | 'break_suggestion' | 'ai_message'
-  payload: unknown
 }
 
 /** 上下文信息 */
@@ -222,24 +185,4 @@ export interface BehaviorMetrics {
   testRuns: number           // 测试运行次数
   testFailures: number       // 测试失败次数
   context?: CodeContext       // 代码上下文（可选，需要时获取）
-}
-
-/** 用户反馈 */
-export interface UserFeedback {
-  timestamp: number
-  detectedState: EmotionState
-  userState: EmotionState | null  // null表示用户未反馈
-  accuracy: 'correct' | 'incorrect' | 'partial'
-  notes?: string
-}
-
-/** 个性化模式 */
-export interface PersonalPattern {
-  userId: string
-  baselineTypingSpeed: number      // 个人基准打字速度
-  preferredWorkHours: number[]      // 偏好的工作时间段
-  emotionTransitions: Record<EmotionState, Record<EmotionState, number>>  // 情绪转换概率
-  factorWeights: Record<EmotionFactorType, number>  // 个人化的因子权重
-  adaptationPreferences: Partial<EnvironmentAdaptation>  // 个人适配偏好
-  learnedTriggers: CustomTrigger[]  // 学习到的触发器
 }

@@ -14,7 +14,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react'
 import {
-  Zap, Activity, Frown, Sun, Eye, EyeOff,
+  Zap, Activity, Frown, Eye, EyeOff,
   Volume2, VolumeX, Palette, Clock, TrendingUp, Play, ChevronDown, ChevronRight, Shield
 } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -187,13 +187,6 @@ export const EmotionAwarenessPanel: React.FC = () => {
                     onToggle={() => toggleSetting('soundEnabled')}
                   />
                   <SettingToggle
-                    icon={<Sun className="w-3.5 h-3.5" />}
-                    label={t('emotion.autoAdapt', language)}
-                    description={t('emotion.autoAdaptDesc', language)}
-                    enabled={settings.autoAdapt}
-                    onToggle={() => toggleSetting('autoAdapt')}
-                  />
-                  <SettingToggle
                     icon={<Shield className="w-3.5 h-3.5" />}
                     label={t('emotion.privacyMode', language)}
                     description={t('emotion.privacyModeDesc', language)}
@@ -299,13 +292,6 @@ export const EmotionAwarenessPanel: React.FC = () => {
                   description={t('emotion.soundEffectsDesc', language)}
                   enabled={settings.soundEnabled}
                   onToggle={() => toggleSetting('soundEnabled')}
-                />
-                <SettingToggle
-                  icon={<Sun className="w-3.5 h-3.5" />}
-                  label={t('emotion.autoAdapt', language)}
-                  description={t('emotion.autoAdaptDesc', language)}
-                  enabled={settings.autoAdapt}
-                  onToggle={() => toggleSetting('autoAdapt')}
                 />
                 <SettingToggle
                   icon={<Shield className="w-3.5 h-3.5" />}

@@ -17,7 +17,7 @@ describe('EventBus emotion feedback', () => {
       cooldownKey: 'frustration_support:frustrated',
       sourceRule: 'test',
       dismissible: true,
-      channelHints: ['statusBar', 'editorBar'],
+      channelHints: ['statusBar'],
       showFeedback: true,
     }
 

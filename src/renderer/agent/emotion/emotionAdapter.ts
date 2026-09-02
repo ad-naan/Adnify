@@ -1,6 +1,9 @@
 /**
  * 情绪环境适配服务
- * 根据情绪状态自动调整编辑器环境，并统一编排 companion feedback
+ *
+ * 实际在做两件事：按情绪播放/停止环境音，以及编排 companion feedback（含休息提醒）。
+ * 名字里的"环境适配"曾经还包括改主题和 UI，那部分是空转的，2026-09-02 删了 ——
+ * 详见下面 `DEFAULT_ADAPTATIONS` 的注释。
  */
 
 import { EventBus } from '../core/EventBus'
@@ -22,25 +25,24 @@ import {
   type EmotionPanelSettings,
 } from './panelSettings'
 
-// 默认适配配置
+/**
+ * 每个状态的适配参数。
+ *
+ * 原来还有 theme / ui / ai 三组，2026-09-02 全部删掉：
+ * - `ai`（proactivity / tone / suggestionFrequency）从来没被读过 —— `applyAIAdaptation`
+ *   的第一个参数叫 `_ai`，函数体一次都没碰它，也没有任何 prompt / 模型选择 / 采样参数
+ *   路径引用过情绪。等平滑和 confidence 修好、检测信号可靠之后，再作为新功能设计接入；
+ *   把一个每 12 秒重算一次、没有滞回、confidence 又被覆盖成固定值的信号接进 prompt，
+ *   只会让 agent 因为用户看不见的原因忽冷忽热。
+ * - `theme` / `ui` 写的是 `--editor-brightness` / `--custom-accent` /
+ *   `--transition-duration` 三个自定义属性，而全仓库没有任何地方读它们；`theme.id`
+ *   （cyberpunk / midnight）和 `ui.fontSize` / `lineHeight` / `notifications` 连写都没写。
+ *   也就是说 `autoAdapt` 那个默认开着的开关什么都没做，一起删了。
+ *
+ * 剩下两组是真在生效的：`sound` 走 AudioContext 白噪音（默认关），`break` 走休息提醒。
+ */
 const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
   focused: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'normal',
-      accentColor: '#3b82f6',
-    },
-    ui: {
-      notifications: 'minimal',
-      animationSpeed: 'normal',
-      fontSize: 14,
-      lineHeight: 1.5,
-    },
-    ai: {
-      proactivity: 'suggestive',
-      tone: 'neutral',
-      suggestionFrequency: 'medium',
-    },
     sound: {
       enabled: false,
       volume: 0,
@@ -53,22 +55,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   frustrated: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'dim',
-      accentColor: '#f97316',
-    },
-    ui: {
-      notifications: 'disabled',
-      animationSpeed: 'slow',
-      fontSize: 15,
-      lineHeight: 1.6,
-    },
-    ai: {
-      proactivity: 'active',
-      tone: 'encouraging',
-      suggestionFrequency: 'high',
-    },
     sound: {
       enabled: true,
       volume: 0.3,
@@ -81,22 +67,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   tired: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'dim',
-      accentColor: '#8b5cf6',
-    },
-    ui: {
-      notifications: 'disabled',
-      animationSpeed: 'slow',
-      fontSize: 16,
-      lineHeight: 1.7,
-    },
-    ai: {
-      proactivity: 'active',
-      tone: 'encouraging',
-      suggestionFrequency: 'low',
-    },
     sound: {
       enabled: true,
       volume: 0.2,
@@ -109,22 +79,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   excited: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'bright',
-      accentColor: '#22c55e',
-    },
-    ui: {
-      notifications: 'normal',
-      animationSpeed: 'fast',
-      fontSize: 14,
-      lineHeight: 1.5,
-    },
-    ai: {
-      proactivity: 'passive',
-      tone: 'neutral',
-      suggestionFrequency: 'low',
-    },
     sound: {
       enabled: true,
       volume: 0.4,
@@ -137,22 +91,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   bored: {
-    theme: {
-      id: 'cyberpunk',
-      brightness: 'bright',
-      accentColor: '#ec4899',
-    },
-    ui: {
-      notifications: 'normal',
-      animationSpeed: 'fast',
-      fontSize: 14,
-      lineHeight: 1.5,
-    },
-    ai: {
-      proactivity: 'active',
-      tone: 'encouraging',
-      suggestionFrequency: 'high',
-    },
     sound: {
       enabled: true,
       volume: 0.5,
@@ -165,22 +103,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   stressed: {
-    theme: {
-      id: 'midnight',
-      brightness: 'dim',
-      accentColor: '#06b6d4',
-    },
-    ui: {
-      notifications: 'disabled',
-      animationSpeed: 'slow',
-      fontSize: 15,
-      lineHeight: 1.6,
-    },
-    ai: {
-      proactivity: 'active',
-      tone: 'direct',
-      suggestionFrequency: 'medium',
-    },
     sound: {
       enabled: true,
       volume: 0.25,
@@ -193,22 +115,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   flow: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'normal',
-      accentColor: '#6366f1',
-    },
-    ui: {
-      notifications: 'disabled',
-      animationSpeed: 'normal',
-      fontSize: 14,
-      lineHeight: 1.5,
-    },
-    ai: {
-      proactivity: 'passive',
-      tone: 'neutral',
-      suggestionFrequency: 'low',
-    },
     sound: {
       enabled: true,
       volume: 0.3,
@@ -221,22 +127,6 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
     },
   },
   neutral: {
-    theme: {
-      id: 'adnify-dark',
-      brightness: 'normal',
-      accentColor: '#3b82f6',
-    },
-    ui: {
-      notifications: 'normal',
-      animationSpeed: 'normal',
-      fontSize: 14,
-      lineHeight: 1.5,
-    },
-    ai: {
-      proactivity: 'suggestive',
-      tone: 'neutral',
-      suggestionFrequency: 'medium',
-    },
     sound: {
       enabled: false,
       volume: 0,
@@ -380,14 +270,9 @@ class EmotionAdapter {
     const adaptation = DEFAULT_ADAPTATIONS[detection.state]
     this.currentAdaptation = adaptation
 
-    if (this.settings.autoAdapt) {
-      this.applyThemeAdaptation(adaptation.theme)
-      this.applyUIAdaptation(adaptation.ui)
-    }
-    this.applyAIAdaptation(adaptation.ai, detection)
+    this.emitCompanionFeedback(detection)
     this.applySoundAdaptation(adaptation.sound)
     this.setupBreakReminders(adaptation.break, detection.state)
-    this.showEmotionAwareness(detection)
 
     logger.agent.info('[EmotionAdapter] Adapted to:', detection.state)
   }
@@ -480,7 +365,7 @@ class EmotionAdapter {
     messageKey: TranslationKey,
     sourceRule: string,
     priority: number,
-    channelHints: Array<'statusBar' | 'editorBar'>,
+    channelHints: Array<'statusBar'>,
     showFeedback = true,
   ): EmotionFeedbackPayload {
     const now = Date.now()
@@ -501,31 +386,14 @@ class EmotionAdapter {
     }
   }
 
-  private applyThemeAdaptation(theme: EnvironmentAdaptation['theme']): void {
-    const root = document.documentElement
-    const brightnessMap = {
-      dim: '0.85',
-      normal: '1',
-      bright: '1.1',
-    }
-    root.style.setProperty('--editor-brightness', brightnessMap[theme.brightness])
-    root.style.setProperty('--custom-accent', theme.accentColor)
-  }
-
-  private applyUIAdaptation(ui: EnvironmentAdaptation['ui']): void {
-    const root = document.documentElement
-    const speedMap = {
-      slow: '0.5s',
-      normal: '0.2s',
-      fast: '0.1s',
-    }
-    root.style.setProperty('--transition-duration', speedMap[ui.animationSpeed])
-  }
-
-  private applyAIAdaptation(
-    _ai: EnvironmentAdaptation['ai'],
-    detection: EmotionDetection,
-  ): void {
+  /**
+   * 按当前状态发一条陪伴反馈。
+   *
+   * 原名 `applyAIAdaptation`，第一个参数是 `EnvironmentAdaptation['ai']` —— 但函数体
+   * 一次都没读它（参数名就是 `_ai`）。名字和签名都在暗示"这里按情绪调整了 AI 行为"，
+   * 实际做的只有发一条文案。参数删掉，名字改成它真正做的事。
+   */
+  private emitCompanionFeedback(detection: EmotionDetection): void {
     const state = detection.state
     if (state === 'neutral' || state === 'flow') return
     if (!this.settings.companionEnabled) return
@@ -544,7 +412,7 @@ class EmotionAdapter {
                 : 'encouragement'
 
       this.emitFeedback(
-        this.buildFeedback(type, detection, messageKey, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar', 'editorBar'])
+        this.buildFeedback(type, detection, messageKey, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar'])
       )
     }
 
@@ -646,7 +514,7 @@ class EmotionAdapter {
           triggeredAt: Date.now(),
           duration: 0,
           factors: [],
-        }, 'emotion.break.micro', 'micro_break_timer', 4, ['statusBar', 'editorBar']))
+        }, 'emotion.break.micro', 'micro_break_timer', 4, ['statusBar']))
       }, 20 * 60 * 1000)
     }
 
@@ -658,11 +526,8 @@ class EmotionAdapter {
         triggeredAt: Date.now(),
         duration: 0,
         factors: [],
-      }, BREAK_SUGGESTION_KEYS[state], 'break_timer', 7, ['statusBar', 'editorBar']))
+      }, BREAK_SUGGESTION_KEYS[state], 'break_timer', 7, ['statusBar']))
     }, breakConfig.breakInterval)
-  }
-
-  private showEmotionAwareness(_detection: EmotionDetection): void {
   }
 
   private stopAmbientSound(): void {
