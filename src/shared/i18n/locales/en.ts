@@ -1768,6 +1768,29 @@ export const en = {
   'emptyChatSuggestions.whatAreWePushing': 'What are we pushing forward today?',
   'emptyChatSuggestions.workspace': 'Workspace',
 
+  // errorCode
+  'errorCode.aborted': 'Request was cancelled',
+  'errorCode.apiCallFailed': 'API call failed',
+  'errorCode.apiKeyInvalid': 'Invalid API key',
+  'errorCode.apiRateLimit': 'Rate limit exceeded',
+  'errorCode.fileNotFound': 'File not found',
+  'errorCode.fileRead': 'Failed to read file',
+  'errorCode.fileWrite': 'Failed to write file',
+  'errorCode.llmEmptyResponse': 'Empty response from model',
+  'errorCode.llmInvalidPrompt': 'Invalid prompt format',
+  'errorCode.llmInvalidResponse': 'Invalid response from model',
+  'errorCode.llmNoContent': 'Model did not generate any content',
+  'errorCode.llmNoOutput': 'No output was generated',
+  'errorCode.llmNoSuchModel': 'Model not found',
+  'errorCode.llmUnsupported': 'Functionality not supported',
+  'errorCode.llmValidationFailed': 'Response validation failed',
+  'errorCode.lspNotInitialized': 'Language server not initialized',
+  'errorCode.lspRequestFailed': 'Language server request failed',
+  'errorCode.mcpNotInitialized': 'MCP not initialized',
+  'errorCode.mcpServerError': 'MCP server error',
+  'errorCode.mcpToolError': 'MCP tool execution failed',
+  'errorCode.timeout': 'Request timed out',
+
   // explorerView
   'explorerView.openAFolderOr': 'Open a folder or workspace catalog to start browsing and editing code.',
 

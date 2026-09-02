@@ -90,7 +90,7 @@ export function isProviderAuthErrorMessage(message: string | undefined | null): 
  * 渲染进程侧：认出码就查表，认不出返回 `null`。
  *
  * 需要区分"这是本类错误"的展示点用这个 —— 聊天流那条路径上，通用兜底文案
- * （`getErrorMessage(UNKNOWN)` = "发生了未知错误"）会被拼在具体消息前面，
+ * （`getErrorMessage(UNKNOWN)` = "发生未知错误"）会被拼在具体消息前面，
  * 而本类错误本身已经足够具体，不该再套那层前缀。
  */
 export function tryProviderAuthErrorText(

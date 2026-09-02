@@ -21,6 +21,7 @@ import {
 } from 'ai'
 
 import { isProviderAuthErrorMessage } from '@shared/errors/providerAuthError'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
 export enum ErrorCode {
   // 通用错误
@@ -87,112 +88,53 @@ export class AppError extends Error {
 }
 
 /**
- * 错误消息映射表（支持国际化）
+ * `ErrorCode` → 文案键。
+ *
+ * 用穷尽 Record 而不是 `` t(`errorCode.${code}`) ``：`ErrorCode` 的值是 SCREAMING_SNAKE，
+ * 拼不出 camelCase 的键名。样板是 `src/main/services/privilegeCapabilities.ts` 的
+ * `PRIVILEGE_CAPABILITY_REASON_KEYS` —— 少一个枚举成员编译期就报错，和模板字面量类型同样严。
+ *
+ * 有三条指向早就存在的 `error.*`（那一段的文案和这里逐字重合），其余补在 `errorCode.*`。
+ * `error.timeout` / `error.apiKeyInvalid` / `error.rateLimited` 看着像可以并进来，但它们的
+ * 文案多带一句建议（"Please try again."），和这里的短句不是一回事，没并 —— 那一段除了
+ * `error.unknown` 和 `error.fileNotFound` 之外今天没有任何调用点，并进来等于顺手改文案。
+ * `error.fileNotFound` 也没并：它带 `{path}` 占位符，而 `getErrorMessage` 没有传参的通道。
  */
-const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
-  [ErrorCode.UNKNOWN]: {
-    en: 'An unexpected error occurred',
-    zh: '发生了未知错误'
-  },
-  [ErrorCode.NETWORK]: {
-    en: 'Network error. Please check your connection',
-    zh: '网络错误，请检查网络连接'
-  },
-  [ErrorCode.TIMEOUT]: {
-    en: 'Request timed out',
-    zh: '请求超时'
-  },
-  [ErrorCode.ABORTED]: {
-    en: 'Request was cancelled',
-    zh: '请求已取消'
-  },
-  [ErrorCode.FILE_NOT_FOUND]: {
-    en: 'File not found',
-    zh: '文件不存在'
-  },
-  [ErrorCode.FILE_ACCESS_DENIED]: {
-    en: 'Permission denied',
-    zh: '没有权限访问'
-  },
-  [ErrorCode.FILE_READ]: {
-    en: 'Failed to read file',
-    zh: '读取文件失败'
-  },
-  [ErrorCode.FILE_WRITE]: {
-    en: 'Failed to write file',
-    zh: '写入文件失败'
-  },
-  [ErrorCode.API_KEY_INVALID]: {
-    en: 'Invalid API key',
-    zh: 'API Key 无效'
-  },
-  [ErrorCode.API_RATE_LIMIT]: {
-    en: 'Rate limit exceeded',
-    zh: 'API 请求频率超限'
-  },
-  [ErrorCode.API_CALL_FAILED]: {
-    en: 'API call failed',
-    zh: 'API 调用失败'
-  },
-  [ErrorCode.LSP_NOT_INITIALIZED]: {
-    en: 'Language server not initialized',
-    zh: '语言服务器未初始化'
-  },
-  [ErrorCode.LSP_REQUEST_FAILED]: {
-    en: 'Language server request failed',
-    zh: '语言服务器请求失败'
-  },
-  [ErrorCode.MCP_NOT_INITIALIZED]: {
-    en: 'MCP not initialized',
-    zh: 'MCP 未初始化'
-  },
-  [ErrorCode.MCP_SERVER_ERROR]: {
-    en: 'MCP server error',
-    zh: 'MCP 服务器错误'
-  },
-  [ErrorCode.MCP_TOOL_ERROR]: {
-    en: 'MCP tool execution failed',
-    zh: 'MCP 工具执行失败'
-  },
-  [ErrorCode.LLM_NO_CONTENT]: {
-    en: 'Model did not generate any content',
-    zh: '模型未生成任何内容'
-  },
-  [ErrorCode.LLM_NO_OUTPUT]: {
-    en: 'No output was generated',
-    zh: '未生成输出'
-  },
-  [ErrorCode.LLM_INVALID_PROMPT]: {
-    en: 'Invalid prompt format',
-    zh: '提示词格式无效'
-  },
-  [ErrorCode.LLM_INVALID_RESPONSE]: {
-    en: 'Invalid response from model',
-    zh: '模型响应格式无效'
-  },
-  [ErrorCode.LLM_EMPTY_RESPONSE]: {
-    en: 'Empty response from model',
-    zh: '模型返回空响应'
-  },
-  [ErrorCode.LLM_NO_SUCH_MODEL]: {
-    en: 'Model not found',
-    zh: '模型不存在'
-  },
-  [ErrorCode.LLM_VALIDATION_FAILED]: {
-    en: 'Response validation failed',
-    zh: '响应验证失败'
-  },
-  [ErrorCode.LLM_UNSUPPORTED]: {
-    en: 'Functionality not supported',
-    zh: '功能不支持'
-  },
+const ERROR_MESSAGE_KEYS: Record<ErrorCode, TranslationKey> = {
+  [ErrorCode.UNKNOWN]: 'error.unknown',
+  [ErrorCode.NETWORK]: 'error.networkError',
+  [ErrorCode.TIMEOUT]: 'errorCode.timeout',
+  [ErrorCode.ABORTED]: 'errorCode.aborted',
+  [ErrorCode.FILE_NOT_FOUND]: 'errorCode.fileNotFound',
+  [ErrorCode.FILE_ACCESS_DENIED]: 'error.permissionDenied',
+  [ErrorCode.FILE_READ]: 'errorCode.fileRead',
+  [ErrorCode.FILE_WRITE]: 'errorCode.fileWrite',
+  [ErrorCode.API_KEY_INVALID]: 'errorCode.apiKeyInvalid',
+  [ErrorCode.API_RATE_LIMIT]: 'errorCode.apiRateLimit',
+  [ErrorCode.API_CALL_FAILED]: 'errorCode.apiCallFailed',
+  [ErrorCode.LSP_NOT_INITIALIZED]: 'errorCode.lspNotInitialized',
+  [ErrorCode.LSP_REQUEST_FAILED]: 'errorCode.lspRequestFailed',
+  [ErrorCode.MCP_NOT_INITIALIZED]: 'errorCode.mcpNotInitialized',
+  [ErrorCode.MCP_SERVER_ERROR]: 'errorCode.mcpServerError',
+  [ErrorCode.MCP_TOOL_ERROR]: 'errorCode.mcpToolError',
+  [ErrorCode.LLM_NO_CONTENT]: 'errorCode.llmNoContent',
+  [ErrorCode.LLM_NO_OUTPUT]: 'errorCode.llmNoOutput',
+  [ErrorCode.LLM_INVALID_PROMPT]: 'errorCode.llmInvalidPrompt',
+  [ErrorCode.LLM_INVALID_RESPONSE]: 'errorCode.llmInvalidResponse',
+  [ErrorCode.LLM_EMPTY_RESPONSE]: 'errorCode.llmEmptyResponse',
+  [ErrorCode.LLM_NO_SUCH_MODEL]: 'errorCode.llmNoSuchModel',
+  [ErrorCode.LLM_VALIDATION_FAILED]: 'errorCode.llmValidationFailed',
+  [ErrorCode.LLM_UNSUPPORTED]: 'errorCode.llmUnsupported',
 }
 
 /**
  * 获取错误消息
+ *
+ * `language` 默认 `'en'`：主进程那 16 个 `toAppError` 调用点一个都没传，所以主进程今天拿到的
+ * 一直是英文。这次只把文案搬进 locale 表，没动这个语义。
  */
-export function getErrorMessage(code: ErrorCode, language: 'en' | 'zh' = 'en'): string {
-  return ERROR_MESSAGES[code]?.[language] || ERROR_MESSAGES[ErrorCode.UNKNOWN][language]
+export function getErrorMessage(code: ErrorCode, language: Language = 'en'): string {
+  return t(ERROR_MESSAGE_KEYS[code] ?? ERROR_MESSAGE_KEYS[ErrorCode.UNKNOWN], language)
 }
 
 /**
@@ -463,7 +405,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
  * 将任意错误转换为 AppError
  * 使用英文友好消息（前端可根据用户语言转换）
  */
-export function toAppError(error: unknown, language: 'en' | 'zh' = 'en'): AppError {
+export function toAppError(error: unknown, language: Language = 'en'): AppError {
   if (error instanceof AppError) {
     return error
   }

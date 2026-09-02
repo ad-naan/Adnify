@@ -130,10 +130,6 @@ describe('inline bilingual text', () => {
       // ---- 双语标签是数据表的一列：要先给每行定一个键，才谈得上搬进 locale ----
       'src/renderer/components/settings/settingsSearchIndex.ts': 71,
       'src/shared/config/mcpPresets.ts': 9,
-
-      // ---- ErrorCode → 文案，键已经是稳定的枚举值，搬进 locale 基本是机械替换
-      //      （读它的 `getErrorMessage` 只有渲染进程在用，不涉及主进程拿不到 locale 的问题）----
-      'src/shared/utils/errorHandler.ts': 24,
     }
     const found: Record<string, number> = {}
     for (const root of ROOTS) scan(path.join(REPO_ROOT, root), COPY_TABLE, found, { gates: GATES })

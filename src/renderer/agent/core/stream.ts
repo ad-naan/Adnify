@@ -311,7 +311,7 @@ export function createStreamProcessor(
     let errorMsg: string
 
     // 供应商鉴权类错误的文案键编在 message 里（主进程没有界面语言），认出来就直接用它：
-    // 它的 code 一路走到这里是 `UNKNOWN`，套上通用前缀只会变成"发生了未知错误: <具体原因>"。
+    // 它的 code 一路走到这里是 `UNKNOWN`，套上通用前缀只会变成"发生未知错误: <具体原因>"。
     const authText = tryProviderAuthErrorText(rawMessage, language)
     if (authText) {
       errorMsg = authText

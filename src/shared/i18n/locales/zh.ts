@@ -1769,6 +1769,29 @@ export const zh = {
   'emptyChatSuggestions.whatAreWePushing': '今天准备推进哪一块？',
   'emptyChatSuggestions.workspace': '打开目录',
 
+  // errorCode
+  'errorCode.aborted': '请求已取消',
+  'errorCode.apiCallFailed': 'API 调用失败',
+  'errorCode.apiKeyInvalid': 'API Key 无效',
+  'errorCode.apiRateLimit': 'API 请求频率超限',
+  'errorCode.fileNotFound': '文件不存在',
+  'errorCode.fileRead': '读取文件失败',
+  'errorCode.fileWrite': '写入文件失败',
+  'errorCode.llmEmptyResponse': '模型返回空响应',
+  'errorCode.llmInvalidPrompt': '提示词格式无效',
+  'errorCode.llmInvalidResponse': '模型响应格式无效',
+  'errorCode.llmNoContent': '模型未生成任何内容',
+  'errorCode.llmNoOutput': '未生成输出',
+  'errorCode.llmNoSuchModel': '模型不存在',
+  'errorCode.llmUnsupported': '功能不支持',
+  'errorCode.llmValidationFailed': '响应验证失败',
+  'errorCode.lspNotInitialized': '语言服务器未初始化',
+  'errorCode.lspRequestFailed': '语言服务器请求失败',
+  'errorCode.mcpNotInitialized': 'MCP 未初始化',
+  'errorCode.mcpServerError': 'MCP 服务器错误',
+  'errorCode.mcpToolError': 'MCP 工具执行失败',
+  'errorCode.timeout': '请求超时',
+
   // explorerView
   'explorerView.openAFolderOr': '在 Adnify 中打开一个工作区目录以开始浏览和编辑代码。',
 
