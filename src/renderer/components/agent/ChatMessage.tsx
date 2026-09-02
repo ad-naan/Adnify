@@ -43,6 +43,13 @@ import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
+import {
+  REVEAL_CLASS,
+  StreamingRevealTracker,
+  assignRevealPhases,
+  rehypeStreamingReveal,
+  type RevealSegment,
+} from './streamingTextReveal'
 import { skillService } from '@/renderer/agent/services/skillService'
 import { logger } from '@shared/utils/Logger'
 import { buildChatMessagePartKeys } from './chatMessagePartKeys'
@@ -80,6 +87,30 @@ interface RenderPartProps {
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
+
+/**
+ * 纯文本通道的写入头渐显（推理过程、未闭合的代码栅栏）。这里的文字就是源码本身，
+ * 最后一个字就是窗口的原点，所以 distanceOfLast = 0。markdown 那条路走
+ * rehypeStreamingReveal，好让 span 落在正确的行内元素里。
+ */
+const RevealText = React.memo(({ text, segments }: { text: string; segments: readonly RevealSegment[] }) => (
+  <>
+    {assignRevealPhases(text, 0, segments).map((part, index) => (
+      part.ageMs === undefined
+        ? <React.Fragment key={index}>{part.text}</React.Fragment>
+        : (
+          <span
+            key={index}
+            className={REVEAL_CLASS}
+            style={{ animationDelay: `-${Math.round(part.ageMs)}ms` }}
+          >
+            {part.text}
+          </span>
+        )
+    ))}
+  </>
+))
+RevealText.displayName = 'RevealText'
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
@@ -151,14 +182,16 @@ CodeBlock.displayName = 'CodeBlock'
 const StableStreamingMarkdownBlock = React.memo(({
   content,
   components,
+  rehypePlugins,
 }: {
   content: string
   components: Record<string, React.ComponentType<any> | keyof React.JSX.IntrinsicElements>
+  rehypePlugins?: React.ComponentProps<typeof ReactMarkdown>['rehypePlugins']
 }) => (
   <ReactMarkdown
     className="prose prose-invert max-w-none"
     remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-    rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+    rehypePlugins={rehypePlugins ?? MARKDOWN_REHYPE_PLUGINS}
     components={components as any}
     urlTransform={(url) => parseThreadDeepLink(url) ? url : defaultUrlTransform(url)}
     skipHtml
@@ -480,6 +513,10 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
 
+  // 见 MarkdownContent 里同名的一段：年龄要跟着这一次渲染走，所以不缓存
+  const revealTracker = React.useMemo(() => new StreamingRevealTracker(), [])
+  const revealSegments = revealTracker.update(content, !!isStreaming)
+
   useEffect(() => {
     if (!startTime || !isStreaming) return
     const timer = setInterval(() => {
@@ -539,9 +576,9 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
             {content ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
-                className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans ${isStreaming ? 'animate-block-reveal' : ''}`}
+                className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans"
               >
-                {content}
+                <RevealText text={content} segments={revealSegments} />
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -592,6 +629,15 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     () => keepStreamingLayout ? streamingPartitioner.update(contentWithoutAlert, !!isStreaming) : null,
     [contentWithoutAlert, isStreaming, keepStreamingLayout, streamingPartitioner],
   )
+
+  // 刻意不 useMemo：年龄必须跟着「这一次渲染」走。缓存在 content 上的话，同一段内容
+  // 因为别的原因（字号变了、父组件更新）再渲染一次时相位会往回跳。update 对状态是幂等的，
+  // 每帧调一次的代价只是遍历十几个批次。
+  const revealTracker = React.useMemo(() => new StreamingRevealTracker(), [])
+  const revealSegments = revealTracker.update(contentWithoutAlert, !!isStreaming)
+  const activeRehypePlugins = revealSegments.length > 0
+    ? [...MARKDOWN_REHYPE_PLUGINS, rehypeStreamingReveal(revealSegments)]
+    : undefined
 
   const workspacePath = useStore(s => s.workspacePath)
 
@@ -706,18 +752,16 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
                 />
               ))}
               {streamingPartition.activeBlock && (
-                <div
-                  key={`active-block-${streamingPartition.completedBlocks.length}`}
-                  className={isStreaming ? 'streaming-block-soft-enter' : undefined}
-                >
+                <div key={`active-block-${streamingPartition.completedBlocks.length}`}>
                   {streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
                     <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
-                      {streamingPartition.activeBlock}
+                      <RevealText text={streamingPartition.activeBlock} segments={revealSegments} />
                     </div>
                   ) : (
                     <StableStreamingMarkdownBlock
                       content={streamingPartition.activeBlock}
                       components={markdownComponents as any}
+                      rehypePlugins={activeRehypePlugins}
                     />
                   )}
                 </div>

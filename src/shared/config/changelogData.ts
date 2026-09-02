@@ -69,6 +69,264 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.65",
+    "rawVersion": "1.7.65",
+    "date": "2026-09-02",
+    "title": "并行执行的独立 Git 车道、情绪感知系统修正、英文界面文案补全与工作区索引缓存",
+    "titleEn": "Isolated Git Lanes for Parallel Execution, Emotion Sensing Corrections, Complete English UI & Workspace Index Cache",
+    "highlight": "并发写入的子 Agent 与 Plan 任务现在各自在独立的 Git worktree 车道中工作，完成后自动合并回工作区；冲突或失败的车道会保留下来，可在面板里重试合并或丢弃。情绪感知系统做了系统性修正：专注状态此前在默认灵敏度下数学上不可达、上报状态每 12 秒抖动一次、打字速度虚高约 1.5 倍、专注时长少报约一半、置信度算完即被覆盖成固定值，同时删除了三处类型与开关齐全但从未接线的空功能。约 2,400 项界面文案从代码里的中英内联搬进语言表，英文界面不再退回中文原文。此外重整了工作区索引的缓存布局，并修复 Git 批量丢弃更改的确认与错误反馈。",
+    "highlightEn": "Concurrent writable sub-agents and Plan tasks now each work inside an isolated Git worktree lane and merge back into the workspace on completion; lanes that conflict or fail are retained so the merge can be retried or the lane discarded from a panel. Emotion sensing received systematic corrections: the focused state was mathematically unreachable at default sensitivity, the reported state flipped every 12 seconds, typing speed read about 1.5x too high, focus time under-reported by roughly half, and confidence was overwritten with a constant right after being computed; three surfaces with complete types and toggles but no wiring were removed. Around 2,400 UI strings moved out of inline bilingual code into the locale tables, so the English UI no longer falls back to Chinese. The workspace index cache layout was reorganized, and Git batch discard now confirms and reports failures correctly.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "并行执行与 Git 车道隔离 / Parallel Execution & Worktree Lanes",
+        "labelEn": "Parallel Execution & Worktree Lanes",
+        "items": [
+          {
+            "title": "子 Agent 与并行任务的独立 worktree 车道",
+            "titleEn": "Isolated Worktree Lanes for Sub-Agents and Parallel Tasks",
+            "details": [
+              "需要并发写入时，可写子 Agent、Plan 并行任务与顶层会话各自在工作区 .adnify/worktrees/ 下获得独立检出与分支，改动不再互相覆盖",
+              "隔离粒度是执行节点而不是单条消息：一个节点从开始到结束只看见一份工作区快照，结束时自动提交并合并回原分支",
+              "不满足隔离条件时给出明确原因（不是 Git 仓库、没有任何提交、基线工作区有未提交更改）：顶层会话退回共享工作区并提示，真正的并行写入直接中止，而不是让两个写者互相覆盖"
+            ],
+            "detailsEn": [
+              "When concurrent writing is needed, writable sub-agents, parallel Plan tasks, and top-level sessions each receive their own checkout and branch under the workspace's .adnify/worktrees/, so their edits can no longer overwrite each other",
+              "Isolation is per execution node rather than per message: a node sees one workspace snapshot from start to finish, then commits and merges back into its base branch",
+              "When isolation is not possible the reason is explicit (not a Git repository, no commits to branch from, uncommitted changes in the base workspace): a top-level session falls back to the shared workspace with a notice, while genuine parallel writing aborts instead of letting two writers overwrite each other"
+            ]
+          },
+          {
+            "title": "车道恢复面板与统一的状态标记",
+            "titleEn": "Lane Recovery Panel and Unified Status Chips",
+            "details": [
+              "合并冲突或失败的车道会被保留，聊天中出现车道面板，可以再次合并或丢弃；丢弃前需二次确认，并说明该分支上的提交无法恢复",
+              "车道状态（运行中、待合并、已合并、冲突、已丢弃、失败）在任务看板、Plan 工作台与系统消息中使用同一枚状态标记",
+              "冲突会列出冲突文件，并把 Git 的原始报错作为诊断信息一并透出；车道文件夹被回收时会说明提交仍保留在哪个分支上"
+            ],
+            "detailsEn": [
+              "Lanes that hit a merge conflict or a failure are kept, and a lane panel appears in the chat with Merge again and Discard actions; discarding asks for confirmation and states that the commits on that branch cannot be recovered",
+              "Lane status (running, ready to merge, merged, conflict, discarded, failed) is rendered by one shared status chip across the task board, the Plan workbench, and system messages",
+              "Conflicts list the conflicting files and pass Git's own error text through as diagnostic detail; when a lane folder is reclaimed, the notice says which branch still holds the commits"
+            ]
+          },
+          {
+            "title": "车道命令的安全边界",
+            "titleEn": "Security Boundary for Lane Commands",
+            "details": [
+              "车道操作走专用的 Git 通道，只接受 worktree 的 add / remove / list / prune 四个子命令，且 add / remove 的目标路径必须落在工作区的 .adnify/worktrees/ 之内，越界一律拒绝",
+              "后台车道的创建与回收因此不再弹审批框打断用户，而通用 Git 通道仍把 worktree 视为不可信子命令；分支删除只允许作用于 Adnify 自己的车道分支",
+              "命令审批理由改为按界面语言渲染的原因码，主进程不再直接抛出中文文案"
+            ],
+            "detailsEn": [
+              "Lane operations use a dedicated Git channel that accepts only worktree add, remove, list, and prune, and add/remove targets must resolve inside the workspace's .adnify/worktrees/ directory; anything outside is rejected",
+              "Background lane creation and cleanup therefore no longer interrupt with approval prompts, while the general Git channel still treats worktree as an untrusted subcommand; branch deletion is restricted to Adnify's own lane branches",
+              "Command approval reasons are now reason codes rendered in the interface language instead of Chinese prose thrown from the main process"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "情绪感知系统修正 / Emotion Sensing Corrections",
+        "labelEn": "Emotion Sensing Corrections",
+        "items": [
+          {
+            "title": "专注状态终于可达，上报状态不再每 12 秒抖动",
+            "titleEn": "Focused Is Reachable, and the Reported State No Longer Flips Every 12 Seconds",
+            "details": [
+              "修复默认灵敏度下专注状态数学上不可达：打字时同一信号被兴奋以更高系数吃掉，不打字的阅读分支上限又刚好越不过先验，八个状态里最该常见的那个一次都出不来",
+              "新增状态平滑：新状态需要连续赢下两个检测窗口（约 24 秒）才对外生效，单个窗口的抖动被吸收，水獬、状态栏圆点与环境光晕不再每 12 秒变一次",
+              "修复状态切换那一个窗口上报的持续时长其实是上一个状态待了多久；一次检测内的时间基准统一为同一时刻，不再跨过整分钟边界"
+            ],
+            "detailsEn": [
+              "Fixed the focused state being mathematically unreachable at default sensitivity: while typing, excited consumed the same signal with a higher coefficient, and the non-typing reading branch capped just below the prior, so the state that should be the most common of the eight never appeared once",
+              "Added state smoothing: a new state must win two consecutive detection windows (about 24 seconds) before it is reported, absorbing single-window noise so the otter, the status bar dot, and the ambient glow no longer change every 12 seconds",
+              "Fixed the duration reported on the window where the state changes actually describing the previous state, and unified all timestamps within one detection pass so it can no longer straddle a minute boundary"
+            ]
+          },
+          {
+            "title": "打字速度、专注时长与置信度的数值修正",
+            "titleEn": "Corrected Typing Speed, Focus Time and Confidence",
+            "details": [
+              "修复打字速度（WPM）系统性虚高约 1.5 倍：窗口长度按采样首尾时间差计算，比实际覆盖时长少了一个采样间隔，27 WPM 会被报成 40，恰好把人推过判定门槛",
+              "修复专注时长少报约一半：原先按历史记录条数乘固定 12 秒累加，而持续专注时广播会被去重、实际约 24 秒才写一条；现在按相邻记录之间的真实间隔累加，并对长时间挂机设上限",
+              "修复置信度算完即被丢弃：上下文层原来无论行为层算出什么都覆盖成固定值，因子数量与强度对最终置信度毫无影响；现在行为层结果作为基准传入，上下文只在其之上叠加，同时删除了从未参与计算的装饰性权重字段"
+            ],
+            "detailsEn": [
+              "Fixed typing speed (WPM) reading about 1.5x too high: the window length was measured between the first and last sample, one sampling interval short of what they actually cover, so 27 WPM was reported as 40 — just enough to cross the detection threshold",
+              "Fixed focus time under-reporting by roughly half: it multiplied the number of history records by a fixed 12 seconds, but broadcasts are deduplicated during sustained focus and only write a record about every 24 seconds; it now sums the real interval between adjacent records and caps long idle gaps",
+              "Fixed confidence being discarded right after it was computed: the context layer overwrote it with a constant regardless of what the behaviour layer produced, so factor count and intensity had no effect on the final value; the behaviour result is now passed in as the base and context only adds to it, and the decorative weight field that never took part in scoring was removed"
+            ]
+          },
+          {
+            "title": "隐私模式真正清除数据，休息提醒终于会响",
+            "titleEn": "Privacy Mode Actually Deletes Data, and Break Reminders Finally Fire",
+            "details": [
+              "修复隐私模式只做了一半：开关此前只阻止新样本写入，已存的行为数据仍留在本地并继续被内存中的实例读取；现在从关到开会同时清除磁盘与内存中的样本，开关说明也如实写明会删除已保存的行为数据",
+              "修复休息提醒从实现当天起从未触发：定时器挂在情绪变化事件上、每约 12 秒就被重建，20 分钟的微休息与更长的休息间隔永远等不到；现在改为初始化时建立一次的定时轮询",
+              "修复终端命令失败绕过检测引擎直接伪造情绪事件，导致界面卡在受挫状态、且该次失败不计入历史统计；现在作为环境错误交给引擎在下一个窗口正常判定，即时反馈仍由原有提示承担",
+              "修复状态栏在未悬停时仍每 6 秒重渲染去更新看不见的文案，以及展开态因依赖整个情绪对象而永久停留在刚变化外观的问题"
+            ],
+            "detailsEn": [
+              "Fixed privacy mode being only half-implemented: the toggle blocked new samples but left previously stored behaviour data on disk, still being read by the in-memory instance; turning it on now clears both disk and memory, and the toggle description says plainly that saved behaviour data is deleted",
+              "Fixed break reminders never firing since the day they were written: their timers hung off the emotion-change event and were rebuilt roughly every 12 seconds, so the 20-minute micro-break and the longer intervals were never reached; they now run on a single polling timer created at initialization",
+              "Fixed terminal command failures bypassing the detection engine with a synthetic emotion event, which left the UI stuck in the frustrated state and kept the failure out of the history; it is now handed to the engine as an environment error and judged in the next window, with immediate feedback still coming from the existing toast",
+              "Fixed the status bar re-rendering every 6 seconds to update text that is only visible on hover, and the expanded state staying permanently in its just-changed appearance because its timer depended on the whole emotion object"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "情绪面板与呈现 / Emotion Panel & Presentation",
+        "labelEn": "Emotion Panel & Presentation",
+        "items": [
+          {
+            "title": "检测质量与个人基线现在看得见",
+            "titleEn": "Detection Quality and Personal Baseline Are Now Visible",
+            "details": [
+              "面板新增检测质量一栏：显示个人基线的校准进度（已采集样本数 / 50，达标后显示已校准）与你的评价准确率",
+              "状态栏的赞 / 踩此前只把记录写进本地账本、没有任何读取方；现在这些记录会汇总成准确率显示出来，点击终于有实际反馈"
+            ],
+            "detailsEn": [
+              "The panel now has a Detection Quality section showing personal baseline calibration progress (samples collected out of 50, then Calibrated) alongside your rating accuracy",
+              "The thumbs up/down in the status bar previously only wrote records into a local ledger that nothing ever read; those records now aggregate into the accuracy figure, so rating finally produces visible feedback"
+            ]
+          },
+          {
+            "title": "形象区分与素材优化",
+            "titleEn": "Distinct Artwork and Optimized Assets",
+            "details": [
+              "修复专注与受挫此前共用同一张水獬插图、界面上完全分不出来的问题，并为空搜索结果换上更贴切的形象",
+              "水獬形象改由统一的素材组件按状态取用，界面素材整体从 PNG 换为 WebP，体积更小、加载更快",
+              "修复趋势图提示框与活动栏图标把内部状态标识符直接显示给用户，提示框的时间格式也改为跟随界面语言而不是系统语言"
+            ],
+            "detailsEn": [
+              "Fixed focused and frustrated sharing one otter illustration, which made them indistinguishable in the UI, and gave empty search results a more fitting one",
+              "Otter artwork is now resolved per state through one shared asset component, and UI assets moved from PNG to WebP for smaller size and faster loading",
+              "Fixed the trend tooltip and the activity bar icon showing raw internal state identifiers, and switched the tooltip's time format to follow the interface language instead of the OS locale"
+            ]
+          },
+          {
+            "title": "移除三处从未生效的功能",
+            "titleEn": "Removal of Three Surfaces That Never Did Anything",
+            "details": [
+              "删除默认开启却完全空转的自动适配开关：它写入的三个自定义属性全仓库无人读取，主题与字号相关的部分连写入都没有，同时去掉了它每 12 秒一次的全文档样式写入",
+              "删除从未被任何文件引入的编辑器情绪条及其 26 项文案键，以及八个状态都认真填写但从未被读取的 AI 适应字段",
+              "情绪信号暂不接入模型提示词：一个每 12 秒重算、缺少平滑与可靠置信度的信号只会让 Agent 因用户看不见的原因忽冷忽热，等这批修正稳定后再作为新功能设计"
+            ],
+            "detailsEn": [
+              "Removed the auto-adapt toggle that was on by default and did nothing: the three custom properties it wrote were read nowhere in the repo, its theme and font-size fields were never even written, and its per-12-second document-wide style write is gone with it",
+              "Removed the editor emotion bar that no file ever imported along with its 26 locale keys, and the AI adaptation fields that were filled in for all eight states but never read",
+              "Emotion signals stay out of model prompts for now: a signal recomputed every 12 seconds without smoothing or a trustworthy confidence value would only make the agent run hot and cold for reasons invisible to the user; it will be designed as a feature once these corrections settle"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "英文界面完整性与本地化 / English UI Completeness & Localization",
+        "labelEn": "English UI Completeness & Localization",
+        "items": [
+          {
+            "title": "约 2,400 项界面文案移入语言表",
+            "titleEn": "About 2,400 UI Strings Moved Into the Locale Tables",
+            "details": [
+              "设置搜索索引（71 项）、MCP 预设与分类（177 项）、提示词模板、错误码文案（24 个错误码）、LSP 设置与工具调用日志等界面文案，从代码里的中英内联改为语言表键位，语言表从 720 键增长到 3,146 键",
+              "修复英文界面下仍显示中文的文案：角色名（取值写成中文字段优先且该字段永不为空，英文分支从未生效）、模型选择器的搜索占位符与空状态、日期选择器的默认占位符、上次工作区缺失提示",
+              "修复模板选择器把默认标记硬编码成英文、且隔行多带一个尾随空格的问题"
+            ],
+            "detailsEn": [
+              "The settings search index (71 rows), MCP presets and categories (177), prompt templates, error-code copy (24 codes), LSP settings, and tool-call logging copy moved from inline bilingual code into locale keys, growing the tables from 720 to 3,146 keys",
+              "Fixed copy that still rendered in Chinese on the English UI: agent role names (the Chinese field was checked first and is never empty, so the English branch never ran), the model selector's search placeholder and empty states, the date picker's default placeholder, and the missing-workspace notice",
+              "Fixed the template picker hardcoding its default marker in English, with a stray trailing space on alternating rows"
+            ]
+          },
+          {
+            "title": "跨进程错误与提示的语言归属",
+            "titleEn": "Language Ownership for Cross-Process Errors and Notices",
+            "details": [
+              "主进程不再抛出中文错误文案：模型凭据与 OAuth 登录失败改为携带原因码跨进程传递，由渲染层在显示位置翻译；命令审批理由、Git 忽略规则错误与车道提示都采用同一形态",
+              "启动闪屏会在设置加载完成前读取缓存的语言设置，冷启动不再先闪一次错误语言",
+              "相对时间描述改为走翻译层，不再由代码内联拼接"
+            ],
+            "detailsEn": [
+              "The main process no longer throws Chinese error prose: model credential and OAuth login failures now carry reason codes across the process boundary and are translated by the renderer at the display site, the same shape used for command approval reasons, Git ignore-rule errors, and lane notices",
+              "The splash screen reads a cached language setting before settings finish loading, so a cold start no longer flashes the wrong language first",
+              "Relative time descriptions now go through the translation layer instead of being assembled inline in code"
+            ]
+          },
+          {
+            "title": "搜索匹配行为变化",
+            "titleEn": "Search Matching Behaviour Change",
+            "details": [
+              "设置搜索与 MCP 预设搜索现在只匹配当前界面语言的标签与描述，不再同时匹配两种语言；跨语言查找仍通过关键词与标签生效（英文界面下可用中文关键词、中文界面下可用英文标签）",
+              "设置搜索原先只把查询转小写、不处理中文标签的不对称行为已消除，含 ASCII 的标签现在也能被小写查询命中"
+            ],
+            "detailsEn": [
+              "Settings search and MCP preset search now match only the current interface language's labels and descriptions instead of both at once; cross-language lookup still works through keywords and tags — a Chinese keyword on the English UI, an English tag on the Chinese UI",
+              "The old asymmetry where settings search lowercased the query but not the Chinese label is gone, so labels containing ASCII now match a lowercase query as well"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "索引、Git 与工作台 / Indexing, Git & Workbench",
+        "labelEn": "Indexing, Git & Workbench",
+        "items": [
+          {
+            "title": "工作区索引缓存布局与状态反馈",
+            "titleEn": "Workspace Index Cache Layout and Status Feedback",
+            "details": [
+              "每个工作区的索引统一落在按路径哈希命名的目录下：结构化索引（SQLite）、语义索引（LanceDB）与语义完成清单各自分离，项目摘要收归结构化索引持有，不再有第二份需要同步的摘要文件",
+              "语义索引的配置指纹变化会在被查询前失效可丢弃的向量缓存；旧版本残留的索引缓存会被清理",
+              "开始索引现在等到真实结果再提示完成或失败，不再在刚启动时就报索引已开始；设置页也会正确反映后台仍在索引的状态"
+            ],
+            "detailsEn": [
+              "Each workspace's index now lives under one path-hashed directory with the structural index (SQLite), the semantic index (LanceDB), and the semantic completion manifest kept separate, and the project summary is owned by the structural index so there is no second copy to keep in sync",
+              "A changed semantic configuration fingerprint invalidates the disposable vector cache before it can be queried, and index caches left behind by older versions are cleaned up",
+              "Starting an index now waits for the real result before reporting completion or failure instead of announcing that indexing started, and the settings page correctly reflects an index still running in the background"
+            ]
+          },
+          {
+            "title": "Git 批量丢弃更改",
+            "titleEn": "Git Batch Discard",
+            "details": [
+              "丢弃全部未暂存更改现在在一次确认后用一条 clean 命令删除整批未跟踪文件，不再对每个文件逐个走安全删除流程",
+              "未跟踪文件有独立的确认文案，明确说明文件将被删除且无法恢复；确认框会显示本次将丢弃的更改数量",
+              "丢弃失败会显示 Git 的具体报错；已跟踪更改成功但未跟踪文件删除失败时，会明确告知这次只完成了一半"
+            ],
+            "detailsEn": [
+              "Discarding all unstaged changes now removes the whole untracked set with a single clean command after one confirmation, instead of routing every file through the secure deletion path individually",
+              "Untracked files have their own confirmation text stating that they will be deleted and cannot be recovered, and the dialog shows how many changes are about to be discarded",
+              "A failed discard surfaces Git's own error message, and when tracked changes are discarded but untracked files cannot be deleted, the notice says the operation only half completed"
+            ]
+          },
+          {
+            "title": "Plan 工作台、任务中心与工具调用日志",
+            "titleEn": "Plan Workbench, Task Center and Tool Call Logging",
+            "details": [
+              "移除状态栏里的旧计划弹层，计划加载改由工作台自身负责，同一份计划不再有两处入口与两套加载逻辑",
+              "任务中心恢复重命名：任务与子会话可就地改名，回车保存、Esc 取消",
+              "新增工具调用日志开关（默认关闭）：开启后底部日志面板会保留工具请求、响应、耗时与错误，关闭时不再产生相应的内存与序列化开销",
+              "Plan 工作台各状态页与任务看板的字号统一上调，提升可读性"
+            ],
+            "detailsEn": [
+              "Removed the legacy plan popover from the status bar and moved plan loading into the workbench itself, so one plan no longer has two entry points and two loading paths",
+              "Renaming is back in the task center: tasks and sub-threads can be renamed in place, with Enter to save and Escape to cancel",
+              "Added a tool call logging toggle, off by default: when enabled, the bottom log panel keeps tool requests, responses, timing, and errors; when disabled, none of that memory or serialization cost is paid",
+              "Raised font sizes across the Plan workbench state screens and the task board for better readability"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.64",
     "rawVersion": "1.7.64",
     "date": "2026-08-31",
@@ -76,8 +334,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Multi-Task Session Center, Save-Path Truncation Guards, Chat Consistency, Codebase Indexing & Credential Security",
     "highlight": "新增面向多 Agent 并行执行的任务中心，将交接续跑、子 Agent 与会话分支归入清晰的任务层级，并提供运行任务快捷切换和可带入新对话的压缩会话引用；修复大文件只读预览误入保存流程导致文件被截断，以及聊天界面、本地数据库与模型上下文不一致的问题；提升结构化索引可靠性，收紧凭据存储权限，并恢复长上下文提示缓存与主进程内存预警。",
     "highlightEn": "Added a task center for parallel multi-agent work, organizing handoff continuations, sub-agents, and conversation branches into clear task lineages, with quick switching for active work and compressed thread references that can be carried into a new chat; fixed large-file read-only previews entering the save path and truncating files, plus divergence between the visible transcript, local database, and model context; improved structural index reliability, tightened credential storage, and restored prompt caching and main-process memory warnings.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "minor",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",

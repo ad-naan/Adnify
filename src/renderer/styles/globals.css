@@ -935,29 +935,34 @@ textarea,
   animation: reveal-highlight 2s ease-out forwards;
 }
 
-/* --- Streaming block-reveal animation --- */
-@keyframes block-reveal {
-  0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
-  100% { opacity: 1; filter: blur(0); transform: translateY(0); }
-}
-.animate-block-reveal {
-  animation: block-reveal 0.28s ease-out both;
-  will-change: opacity, filter, transform;
+/* --- Streaming write-head reveal (see streamingTextReveal.ts) --- */
+/* 每一批到达的字符自己淡入，相位由内联的**负** animation-delay 给出，所以 React
+   重排 span、或整段 markdown 重新解析都不会让已经落定的字重新闪一次。
+
+   只动 color 的透明度，不碰 opacity / filter / transform：
+   - blur 会把笔画的墨往外糊一圈，一个字淡入时看着先胖一圈再缩回去 —— 那不叫渐显，
+     那叫放大。
+   - opacity 也不行。非 1 的 opacity 会让这个 span 单独走一遍合成/绘制，里面的文字拿不到
+     次像素抗锯齿；动画一结束样式回到基线，字又「瘦」一下，尾巴上每个字都要闪这么一次。
+   - color 是纯绘制属性：不建合成层，不换抗锯齿，也不会把窗口里那二十来个 span 各自送进
+     GPU 做一遍模糊。关键帧里 color 上的 currentColor 取的是继承来的颜色，所以粗体、链接、
+     引用各自的颜色都还是对的。
+
+   刻意不写 fill-mode: forwards —— 跑完就回到基线样式，落定的字身上不留任何额外样式。
+   改这里的 420ms 要同步改 REVEAL_DURATION_MS，不然年龄和相位会脱钩（有单测盯着）。 */
+@keyframes stream-reveal {
+  from { color: color-mix(in srgb, currentColor 14%, transparent); }
+  to { color: currentColor; }
 }
 
-/* One soft "ink settling" moment per new streaming block. The wrapper key is
-   stable while tokens append, so this never replays for individual characters. */
-@keyframes streaming-block-soft-enter {
-  from { opacity: 0.72; filter: blur(0.8px); }
-  to { opacity: 1; filter: blur(0); }
-}
-
-.streaming-block-soft-enter {
-  animation: streaming-block-soft-enter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.stream-reveal {
+  /* 相位本身就是按「距写入头多远」连续铺开的，再叠一条强 ease-out 会把渐变
+     全压到最后一两个字上，看着就是一块字在跳。两头各留一点缓冲让落定不那么硬。 */
+  animation: stream-reveal 420ms cubic-bezier(0.35, 0, 0.65, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .streaming-block-soft-enter {
+  .stream-reveal {
     animation: none;
   }
 }
