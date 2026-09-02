@@ -72,10 +72,10 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "version": "1.7.65",
     "rawVersion": "1.7.65",
     "date": "2026-09-02",
-    "title": "并行执行的独立 Git 车道、情绪感知系统修正、英文界面文案补全与工作区索引缓存",
-    "titleEn": "Isolated Git Lanes for Parallel Execution, Emotion Sensing Corrections, Complete English UI & Workspace Index Cache",
-    "highlight": "并发写入的子 Agent 与 Plan 任务现在各自在独立的 Git worktree 车道中工作，完成后自动合并回工作区；冲突或失败的车道会保留下来，可在面板里重试合并或丢弃。情绪感知系统做了系统性修正：专注状态此前在默认灵敏度下数学上不可达、上报状态每 12 秒抖动一次、打字速度虚高约 1.5 倍、专注时长少报约一半、置信度算完即被覆盖成固定值，同时删除了三处类型与开关齐全但从未接线的空功能。约 2,400 项界面文案从代码里的中英内联搬进语言表，英文界面不再退回中文原文。此外重整了工作区索引的缓存布局，并修复 Git 批量丢弃更改的确认与错误反馈。",
-    "highlightEn": "Concurrent writable sub-agents and Plan tasks now each work inside an isolated Git worktree lane and merge back into the workspace on completion; lanes that conflict or fail are retained so the merge can be retried or the lane discarded from a panel. Emotion sensing received systematic corrections: the focused state was mathematically unreachable at default sensitivity, the reported state flipped every 12 seconds, typing speed read about 1.5x too high, focus time under-reported by roughly half, and confidence was overwritten with a constant right after being computed; three surfaces with complete types and toggles but no wiring were removed. Around 2,400 UI strings moved out of inline bilingual code into the locale tables, so the English UI no longer falls back to Chinese. The workspace index cache layout was reorganized, and Git batch discard now confirms and reports failures correctly.",
+    "title": "并行执行的独立 Git 车道、情绪感知系统修正、流式写入头渐显、英文界面文案补全与工作区索引缓存",
+    "titleEn": "Isolated Git Lanes for Parallel Execution, Emotion Sensing Corrections, Streaming Write-Head Reveal, Complete English UI & Workspace Index Cache",
+    "highlight": "并发写入的子 Agent 与 Plan 任务现在各自在独立的 Git worktree 车道中工作，完成后自动合并回工作区；冲突或失败的车道会保留下来，可在面板里重试合并或丢弃。情绪感知系统做了系统性修正：专注状态此前在默认灵敏度下数学上不可达、上报状态每 12 秒抖动一次、打字速度虚高约 1.5 倍、专注时长少报约一半、置信度算完即被覆盖成固定值，同时删除了三处类型与开关齐全但从未接线的空功能。约 2,400 项界面文案从代码里的中英内联搬进语言表，英文界面不再退回中文原文。流式输出新增写入头渐显：吐字的尾巴上拖出一段连续的浓淡渐变，相位按距写入头的远近算而不是按批次分档，只改颜色通道所以字形不会看着变粗变大。此外重整了工作区索引的缓存布局，并修复 Git 批量丢弃更改的确认与错误反馈。",
+    "highlightEn": "Concurrent writable sub-agents and Plan tasks now each work inside an isolated Git worktree lane and merge back into the workspace on completion; lanes that conflict or fail are retained so the merge can be retried or the lane discarded from a panel. Emotion sensing received systematic corrections: the focused state was mathematically unreachable at default sensitivity, the reported state flipped every 12 seconds, typing speed read about 1.5x too high, focus time under-reported by roughly half, and confidence was overwritten with a constant right after being computed; three surfaces with complete types and toggles but no wiring were removed. Around 2,400 UI strings moved out of inline bilingual code into the locale tables, so the English UI no longer falls back to Chinese. Streaming output gained a write-head reveal: a continuous soft-to-solid gradient trails the text as it arrives, phased by distance from the write head rather than stepped per batch, and animating only the colour channel so glyphs never appear to swell. The workspace index cache layout was reorganized, and Git batch discard now confirms and reports failures correctly.",
     "tag": "latest",
     "isLatest": true,
     "categories": [
@@ -222,6 +222,45 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
               "Removed the auto-adapt toggle that was on by default and did nothing: the three custom properties it wrote were read nowhere in the repo, its theme and font-size fields were never even written, and its per-12-second document-wide style write is gone with it",
               "Removed the editor emotion bar that no file ever imported along with its 26 locale keys, and the AI adaptation fields that were filled in for all eight states but never read",
               "Emotion signals stay out of model prompts for now: a signal recomputed every 12 seconds without smoothing or a trustworthy confidence value would only make the agent run hot and cold for reasons invisible to the user; it will be designed as a feature once these corrections settle"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "流式呈现 / Streaming Presentation",
+        "labelEn": "Streaming Presentation",
+        "items": [
+          {
+            "title": "写入头渐显：吐字的尾巴上拖出一段渐变",
+            "titleEn": "Write-Head Reveal: a Gradient Trailing the Text as It Arrives",
+            "details": [
+              "模型吐字时尾巴上会拖出一段由淡到实的渐变。相位是「距写入头多远」的连续函数，在相邻两批字的实际到达时间之间插值，所以一次 flush 送来的十几个字不会整块同时变实 —— 那种整批同相位的写法看着是一块一块地蹦，而不是在写字",
+              "相位每次渲染显式算出、写成负的动画延迟，不依赖元素的挂载时刻：流式渲染每 33ms 重建一次 markdown 树，下标会随着老批次落定而前移，靠挂载计时的话已经实了的字会跟着重新闪一次",
+              "窗口位置按源码偏移的「距结尾多远」计算，而不是按渲染出来的文字长度累加：粗体收尾时那两对星号会从渲染结果里消失，按长度算的话窗口要往前多吃 4 个字，把早就到了的文字重新淡入一遍",
+              "历史消息与切换会话时的正文一上来就是落定状态，不会满屏重新淡入；内容被回滚或重写（不是追加）时整段直接落定，因为此时没有可信的到达时间可留"
+            ],
+            "detailsEn": [
+              "As the model emits text, a soft-to-solid gradient now trails the write head. The phase is a continuous function of distance from the write head, interpolated between the arrival times of adjacent batches, so the dozen characters delivered by a single flush no longer turn solid as one block — giving a whole batch one phase reads as blocks popping in, not as writing",
+              "The phase is computed explicitly on every render and written as a negative animation delay rather than relying on when an element mounted: streaming rebuilds the markdown tree every 33ms and indices shift forward as older batches settle, so mount-time animation would make already-solid characters flash again",
+              "The window is positioned by source offset expressed as distance from the end, not by accumulating rendered text length: the two pairs of asterisks disappear from the output when bold closes, and a length-based window would reach 4 characters further back and re-fade text that arrived long ago",
+              "History and thread switching render fully settled instead of fading a whole screen back in, and content that is rewritten or rolled back rather than appended settles immediately, since there is no trustworthy arrival time left to honour"
+            ]
+          },
+          {
+            "title": "渐显只走绘制，字形从头到尾一个样",
+            "titleEn": "The Reveal Is Paint-Only, and Glyphs Never Change Shape",
+            "details": [
+              "动画只改文字颜色的 alpha 通道，不再使用模糊与透明度：模糊会把墨迹向外糊开，非 1 的透明度会让浏览器暂时关掉次像素抗锯齿并在动画结束时弹回，两者叠起来看着像字在放大变粗。现在字形从头到尾一模一样，只有浓淡在变",
+              "每帧只遍历窗口真正覆盖到的子树：结束位置落在窗口左边界之前的分支整棵跳过，几千字的长回答里一帧只处理尾巴上的十几个字",
+              "相位量化到一帧，相邻同相位的字并成一段，渐变段落数因此封顶在约 27 个，与流速无关；动画由 CSS 自己跑完，模型中途停顿或消息收尾都不需要再渲染一帧去推进它，这里没有逐帧循环",
+              "行内代码、代码块、KaTeX 公式与表格单元格不参与切分：高亮、复制、公式解析与表格补齐都保持原样；源码区间与文字长度对不上的节点（HTML 实体之类）宁可不淡入，也不淡错位置"
+            ],
+            "detailsEn": [
+              "The animation only moves the alpha channel of the text colour; blur and opacity are gone. Blur spreads the ink outward and a non-1 opacity makes the browser drop subpixel antialiasing and snap it back when the animation ends — together they read as glyphs swelling. Glyph shapes are now identical throughout, and only the ink density changes",
+              "Each frame walks only the subtrees the window actually covers: any branch ending before the window's left edge is skipped whole, so a several-thousand-character answer still only processes the dozen characters at the tail",
+              "Phases are quantized to one frame so adjacent characters merge into runs, capping the number of gradient spans at roughly 27 regardless of stream speed; CSS runs each animation to completion, so a pause in generation or the end of a message needs no extra frame to advance it — there is no per-frame loop here",
+              "Inline code, code blocks, KaTeX output, and table cells are never split, keeping highlighting, copying, formula parsing, and table repair intact; nodes whose source range does not match their text length (HTML entities and the like) are left alone rather than phased at the wrong position"
             ]
           }
         ]
