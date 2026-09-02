@@ -20,7 +20,7 @@ function context(overrides: Partial<CodeContext> = {}): CodeContext {
     gitStatus: 'clean',
     recentCommits: 0,
     searchQueries: 0,
-    aiInteractions: { count: 0, avgResponseTime: 0, lastInteraction: 0 },
+    aiInteractions: { count: 0, avgResponseTime: 0, rejectionRate: 0, questionComplexity: 'simple' },
     ...overrides,
   }
 }
