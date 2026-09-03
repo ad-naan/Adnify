@@ -20,7 +20,8 @@ export function useLintCheck() {
 
     setIsLinting(true)
     try {
-      const { errors } = await lintService.getLintErrors(filePath, true)
+      const documentContent = editorRef?.getModel()?.getValue()
+      const { errors } = await lintService.getLintErrors(filePath, true, documentContent)
       setLintErrors(errors)
 
       // 在编辑器中显示错误标记

@@ -11,7 +11,7 @@ import { getCacheConfig } from '@shared/config/agentConfig'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getNpxCommand, joinPath, normalizePath, platform } from '@shared/utils/pathUtils'
 import { getServerIdForLanguage, LSP_SERVER_DEFINITIONS } from '@shared/languages'
-import { ensureServerForFile, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
+import { didOpenDocument, ensureServerForFile, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
 const LINT_COMMANDS: Record<string, {
@@ -310,10 +310,14 @@ class LintService {
 	/**
 	 * 获取文件的 lint 错误
 	 */
-	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintResult> {
+	async getLintErrors(
+		filePath: string,
+		forceRefresh: boolean = false,
+		documentContent?: string,
+	): Promise<LintResult> {
 		// 1. 优先使用 LSP 诊断信息（与面板完全相同的数据源，支持所有 LSP 语言）
 		const lspErrors = getLspDiagnosticsForFile(filePath)
-		if (lspErrors !== null) {
+		if (!forceRefresh && lspErrors !== null) {
 			// LSP 已推送过诊断，直接返回（空数组表示该文件无错误）
 			return { errors: lspErrors }
 		}
@@ -342,7 +346,15 @@ class LintService {
 				try {
 					const serverReady = await ensureServerForFile(filePath)
 					if (serverReady) {
-						await waitForDiagnostics(filePath)
+						// Register the waiter before syncing the document so a fast LSP response
+						// cannot be missed. Agent edits write directly to disk, so explicitly
+						// send the latest file text instead of relying on an old open buffer.
+						const diagnosticsReady = waitForDiagnostics(filePath)
+						const content = documentContent ?? await api.file.readFull(filePath)
+						if (typeof content === 'string') {
+							await didOpenDocument(filePath, content)
+						}
+						await diagnosticsReady
 						const refreshedErrors = getLspDiagnosticsForFile(filePath)
 						if (refreshedErrors !== null) {
 							return { errors: refreshedErrors }
