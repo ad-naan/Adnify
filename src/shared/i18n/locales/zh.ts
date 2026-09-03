@@ -1011,6 +1011,7 @@ export const zh = {
   'tool.direct': '直执行',
   'tool.noTerminalSession': '这条命令没有可用的终端会话。',
   'tool.directExecutionNoTerminal': '这条命令为了保证可靠性走的是直执行，因此没有创建可实时查看的终端会话。',
+  'fileChangeCard.openInEditor': '在编辑器中打开',
 
   // File Preview
   'filePreview.cannotLoadImage': '无法加载图片',

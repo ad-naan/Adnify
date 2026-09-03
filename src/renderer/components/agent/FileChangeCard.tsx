@@ -18,11 +18,13 @@ import { ToolApprovalActions } from './ToolApprovalActions'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
 import SmoothCollapse from './SmoothCollapse'
 import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
+import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
+import { t } from '@shared/i18n'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
-    presentOnMount?: boolean
+    isPresenting?: boolean
     onApprove?: () => void
     onApproveForTask?: () => void
     onReject?: () => void
@@ -34,7 +36,7 @@ interface FileChangeCardProps {
 function FileChangeCard({
     toolCall,
     isAwaitingApproval,
-    presentOnMount,
+    isPresenting,
     onApprove,
     onApproveForTask,
     onReject,
@@ -51,7 +53,8 @@ function FileChangeCard({
     const isActive = isRunning || isStreaming
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
-        presentOnMount,
+        holdOpenWhile: isPresenting,
+        closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
     })
     const timing = getToolTiming(toolCall)
     const activityState = isStreaming || isRunning
@@ -343,7 +346,7 @@ function FileChangeCard({
                                             onOpenInEditor(filePath, oldContent, newContent)
                                         }}
                                         className={`flex items-center justify-center rounded-md text-text-muted opacity-55 transition-all hover:bg-surface-hover hover:text-accent group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${TOOL_ROW_ACTION_SLOT_CLASS}`}
-                                        title="Open in Editor"
+                                        title={t('fileChangeCard.openInEditor', language)}
                                     >
                                         <ExternalLink className="h-3.5 w-3.5" />
                                     </button>

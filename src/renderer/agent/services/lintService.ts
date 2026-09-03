@@ -11,18 +11,16 @@ import { getCacheConfig } from '@shared/config/agentConfig'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getNpxCommand, joinPath, normalizePath, platform } from '@shared/utils/pathUtils'
 import { getServerIdForLanguage, LSP_SERVER_DEFINITIONS } from '@shared/languages'
-import { didOpenDocument, ensureServerForFile, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
+import { didOpenDocument, ensureServerForFile, findBestRoot, getFileWorkspaceRoot, getLanguageId, waitForDiagnostics } from '@services/lspService'
 
 // 支持的语言和对应的 lint 命令
+// typescript 没有 getCommand：它的命令必须按工程根目录动态推导（见 resolveLintCommand），
+// 一个静态命令无法表达 --project / 单文件两种模式。
 const LINT_COMMANDS: Record<string, {
-	getCommand: () => { command: string; args: string[] }
+	getCommand?: () => { command: string; args: string[] }
 	parser: (output: string, file: string) => LintError[]
 }> = {
 	typescript: {
-		getCommand: () => ({
-			command: getNpxCommand(),
-			args: ['tsc', '--noEmit', '--pretty', 'false'],
-		}),
 		parser: parseTscOutput,
 	},
 	javascript: {
@@ -41,27 +39,86 @@ const LINT_COMMANDS: Record<string, {
 	},
 }
 
+const TSC_BASE_ARGS = ['--noEmit', '--pretty', 'false']
+
+/**
+ * 无 tsconfig.json 时的单文件回退参数。
+ *
+ * 单文件模式不会读取任何工程配置，所以这里补上最低限度的现代默认值。
+ * 缺少它们时，仅 exports 字段发布类型的包（react、@emotion/styled 等）在默认的
+ * node10 解析下会全部报 TS2307，.tsx 还会因为缺少 --jsx 而整份文件报错 ——
+ * 依赖明明装好了，报错却指向未改动的 import 行。
+ *
+ * bundler 解析需要 TypeScript >= 5.0；该分支只在工程完全没有 tsconfig.json
+ * 时才会走到，此时本就没有可遵循的工程约定。
+ */
+const SINGLE_FILE_TSC_ARGS = [
+	...TSC_BASE_ARGS,
+	'--target', 'es2022',
+	'--module', 'esnext',
+	'--moduleResolution', 'bundler',
+	'--jsx', 'react-jsx',
+	'--esModuleInterop',
+	'--skipLibCheck',
+]
+
 interface ResolvedLintCommand {
 	command: string
 	args: string[]
 	cwd?: string
 }
 
-async function resolveWorkspaceTool(
-	workspaceRoot: string | null,
-	relativePaths: string[],
-	args: string[]
-): Promise<ResolvedLintCommand | null> {
-	if (!workspaceRoot) return null
+async function fileExists(candidate: string): Promise<boolean> {
+	try {
+		return await api.file.exists(candidate)
+	} catch {
+		return false
+	}
+}
 
-	for (const relativePath of relativePaths) {
-		const fullPath = joinPath(workspaceRoot, relativePath)
-		try {
-			if (await api.file.exists(fullPath)) {
-				return { command: fullPath, args, cwd: workspaceRoot }
-			}
-		} catch {
-			// ignore and keep falling back
+/**
+ * 候选工程根目录，最近的排在前面。
+ *
+ * getFileWorkspaceRoot 返回的是用户打开的工作区根，对 monorepo 来说过于靠上：
+ * 真实的 TS 工程可能位于 <workspace>/frontend，那里才有 tsconfig.json 和
+ * node_modules。只看工作区根会同时找不到工程配置和本地 tsc，从而退化成单文件
+ * 检查 —— tsc 一旦收到文件参数就完全忽略 tsconfig.json，路径别名、jsx、
+ * moduleResolution、全局 .d.ts 全部失效。
+ *
+ * lspManager 已经实现了按语言的最近根目录探测（lsp:findBestRoot），这里直接复用，
+ * 并保留工作区根作为兜底，兼容依赖被提升到仓库顶层的布局。
+ */
+async function resolveProjectRoots(filePath: string): Promise<string[]> {
+	const workspaceRoot = getFileWorkspaceRoot(filePath)
+	let nearestRoot: string | null = null
+	try {
+		nearestRoot = await findBestRoot(filePath)
+	} catch {
+		// 探测失败时只用工作区根
+	}
+
+	const roots: string[] = []
+	for (const root of [nearestRoot, workspaceRoot]) {
+		if (!root) continue
+		const normalized = normalizePath(root)
+		if (!roots.some(existing => normalizePath(existing) === normalized)) {
+			roots.push(root)
+		}
+	}
+	return roots
+}
+
+/** 在候选根目录中查找 node_modules/.bin 下的工具 */
+async function resolveLocalTool(
+	roots: string[],
+	binName: string
+): Promise<{ command: string; root: string } | null> {
+	const executable = platform.isWindows ? `${binName}.cmd` : binName
+
+	for (const root of roots) {
+		const fullPath = joinPath(root, 'node_modules', '.bin', executable)
+		if (await fileExists(fullPath)) {
+			return { command: fullPath, root }
 		}
 	}
 
@@ -69,39 +126,58 @@ async function resolveWorkspaceTool(
 }
 
 async function resolveLintCommand(filePath: string, language: string): Promise<ResolvedLintCommand | null> {
-	const workspaceRoot = getFileWorkspaceRoot(filePath)
+	const roots = await resolveProjectRoots(filePath)
+	const workspaceRoot = roots.length > 0 ? roots[roots.length - 1] : null
 
 	if (language === 'typescript') {
-		const tsconfigPath = workspaceRoot ? joinPath(workspaceRoot, 'tsconfig.json') : null
-		const hasProjectConfig = tsconfigPath ? await api.file.exists(tsconfigPath).catch(() => false) : false
-		const typecheckArgs = hasProjectConfig
-			? ['--noEmit', '--pretty', 'false', '--project', tsconfigPath!]
-			: ['--noEmit', '--pretty', 'false', filePath]
-		const localTsc = await resolveWorkspaceTool(
-			workspaceRoot,
-			[joinPath('node_modules', '.bin', platform.isWindows ? 'tsc.cmd' : 'tsc')],
-			typecheckArgs
-		)
-		if (localTsc) return localTsc
+		// 只要能找到 tsconfig.json 就必须走 --project：把文件名传给 tsc 会让它
+		// 丢掉整份工程配置，产出的报错与真实构建结果无关。
+		let projectRoot: string | null = null
+		let tsconfigPath: string | null = null
+		for (const root of roots) {
+			const candidate = joinPath(root, 'tsconfig.json')
+			if (await fileExists(candidate)) {
+				projectRoot = root
+				tsconfigPath = candidate
+				break
+			}
+		}
+
+		const typecheckArgs = tsconfigPath
+			? [...TSC_BASE_ARGS, '--project', tsconfigPath]
+			: [...SINGLE_FILE_TSC_ARGS, filePath]
+
+		const localTsc = await resolveLocalTool(roots, 'tsc')
+		if (localTsc) {
+			return { command: localTsc.command, args: typecheckArgs, cwd: projectRoot ?? localTsc.root }
+		}
+
+		// 没有本地 tsc 才回退到 npx，并把 cwd 定在工程根，让它优先命中工程自己的依赖
+		return {
+			command: getNpxCommand(),
+			args: ['tsc', ...typecheckArgs],
+			cwd: projectRoot ?? workspaceRoot ?? undefined,
+		}
 	}
 
 	if (language === 'javascript') {
-		const localEslint = await resolveWorkspaceTool(
-			workspaceRoot,
-			[joinPath('node_modules', '.bin', platform.isWindows ? 'eslint.cmd' : 'eslint')],
-			['--format', 'json', filePath]
-		)
-		if (localEslint) return localEslint
+		const localEslint = await resolveLocalTool(roots, 'eslint')
+		if (localEslint) {
+			return {
+				command: localEslint.command,
+				args: ['--format', 'json', filePath],
+				cwd: localEslint.root,
+			}
+		}
 	}
 
-	const lintConfig = LINT_COMMANDS[language]
-	if (!lintConfig) return null
+	const fallback = LINT_COMMANDS[language]?.getCommand?.()
+	if (!fallback) return null
 
-	const fallback = lintConfig.getCommand()
 	return {
 		command: fallback.command,
 		args: [...fallback.args, filePath],
-		cwd: workspaceRoot || undefined,
+		cwd: workspaceRoot ?? undefined,
 	}
 }
 

@@ -4,6 +4,7 @@ import {
   buildPlayableText,
   buildVisibleTimeline,
   decidePlaybackFrontierAction,
+  decidePlaybackReleaseOutcome,
   findNextPlaybackFrontier,
   findPlaybackFrontier,
   findPresentingToolId,
@@ -132,5 +133,30 @@ describe('assistant playback timeline', () => {
     expect(findPresentingToolId([], -1, null)).toBeUndefined()
     expect(findPresentingToolId(parts, -1, null)).toBeUndefined()
     expect(findPresentingToolId(parts, parts.length, null)).toBeUndefined()
+  })
+})
+
+/**
+ * 节拍的另一半：呈现中的阶段什么时候松手。
+ *
+ * 松手就是让那一行收起，而收起最后一行会让钉在底部的时间轴把整屏内容往下拽。所以只有在
+ * "有后继行能同时挂载"或"回合已经结束"时才允许。
+ */
+describe('playback release outcome', () => {
+  const decide = (overrides: Partial<Parameters<typeof decidePlaybackReleaseOutcome>[0]> = {}) =>
+    decidePlaybackReleaseOutcome({ hasPendingSuccessor: false, isTransportActive: false, ...overrides })
+
+  it('hands off to the successor stage as soon as one is queued', () => {
+    expect(decide({ hasPendingSuccessor: true, isTransportActive: true })).toBe('publish-successor')
+    expect(decide({ hasPendingSuccessor: true })).toBe('publish-successor')
+  })
+
+  it('keeps holding the presented stage while the turn is still running', () => {
+    // 模型在两次工具之间想事情：这一行是当前阶段，没有东西能接手它的收起。
+    expect(decide({ isTransportActive: true })).toBe('retain-settling')
+  })
+
+  it('lets go once the turn is over', () => {
+    expect(decide({})).toBe('clear-settling')
   })
 })

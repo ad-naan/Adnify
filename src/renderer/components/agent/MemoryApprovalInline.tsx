@@ -5,19 +5,20 @@ import { normalizeMemoryContentInput } from '@/renderer/agent/services/memorySer
 import { t } from '@shared/i18n'
 import SmoothCollapse from './SmoothCollapse'
 import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
+import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 import { useDisclosureState } from '@renderer/hooks'
 import type { ToolCall } from '@/renderer/agent/types'
 
 interface MemoryApprovalInlineProps {
     toolCall: ToolCall
     isAwaitingApproval: boolean
-    presentOnMount?: boolean
+    isPresenting?: boolean
 }
 
 export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     toolCall,
     isAwaitingApproval,
-    presentOnMount,
+    isPresenting,
 }) => {
     const language = useStore(s => s.language)
     const safeContent = normalizeMemoryContentInput(toolCall.arguments.content)
@@ -29,7 +30,8 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     const timing = getToolTiming(toolCall)
     const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
         openWhile: isAwaitingApproval || isRunning || isError,
-        presentOnMount,
+        holdOpenWhile: isPresenting,
+        closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
     })
 
     const statusText = isSuccess

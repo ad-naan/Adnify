@@ -1011,6 +1011,7 @@ export const en = {
   'tool.direct': 'Direct',
   'tool.noTerminalSession': 'No terminal session is available for this command.',
   'tool.directExecutionNoTerminal': 'This command was executed directly for reliability, so no live terminal session was created.',
+  'fileChangeCard.openInEditor': 'Open in editor',
 
   // File Preview
   'filePreview.cannotLoadImage': 'Cannot load image',

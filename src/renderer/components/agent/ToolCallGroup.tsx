@@ -50,7 +50,11 @@ export function renderToolCallCard(
     onStopTool?: () => void
     onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
-    presentOnMount?: boolean
+    /**
+     * 这一行是不是时间轴当前呈现的阶段。它是活信号（不是挂载时的一次性标记）：
+     * 落下的那一刻就是后继阶段挂载的那一刻，卡片靠它决定什么时候收起。
+     */
+    isPresenting?: boolean
   },
 ): ReactNode {
   const isPending = tc.id === opts.pendingToolId
@@ -68,7 +72,7 @@ export function renderToolCallCard(
         onStop={isPending ? opts.onStopTool : undefined}
         onOpenInEditor={opts.onOpenDiff}
         messageId={opts.messageId}
-        presentOnMount={opts.presentOnMount}
+        isPresenting={opts.isPresenting}
       />
     )
   }
@@ -80,7 +84,7 @@ export function renderToolCallCard(
         key={tc.id}
         toolCall={tc}
         isAwaitingApproval={isPending}
-        presentOnMount={opts.presentOnMount}
+        isPresenting={opts.isPresenting}
       />
     )
   }
@@ -96,7 +100,7 @@ export function renderToolCallCard(
   }
 
   if (tc.name === 'task') {
-    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} presentOnMount={opts.presentOnMount} />
+    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} isPresenting={opts.isPresenting} />
   }
 
   // 其他工具使用 ToolCallCard
@@ -105,7 +109,7 @@ export function renderToolCallCard(
       key={tc.id}
       toolCall={tc}
       isAwaitingApproval={isPending}
-      presentOnMount={opts.presentOnMount}
+      isPresenting={opts.isPresenting}
       onApprove={isPending ? opts.onApproveTool : undefined}
       onApproveForTask={isPending && supportsTaskApproval(tc) ? opts.onApproveToolForTask : undefined}
       onReject={isPending ? opts.onRejectTool : undefined}
@@ -146,7 +150,7 @@ function ToolCallGroup({
           <div className={tc.id === presentingToolId ? 'tool-row-enter-clip' : ''}>
             {renderToolCallCard(tc, {
               ...opts,
-              presentOnMount: tc.id === presentingToolId,
+              isPresenting: tc.id === presentingToolId,
             })}
           </div>
         </div>

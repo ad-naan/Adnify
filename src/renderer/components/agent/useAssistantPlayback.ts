@@ -141,6 +141,32 @@ export function decidePlaybackFrontierAction({
   return 'collapse-current'
 }
 
+export type PlaybackReleaseOutcome =
+  | 'publish-successor'
+  | 'retain-settling'
+  | 'clear-settling'
+
+/**
+ * 节拍到点时怎么办。
+ *
+ * 呈现中的阶段（settling）同时是那一行"被按住展开"的凭据，收起要等后继行挂载来接手。所以没有
+ * 后继可交接、而回合还在跑的时候不能松手：松手就是让这一行在下方没有任何新内容时独自收起，
+ * 而钉在底部的时间轴会把整屏内容往下拽一段 —— 正是"先展开后折叠、内容上下摆动"。
+ * 模型在两次工具之间想事情（几百毫秒到几秒都有）恰好落在这个窗口里。
+ *
+ * 回合结束就没有后继了，这时才松手。
+ */
+export function decidePlaybackReleaseOutcome({
+  hasPendingSuccessor,
+  isTransportActive,
+}: {
+  hasPendingSuccessor: boolean
+  isTransportActive: boolean
+}): PlaybackReleaseOutcome {
+  if (hasPendingSuccessor) return 'publish-successor'
+  return isTransportActive ? 'retain-settling' : 'clear-settling'
+}
+
 export function buildVisibleTimeline(
   parts: AssistantPart[],
   frontierIndex: number,
@@ -270,6 +296,9 @@ export function useAssistantPlayback({
   if (isTransportActive || isAwaitingApproval || parts.some(isPlaybackBarrier)) {
     hasBeenLiveRef.current = true
   }
+  // 节拍定时器要读"到点那一刻"的传输状态，不是排定时捕获的那个：回合可能在等待期间就结束了。
+  const transportActiveRef = useRef(isTransportActive)
+  transportActiveRef.current = isTransportActive || isAwaitingApproval
 
   const visibleText = usePlaybackClock(playableText, hasBeenLiveRef.current)
   const frontierDrained = visibleText.length >= playableText.length
@@ -303,7 +332,11 @@ export function useAssistantPlayback({
       )
       machine.timer = window.setTimeout(() => {
         machine.timer = null
-        if (machine.pendingFrontier > machine.releasedFrontier) {
+        const outcome = decidePlaybackReleaseOutcome({
+          hasPendingSuccessor: machine.pendingFrontier > machine.releasedFrontier,
+          isTransportActive: transportActiveRef.current,
+        })
+        if (outcome === 'publish-successor') {
           publishFrontier(findNextPlaybackFrontier(
             partsRef.current,
             machine.releasedFrontier,
@@ -311,6 +344,8 @@ export function useAssistantPlayback({
           ))
           return
         }
+        // 继续按住：releaseReadyAt 留在过去，后继一到就零延迟发布。
+        if (outcome === 'retain-settling') return
         machine.completedBarrier = false
         machine.releaseReadyAt = null
         setSettlingFrontier(current => (
@@ -369,7 +404,7 @@ export function useAssistantPlayback({
         scheduleRelease()
         break
     }
-  }, [activeBarrier, frontierDrained, frontierIndex, parts, sourceFrontier])
+  }, [activeBarrier, frontierDrained, frontierIndex, isAwaitingApproval, isTransportActive, parts, sourceFrontier])
 
   useEffect(() => () => {
     const machine = releaseMachineRef.current!

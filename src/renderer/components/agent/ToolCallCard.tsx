@@ -24,11 +24,12 @@ import { assessShellCommand } from '@shared/security/executionPolicy'
 import { parseSymbolToolResult } from '@renderer/agent/presentation/symbolToolDisplay'
 import SmoothCollapse from './SmoothCollapse'
 import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
+import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
-    presentOnMount?: boolean
+    isPresenting?: boolean
     onApprove?: () => void
     onApproveForTask?: () => void
     onReject?: () => void
@@ -1074,7 +1075,7 @@ function ToolPreview({
 const ToolCallCard = memo(function ToolCallCard({
     toolCall,
     isAwaitingApproval,
-    presentOnMount,
+    isPresenting,
     onApprove,
     onApproveForTask,
     onReject,
@@ -1115,7 +1116,8 @@ const ToolCallCard = memo(function ToolCallCard({
     }
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
-        presentOnMount,
+        holdOpenWhile: isPresenting,
+        closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
     })
     const timing = getToolTiming(toolCall)
     const activityState = isStreaming || isRunning
