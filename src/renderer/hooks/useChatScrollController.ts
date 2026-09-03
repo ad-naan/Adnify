@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VirtuosoHandle } from 'react-virtuoso'
 import { AGENT_BOTTOM_FOLLOW_PAUSE_PADDING_MS, AGENT_DISCLOSURE_COLLAPSE_EVENT, AGENT_DISCLOSURE_COLLAPSE_MS } from '@renderer/agent/presentation/disclosureMotion'
+import { reconcileCollapseCredit, resolveMaxCollapseCredit, retireCollapseCredit } from '@renderer/agent/presentation/collapseCredit'
 
 const CHAT_BOTTOM_THRESHOLD = 220
 
@@ -33,6 +34,13 @@ export function useChatScrollController({
   const stickyFrameRef = useRef<number | null>(null)
   const animationFramesRef = useRef(new Set<number>())
   const bottomFollowPausedUntilRef = useRef(0)
+  const listHeightRef = useRef(0)
+  /** 收起开始那一刻的文档总高。有值就表示"正按着总高，让空间从底部出"。 */
+  const heldTotalRef = useRef<number | null>(null)
+  const collapseCreditRef = useRef(0)
+  /** 按住期间 scrollTop 应有的值：万一浏览器先夹了一下，同一帧里写回去。 */
+  const heldScrollTopRef = useRef<number | null>(null)
+  const basePaddingBottomRef = useRef<number | null>(null)
   const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
@@ -55,6 +63,7 @@ export function useChatScrollController({
     if (!scroller) {
       return {
         bottom: atBottomRef.current,
+        distanceFromBottom: 0,
         hasOverflow: false,
       }
     }
@@ -63,8 +72,38 @@ export function useChatScrollController({
     const hasOverflow = scroller.scrollHeight - scroller.clientHeight > 4
     const bottom = !hasOverflow || distanceFromBottom <= CHAT_BOTTOM_THRESHOLD
 
-    return { bottom, hasOverflow }
+    return { bottom, distanceFromBottom, hasOverflow }
   }, [])
+
+  /**
+   * 把折叠余量写成容器的 padding-bottom。
+   *
+   * 只能在"高度已经变了、还没交给浏览器绘制"的同一次同步回调里写：晚一帧，scrollTop 已经被夹过，
+   * 上面的内容就已经掉下去了。归零时把内联样式摘掉，免得压住 CSS 里原本的下内边距。
+   */
+  const writeCollapseCredit = useCallback((credit: number) => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    if (basePaddingBottomRef.current === null) {
+      // 必须在第一次写之前读，否则读回来的是我们自己写的值。
+      basePaddingBottomRef.current = Number.parseFloat(
+        window.getComputedStyle(scroller).paddingBottom,
+      ) || 0
+    }
+
+    collapseCreditRef.current = credit
+    if (credit <= 0) {
+      scroller.style.removeProperty('padding-bottom')
+      return
+    }
+    scroller.style.paddingBottom = `${basePaddingBottomRef.current + credit}px`
+  }, [])
+
+  const releaseCollapseCredit = useCallback(() => {
+    heldTotalRef.current = null
+    heldScrollTopRef.current = null
+    if (collapseCreditRef.current > 0) writeCollapseCredit(0)
+  }, [writeCollapseCredit])
 
   const syncBottomState = useCallback((bottom: boolean, hasOverflow = true) => {
     atBottomRef.current = bottom
@@ -81,6 +120,8 @@ export function useChatScrollController({
 
     atBottomRef.current = true
     setShowScrollButton(false)
+    // 用户点了"回到底部"，要的是真的底部：先把撑着的空白还掉，再滚。
+    releaseCollapseCredit()
 
     scheduleFrame(() => {
       virtuosoRef.current?.scrollToIndex({
@@ -90,7 +131,7 @@ export function useChatScrollController({
       })
       scheduleFrame(syncBottomStateFromScroller)
     })
-  }, [messageCount, scheduleFrame, syncBottomStateFromScroller])
+  }, [messageCount, releaseCollapseCredit, scheduleFrame, syncBottomStateFromScroller])
 
   const stickToBottom = useCallback(() => {
     if (performance.now() < bottomFollowPausedUntilRef.current) return
@@ -127,14 +168,48 @@ export function useChatScrollController({
     return (isListAtBottom || atBottomRef.current) ? 'auto' : false
   }, [])
 
-  const handleTotalListHeightChanged = useCallback(() => {
+  const handleTotalListHeightChanged = useCallback((height: number) => {
+    listHeightRef.current = height
+
+    // 折叠余量必须跟高度变化落在同一次同步回调里（Virtuoso 开着
+    // skipAnimationFrameInResizeObserver，这里就是那一次）。收起动画每一帧都会走到这儿：
+    // 内容矮多少就补多少空白，总高按住不动 —— 上面的内容不动，让出的空间从底部出。
+    if (heldTotalRef.current !== null) {
+      const scroller = scrollerRef.current
+      const credit = reconcileCollapseCredit({
+        heldTotal: heldTotalRef.current,
+        contentHeight: height,
+        maxCredit: resolveMaxCollapseCredit(scroller?.clientHeight ?? 0),
+      })
+      if (credit !== collapseCreditRef.current) writeCollapseCredit(credit)
+
+      if (credit <= 0) {
+        // 新内容把空白吃完了，恢复"长高就往上推"。
+        heldTotalRef.current = null
+        heldScrollTopRef.current = null
+      } else if (
+        scroller
+        && heldScrollTopRef.current !== null
+        && Math.abs(scroller.scrollTop - heldScrollTopRef.current) > 1
+      ) {
+        // 浏览器可能在我们补上空白之前就夹了一次 scrollTop。总高已经按住，写回去是合法的，
+        // 而且和这次高度变化同帧，屏幕上看不见中间态。
+        isAutoScrollingRef.current = true
+        scroller.scrollTop = heldScrollTopRef.current
+        lastScrollTopRef.current = scroller.scrollTop
+        scheduleFrame(() => {
+          isAutoScrollingRef.current = false
+        })
+      }
+    }
+
     // Virtuoso already publishes bottom intent using the same threshold below.
     // Reading scrollHeight here would force layout on every streamed row resize.
     if (!atBottomRef.current || performance.now() < bottomFollowPausedUntilRef.current) return
 
     setShowScrollButton(false)
     scheduleStickToBottom()
-  }, [scheduleStickToBottom])
+  }, [scheduleFrame, scheduleStickToBottom, writeCollapseCredit])
 
   const handleBottomStateChange = useCallback((bottom: boolean) => {
     if (isAutoScrollingRef.current) return
@@ -151,6 +226,12 @@ export function useChatScrollController({
   const attachScrollerNode = useCallback((node: HTMLDivElement | null) => {
     if (scrollerRef.current === node) return
     scrollerRef.current = node
+    // 换了节点，按住总高的那套账全部作废（下内边距也得重新量）。
+    heldTotalRef.current = null
+    heldScrollTopRef.current = null
+    collapseCreditRef.current = 0
+    basePaddingBottomRef.current = null
+    listHeightRef.current = 0
     // The listener effect below has to follow the real DOM node, not just the
     // ref. Switching threads remounts Virtuoso and replaces the scroller, so a
     // ref-only update would leave the scroll listener and ResizeObserver bound
@@ -171,8 +252,9 @@ export function useChatScrollController({
     // refuse to follow until Virtuoso republishes its own bottom state.
     atBottomRef.current = true
     lastScrollTopRef.current = 0
+    releaseCollapseCredit()
     setShowScrollButton(false)
-  }, [threadId])
+  }, [releaseCollapseCredit, threadId])
 
   useEffect(() => {
     if (!pendingBottomSnapRef.current) return
@@ -208,6 +290,26 @@ export function useChatScrollController({
       const previousTop = lastScrollTopRef.current
       const currentTop = scroller.scrollTop
       lastScrollTopRef.current = currentTop
+
+      // 用户自己滚上去时，把底部撑着的空白还掉能还的那部分（还完 scrollTop 依然合法，
+      // 屏幕上不会动）。往回翻历史就不会一直拖着一块空白。
+      if (collapseCreditRef.current > 0) {
+        const { distanceFromBottom } = getBottomMetrics()
+        const nextCredit = retireCollapseCredit({
+          credit: collapseCreditRef.current,
+          distanceFromBottom,
+        })
+        if (nextCredit !== collapseCreditRef.current) {
+          writeCollapseCredit(nextCredit)
+          if (nextCredit <= 0) {
+            heldTotalRef.current = null
+            heldScrollTopRef.current = null
+          } else {
+            heldTotalRef.current = listHeightRef.current + nextCredit
+            heldScrollTopRef.current = currentTop
+          }
+        }
+      }
 
       // A disclosure deliberately reduces the last row's height. Treating that
       // resize as new streamed output pins the bottom edge and makes an upward
@@ -245,10 +347,24 @@ export function useChatScrollController({
         cancelFrame(stickyFrameRef.current)
         stickyFrameRef.current = null
       }
+
+      // 事件在收起动画开始前（useLayoutEffect）就到了，此刻的总高就是要按住的那个数。
+      // 只在钉着底部时按：滚上去看历史的时候，收起本来就不会把可见内容往下拽。
+      const { bottom, hasOverflow } = getBottomMetrics()
+      if (!hasOverflow || !bottom) return
+      if (resolveMaxCollapseCredit(scroller.clientHeight) <= 0) return
+      heldTotalRef.current = listHeightRef.current + collapseCreditRef.current
+      heldScrollTopRef.current = scroller.scrollTop
     }
     scroller.addEventListener(AGENT_DISCLOSURE_COLLAPSE_EVENT, handleDisclosureCollapse)
 
+    let lastViewportHeight = scroller.clientHeight
     const resizeObserver = new ResizeObserver(() => {
+      // 视口本身变了，按住总高的前提（clientHeight 不变）就不成立了，先还掉。
+      if (scroller.clientHeight !== lastViewportHeight) {
+        lastViewportHeight = scroller.clientHeight
+        releaseCollapseCredit()
+      }
       if (performance.now() < bottomFollowPausedUntilRef.current) return
       if (isStreaming && atBottomRef.current) {
         setShowScrollButton(false)
@@ -264,7 +380,7 @@ export function useChatScrollController({
       scroller.removeEventListener(AGENT_DISCLOSURE_COLLAPSE_EVENT, handleDisclosureCollapse)
       resizeObserver.disconnect()
     }
-  }, [cancelFrame, getBottomMetrics, isStreaming, scheduleStickToBottom, scrollerElement, syncBottomState, syncBottomStateFromScroller])
+  }, [cancelFrame, getBottomMetrics, isStreaming, releaseCollapseCredit, scheduleStickToBottom, scrollerElement, syncBottomState, syncBottomStateFromScroller, writeCollapseCredit])
 
   useEffect(() => {
     return () => {

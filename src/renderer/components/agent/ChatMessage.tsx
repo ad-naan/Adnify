@@ -224,11 +224,8 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
   const hasSearch = searchContent !== undefined || isSearchStreaming
   const hasSkills = hasAutoSkills || hasManualSkills
   const isStreaming = Boolean(isSearchStreaming)
-  // 不自动收：搜索停了正文还在流，这时候变矮会掐掉底部跟随（见 disclosureMotion 的注释）。
-  // 而且这一块在过程块里，过程块会在这一轮说完后整体收起，它自己收不收看不见。
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
     openWhile: isStreaming,
-    autoClose: false,
   })
 
   if (!hasSkills && !hasSearch) return null
@@ -494,10 +491,8 @@ const ProcessFold = React.memo(({ children, language, summary, isActive }: Proce
 ProcessFold.displayName = 'ProcessFold'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
-  // 同理不自动收：思考结束的下一刻正文就开始逐字露出，那是最不能动高度的时候。
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
     openWhile: isStreaming,
-    autoClose: false,
   })
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
@@ -967,7 +962,7 @@ const AssistantMessageContent = React.memo(({
   fontSize,
   activePart,
   messageId,
-  presentingToolId,
+  presentingToolIds,
 }: {
   parts: AssistantPart[]
   pendingToolId?: string
@@ -979,7 +974,7 @@ const AssistantMessageContent = React.memo(({
   fontSize: number
   activePart?: AssistantPart
   messageId: string
-  presentingToolId?: string
+  presentingToolIds?: readonly string[]
 }) => {
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
@@ -1053,7 +1048,7 @@ const AssistantMessageContent = React.memo(({
               onStopTool={onStopTool}
               onOpenDiff={onOpenDiff}
               messageId={messageId}
-              presentingToolId={presentingToolId}
+              presentingToolIds={presentingToolIds}
             />
           </div>
         )
@@ -1126,10 +1121,7 @@ const AssistantTurnContent = React.memo(({
         <ProcessFold
           language={language}
           summary={playback.summary}
-          /* 过程块照旧会收起来，但要等正文露完再收：正文还在逐字长的时候收，
-             底部跟随会停 508ms —— 字照长、视口不跟，停顿一过再一把拽回底部，那一下就是"文字抖动"。
-             `activeFinalReplyPart` 只在正文还在露的时候有值，正好是"这一轮还在动"的判据。 */
-          isActive={playback.isProcessActive || Boolean(playback.activeFinalReplyPart)}
+          isActive={playback.isProcessActive}
         >
           {hasContextMeta && (
             <MessageMetaGroup
@@ -1144,7 +1136,7 @@ const AssistantTurnContent = React.memo(({
               {...sharedProps}
               parts={playback.processParts}
               activePart={playback.activeProcessPart}
-              presentingToolId={playback.presentingToolId}
+              presentingToolIds={playback.presentingToolIds}
             />
           )}
         </ProcessFold>

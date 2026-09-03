@@ -6,6 +6,7 @@ import { useStore } from '@store'
 import { t, type Language } from '@shared/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
+import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 import { useDisclosureState } from '@renderer/hooks'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
@@ -28,6 +29,8 @@ import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_
 interface ToolCallCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
+    /** 这一行是不是时间轴当前呈现的阶段。 */
+    isPresenting?: boolean
     onApprove?: () => void
     onApproveForTask?: () => void
     onReject?: () => void
@@ -1073,6 +1076,7 @@ function ToolPreview({
 const ToolCallCard = memo(function ToolCallCard({
     toolCall,
     isAwaitingApproval,
+    isPresenting,
     onApprove,
     onApproveForTask,
     onReject,
@@ -1113,7 +1117,8 @@ const ToolCallCard = memo(function ToolCallCard({
     }
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
-        autoClose: false,
+        holdOpen: isPresenting,
+        closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
     })
     const timing = getToolTiming(toolCall)
     const activityState = isStreaming || isRunning

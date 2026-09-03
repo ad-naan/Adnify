@@ -30,3 +30,29 @@ export const AGENT_BOTTOM_FOLLOW_PAUSE_MS = AGENT_DISCLOSURE_COLLAPSE_MS + AGENT
  * 一轮里连着几次工具调用就能让托盘先列出暂存文件、几秒后卡片才出现。
  */
 export const AGENT_PLAYBACK_RELEASE_MS = Math.max(AGENT_ROW_ENTER_MS, AGENT_BOTTOM_FOLLOW_PAUSE_MS) + 12
+
+/**
+ * 时间轴最多落后实时界面几个阶段。
+ *
+ * 状态托盘（dock）里的待处理改动来自工具**结果**，一落地就写进 store —— 它天生跑在按节拍重放的
+ * 时间轴前面。一拍一个阶段，一轮里连着几次工具调用就能攒出好几秒的差：托盘先列出暂存文件，
+ * 卡片几秒后才出现，用户看到的是两套互相矛盾的状态。
+ *
+ * 所以给这个差一个上限：积压到这么多阶段就不再按节拍，一次补齐到源头。
+ */
+export const AGENT_PLAYBACK_MAX_STAGE_BACKLOG = 2
+
+/**
+ * 交接式收起没有自己的延迟：后继阶段挂载的那一刻就是收起的那一刻。
+ * 择时由时间轴（`presentingToolId`）决定，抽屉自己不再计时。
+ */
+export const AGENT_DISCLOSURE_HANDOFF_CLOSE_MS = 0
+
+/**
+ * 折叠余量的上限，按视口比例算。
+ *
+ * 一行变矮时我们把文档总高按住（底部补等高的空白），于是让出的空间从底部出，上面的内容
+ * 一动不动 —— 这就是"往上折叠、整体不往下掉"。但抽屉可以很高（292 条 lint 明细），
+ * 无上限地按住会在底部留一大片空白，所以超出这个比例的部分照旧夹回去。
+ */
+export const AGENT_COLLAPSE_CREDIT_VIEWPORT_RATIO = 0.6

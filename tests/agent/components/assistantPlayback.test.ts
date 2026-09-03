@@ -3,12 +3,15 @@ import type { AssistantPart, ToolCall } from '@renderer/agent/types'
 import {
   buildPlayableText,
   buildVisibleTimeline,
+  countPendingStages,
   decidePlaybackFrontierAction,
+  decidePlaybackPacing,
   decidePlaybackReleaseOutcome,
   findNextPlaybackFrontier,
   findPlaybackFrontier,
-  findPresentingToolId,
+  findPresentingToolIds,
 } from '@renderer/components/agent/useAssistantPlayback'
+import { AGENT_PLAYBACK_MAX_STAGE_BACKLOG } from '@renderer/agent/presentation/disclosureMotion'
 
 function reasoning(content: string, isStreaming: boolean): AssistantPart {
   return { id: 'reasoning-1', type: 'reasoning', content, isStreaming }
@@ -122,17 +125,98 @@ describe('assistant playback timeline', () => {
     const runningParts = [tool('running')]
     const settledParts = [tool('success')]
 
-    expect(findPresentingToolId(runningParts, 0, null)).toBe('tool-1')
-    expect(findPresentingToolId(settledParts, 0, 0)).toBe('tool-1')
-    expect(findPresentingToolId(settledParts, 0, null)).toBeUndefined()
+    expect(findPresentingToolIds(runningParts, 0, null)).toEqual(['tool-1'])
+    expect(findPresentingToolIds(settledParts, 0, 0)).toEqual(['tool-1'])
+    expect(findPresentingToolIds(settledParts, 0, null)).toEqual([])
   })
 
   it('does not present a tool when the playback frontier is out of bounds', () => {
     const parts = [tool('running')]
 
-    expect(findPresentingToolId([], -1, null)).toBeUndefined()
-    expect(findPresentingToolId(parts, -1, null)).toBeUndefined()
-    expect(findPresentingToolId(parts, parts.length, null)).toBeUndefined()
+    expect(findPresentingToolIds([], -1, null)).toEqual([])
+    expect(findPresentingToolIds(parts, -1, null)).toEqual([])
+    expect(findPresentingToolIds(parts, parts.length, null)).toEqual([])
+  })
+})
+
+/**
+ * 并发：模型一条消息里发好几个工具调用时，它们在真实世界里同时在跑。
+ *
+ * 一拍放一个的话，界面在说"它们排着队"，而状态托盘里早就列出了后面那几个工具改的文件 ——
+ * 界面自己打自己的脸。所以一整批算一个阶段：一起挂载、一起入场、一起被按住。
+ */
+describe('concurrent tool batches', () => {
+  it('opens the whole live batch as one stage', () => {
+    const parts = [
+      text('intro'),
+      tool('running', 'tool-1'),
+      tool('pending', 'tool-2'),
+      tool('running', 'tool-3'),
+    ]
+
+    expect(findPlaybackFrontier(parts)).toBe(3)
+    expect(findNextPlaybackFrontier(parts, 0, 3)).toBe(3)
+    expect(countPendingStages(parts, 0, 3)).toBe(1)
+  })
+
+  it('keeps a batch member that already returned inside the batch', () => {
+    // 前一个还没跑完，后一个就返回了 —— 这本身就说明它们是并发的。
+    const parts = [tool('running', 'tool-1'), tool('success', 'tool-2'), tool('running', 'tool-3')]
+
+    expect(findPlaybackFrontier(parts)).toBe(2)
+    expect(findPresentingToolIds(parts, 2, null)).toEqual(['tool-1', 'tool-2', 'tool-3'])
+  })
+
+  it('does not drag a previous sequential row into the current batch', () => {
+    // 顺序执行：上一拍那行早已落定，重新拉进来会让它重播入场动画、并被按住不许收起。
+    const parts = [tool('success', 'tool-1'), tool('running', 'tool-2')]
+
+    expect(findPlaybackFrontier(parts)).toBe(1)
+    expect(findPresentingToolIds(parts, 1, null)).toEqual(['tool-2'])
+  })
+
+  it('narrows the presented batch to the hand-off row once everything settles', () => {
+    const parts = [tool('success', 'tool-1'), tool('success', 'tool-2')]
+
+    expect(findPresentingToolIds(parts, 1, 1)).toEqual(['tool-2'])
+  })
+
+  it('still walks a settled history one stage at a time', () => {
+    const parts = [tool('success', 'tool-1'), tool('success', 'tool-2'), text('answer')]
+
+    expect(findPlaybackFrontier(parts)).toBe(2)
+    expect(findNextPlaybackFrontier(parts, -1, 2)).toBe(0)
+    expect(countPendingStages(parts, -1, 2)).toBe(2)
+  })
+
+  it('leaves a non-tool barrier alone', () => {
+    const parts = [reasoning('think', true), tool('running'), text('answer')]
+
+    expect(findPlaybackFrontier(parts)).toBe(0)
+  })
+})
+
+/**
+ * 落后量的上限。
+ *
+ * 托盘里的待处理改动来自工具**结果**，一落地就写进 store —— 它天生跑在按节拍重放的时间轴前面。
+ * 差到两个阶段就不再等节拍；用户被审批卡着时更不能等，那一行就是他要点的东西。
+ */
+describe('playback pacing', () => {
+  const decide = (overrides: Partial<Parameters<typeof decidePlaybackPacing>[0]> = {}) =>
+    decidePlaybackPacing({ backlog: 0, isAwaitingApproval: false, ...overrides })
+
+  it('keeps the beat while the timeline is close enough', () => {
+    expect(decide()).toBe('beat')
+    expect(decide({ backlog: AGENT_PLAYBACK_MAX_STAGE_BACKLOG - 1 })).toBe('beat')
+  })
+
+  it('drops the beat once the timeline falls too far behind the live UI', () => {
+    expect(decide({ backlog: AGENT_PLAYBACK_MAX_STAGE_BACKLOG })).toBe('catch-up')
+  })
+
+  it('never makes a blocked user wait for the animation', () => {
+    expect(decide({ isAwaitingApproval: true })).toBe('catch-up')
   })
 })
 

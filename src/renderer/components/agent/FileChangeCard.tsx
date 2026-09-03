@@ -5,6 +5,7 @@ import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { resolveStreamingEditFilePath } from '@renderer/agent/services/streamingEditPreview'
 import { useDisclosureState } from '@renderer/hooks'
+import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { ExpandablePreviewContainer } from './ToolCallCard'
@@ -29,6 +30,8 @@ interface FileChangeCardProps {
     onStop?: () => void
     onOpenInEditor?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
+    /** 这一行是不是时间轴当前呈现的阶段。落下的那一刻就是后继行挂载的那一刻。 */
+    isPresenting?: boolean
 }
 
 function FileChangeCard({
@@ -39,6 +42,7 @@ function FileChangeCard({
     onReject,
     onStop,
     onOpenInEditor,
+    isPresenting,
 }: FileChangeCardProps) {
     const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
         openFile: s.openFile,
@@ -50,7 +54,8 @@ function FileChangeCard({
     const isActive = isRunning || isStreaming
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
-        autoClose: false,
+        holdOpen: isPresenting,
+        closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
     })
     const timing = getToolTiming(toolCall)
     const activityState = isStreaming || isRunning

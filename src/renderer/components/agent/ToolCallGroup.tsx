@@ -50,6 +50,11 @@ export function renderToolCallCard(
     onStopTool?: () => void
     onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
+    /**
+     * 这一行是不是时间轴当前呈现的阶段。它是活信号（不是挂载时的一次性标记）：
+     * 落下的那一刻就是后继阶段挂载的那一刻，卡片靠它决定什么时候收起。
+     */
+    isPresenting?: boolean
   },
 ): ReactNode {
   const isPending = tc.id === opts.pendingToolId
@@ -67,6 +72,7 @@ export function renderToolCallCard(
         onStop={isPending ? opts.onStopTool : undefined}
         onOpenInEditor={opts.onOpenDiff}
         messageId={opts.messageId}
+        isPresenting={opts.isPresenting}
       />
     )
   }
@@ -78,6 +84,7 @@ export function renderToolCallCard(
         key={tc.id}
         toolCall={tc}
         isAwaitingApproval={isPending}
+        isPresenting={opts.isPresenting}
       />
     )
   }
@@ -93,7 +100,7 @@ export function renderToolCallCard(
   }
 
   if (tc.name === 'task') {
-    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} />
+    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} isPresenting={opts.isPresenting} />
   }
 
   // 其他工具使用 ToolCallCard
@@ -102,6 +109,7 @@ export function renderToolCallCard(
       key={tc.id}
       toolCall={tc}
       isAwaitingApproval={isPending}
+      isPresenting={opts.isPresenting}
       onApprove={isPending ? opts.onApproveTool : undefined}
       onApproveForTask={isPending && supportsTaskApproval(tc) ? opts.onApproveToolForTask : undefined}
       onReject={isPending ? opts.onRejectTool : undefined}
@@ -119,7 +127,7 @@ interface ToolCallGroupProps {
   onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   messageId?: string
-  presentingToolId?: string
+  presentingToolIds?: readonly string[]
 }
 
 function ToolCallGroup({
@@ -131,16 +139,16 @@ function ToolCallGroup({
   onStopTool,
   onOpenDiff,
   messageId,
-  presentingToolId,
+  presentingToolIds,
 }: ToolCallGroupProps) {
   const opts = { pendingToolId, onApproveTool, onApproveToolForTask, onRejectTool, onStopTool, onOpenDiff, messageId }
 
   return (
     <div className="my-2 space-y-2">
       {toolCalls.map(tc => (
-        <div key={tc.id} className={tc.id === presentingToolId ? 'tool-row-enter' : ''}>
-          <div className={tc.id === presentingToolId ? 'tool-row-enter-clip' : ''}>
-            {renderToolCallCard(tc, opts)}
+        <div key={tc.id} className={presentingToolIds?.includes(tc.id) ? 'tool-row-enter' : ''}>
+          <div className={presentingToolIds?.includes(tc.id) ? 'tool-row-enter-clip' : ''}>
+            {renderToolCallCard(tc, { ...opts, isPresenting: presentingToolIds?.includes(tc.id) })}
           </div>
         </div>
       ))}
