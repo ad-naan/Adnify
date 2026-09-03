@@ -26,6 +26,7 @@ import type {
   TodoItem,
 } from '../../types'
 import { getMessageText } from '../../types'
+import { withTimeout } from '@shared/utils/retry'
 
 const HANDOFF_SYSTEM_PROMPT = `You are analyzing a conversation to extract structured information for session handoff.
 
@@ -73,6 +74,27 @@ Rules:
 - Never ask questions or add new questions`
 
 const HANDOFF_TEXT_FALLBACK_MAX_TOKENS = 2000
+const SUMMARY_REQUEST_TIMEOUT_MS = 60_000
+
+function resolveSummaryRequestTimeout(config: { timeout?: number }): number {
+  const configured = config.timeout
+  if (typeof configured !== 'number' || !Number.isFinite(configured) || configured <= 0) {
+    return SUMMARY_REQUEST_TIMEOUT_MS
+  }
+  return Math.min(configured, SUMMARY_REQUEST_TIMEOUT_MS)
+}
+
+function runSummaryRequest<T>(
+  config: { timeout?: number },
+  request: (timeout: number) => Promise<T>,
+): Promise<T> {
+  const timeout = resolveSummaryRequestTimeout(config)
+  return withTimeout(
+    request(timeout),
+    timeout,
+    new Error(`Context summary request timed out after ${timeout}ms`),
+  )
+}
 
 export interface SummaryResult {
   summary: string
@@ -106,9 +128,10 @@ async function generateHandoffSummaryFromTextFallback(
   userPrompt: string,
   llmConfig: import('@store').LLMConfig,
 ) {
-  const fallbackResult = await api.llm.compactContext({
+  const fallbackResult = await runSummaryRequest(llmConfig, timeout => api.llm.compactContext({
     config: {
       ...llmConfig,
+      timeout,
       maxTokens: HANDOFF_TEXT_FALLBACK_MAX_TOKENS,
       temperature: 0,
       toolChoice: 'none',
@@ -117,7 +140,7 @@ async function generateHandoffSummaryFromTextFallback(
       { role: 'system', content: HANDOFF_TEXT_FALLBACK_SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
     ],
-  })
+  }))
 
   if (fallbackResult.error || !fallbackResult.content) {
     throw new Error(fallbackResult.error || 'Text fallback did not return any content.')
@@ -365,9 +388,10 @@ export async function generateSummary(
   ].filter(Boolean).join('\n\n')
 
   try {
-    const result = await api.llm.compactContext({
+    const result = await runSummaryRequest(llmConfig, timeout => api.llm.compactContext({
       config: {
         ...llmConfig,
+        timeout,
         maxTokens: options.maxTokens || 500,
         temperature: 0.3,
       },
@@ -375,7 +399,7 @@ export async function generateSummary(
         { role: 'system', content: SUMMARY_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-    })
+    }))
 
     if (result.error) {
       logger.agent.warn('[SummaryService] LLM error, falling back to rule-based:', result.error)
@@ -418,16 +442,17 @@ async function generateHandoffSummary(
   ].filter(Boolean).join('\n\n')
 
   try {
-    const result = await api.llm.generateObject({
+    const result = await runSummaryRequest(llmConfig, timeout => api.llm.generateObject({
       config: {
         ...llmConfig,
+        timeout,
         maxTokens: 1000,
         temperature: 0.2,
       },
       schema: HANDOFF_SUMMARY_JSON_SCHEMA,
       system: HANDOFF_SYSTEM_PROMPT,
       prompt: userPrompt,
-    })
+    }))
 
     if (result.error || !result.object) {
       const fallbackReason = result.error || 'Structured handoff summary returned no object.'

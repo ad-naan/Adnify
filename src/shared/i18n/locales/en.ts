@@ -1568,7 +1568,6 @@ export const en = {
   'contextStatsContent.handoffSnapshot': 'Handoff Snapshot',
   'contextStatsContent.highRisk': 'High Risk',
   'contextStatsContent.input': 'Input',
-  'contextStatsContent.inputUse': 'Input Use',
   'contextStatsContent.keepFullMessageHistory': 'Keep full message history.',
   'contextStatsContent.l3Around85': 'L3, around 85%+',
   'contextStatsContent.l4Around95': 'L4, around 95%+',

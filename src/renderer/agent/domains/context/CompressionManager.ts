@@ -411,7 +411,10 @@ export function updateStats(
   // 只用 inputTokens 计算比例，输出 token 不占用上下文窗口
   const ratio = inputTokens / contextLimit
   const peakRatio = Math.max(previousStats?.peakRatio ?? 0, ratio)
-  const level = calculateLevel(ratio)
+  // Compression is a thread-level policy. Once older context has been pruned at
+  // a higher level, lowering the policy on the next provider request would add
+  // that history back, cross the same threshold again, and create oscillation.
+  const level = Math.max(previousStats?.level ?? 0, calculateLevel(ratio)) as CompressionLevel
 
   // 计算节省的 token（与上一次比较）
   const savedTokens = previousStats

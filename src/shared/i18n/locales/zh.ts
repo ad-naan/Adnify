@@ -1569,7 +1569,6 @@ export const zh = {
   'contextStatsContent.handoffSnapshot': '续接快照',
   'contextStatsContent.highRisk': '高风险',
   'contextStatsContent.input': '输入',
-  'contextStatsContent.inputUse': '输入占用',
   'contextStatsContent.keepFullMessageHistory': '保留完整消息历史。',
   'contextStatsContent.l3Around85': 'L3，约 85% 以上',
   'contextStatsContent.l4Around95': 'L4，约 95% 以上',

@@ -106,11 +106,7 @@ export async function prepareHandoffForThread(
     workspacePath,
   })
 
-  state.setContextTransition({
-    status: 'compressing',
-    sourceThreadId: threadId,
-    startedAt: Date.now(),
-  })
+  threadStore.setCompressionPhase('summarizing')
 
   try {
     const generated = await generateHandoffDocument(
@@ -121,7 +117,7 @@ export async function prepareHandoffForThread(
     )
 
     const handoff = generated.handoff
-    state.setContextSummary(handoff.summary, threadId)
+    threadStore.setContextSummary(handoff.summary)
     threadStore.setHandoffState({
       status: 'ready',
       document: handoff,
@@ -140,7 +136,7 @@ export async function prepareHandoffForThread(
     logger.agent.error('[HandoffSessionService] Failed to generate handoff document, using fallback packet:', error)
 
     const handoff = buildFallbackHandoffDocument(thread, workspacePath)
-    state.setContextSummary(handoff.summary, threadId)
+    threadStore.setContextSummary(handoff.summary)
     threadStore.setHandoffState({
       status: 'ready',
       document: handoff,
@@ -155,10 +151,7 @@ export async function prepareHandoffForThread(
       error: message,
     }
   } finally {
-    const transition = useAgentStore.getState().contextTransition
-    if (transition.status === 'compressing' && transition.sourceThreadId === threadId) {
-      useAgentStore.getState().clearContextTransition()
-    }
+    threadStore.setCompressionPhase('idle')
   }
 }
 

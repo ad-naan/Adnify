@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { prepareMessages, estimateMessagesTokens } from '@renderer/agent/domains/context/CompressionManager'
+import {
+  prepareMessages,
+  estimateMessagesTokens,
+  updateStats,
+} from '@renderer/agent/domains/context/CompressionManager'
+import { calculateWorkingMemoryHealth } from '@renderer/agent/domains/context/WorkingMemory'
 import type { UserMessage, AssistantMessage } from '@renderer/agent/types'
 
 describe('CompressionManager - Image Handling', () => {
@@ -131,5 +136,30 @@ describe('CompressionManager - Image Handling', () => {
     if (Array.isArray(firstMsg.content)) {
       expect(firstMsg.content.some(p => p.type === 'image')).toBe(true)
     }
+  })
+})
+
+describe('CompressionManager - Stable Thread Policy', () => {
+  it('keeps the compression level and peak stable when a later request is smaller', () => {
+    const memoryHealth = calculateWorkingMemoryHealth(null, 0)
+    const highWatermark = updateStats(
+      { promptTokens: 860, completionTokens: 20 },
+      1000,
+      null,
+      12,
+      memoryHealth,
+    )
+
+    const smallerRequest = updateStats(
+      { promptTokens: 600, completionTokens: 10 },
+      1000,
+      highWatermark,
+      12,
+      memoryHealth,
+    )
+
+    expect(smallerRequest.ratio).toBe(0.6)
+    expect(smallerRequest.peakRatio).toBe(0.86)
+    expect(smallerRequest.level).toBe(3)
   })
 })

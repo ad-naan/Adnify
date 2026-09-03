@@ -210,7 +210,10 @@ export async function checkAndHandleCompression(
     usage.output,
     usage.input
   )
-  const calculatedLevel = reconciliation?.calculatedLevel ?? newStats.level
+  const calculatedLevel = Math.max(
+    newStats.level,
+    reconciliation?.calculatedLevel ?? 0,
+  ) as CompressionCheckResult['level']
   const ratio = reconciliation?.actualUsageRatio ?? newStats.ratio
   const totalTokens = reconciliation
     ? reconciliation.actualInputTokens + reconciliation.actualOutputTokens
@@ -225,7 +228,7 @@ export async function checkAndHandleCompression(
   threadStore.setCompressionStats(newStats)
   threadStore.setCompressionPhase('idle')
 
-  return applyCompressionActions(
+  const result = await applyCompressionActions(
     calculatedLevel,
     ratio,
     totalTokens,
@@ -241,4 +244,19 @@ export async function checkAndHandleCompression(
     autoHandoff,
     budgetController
   )
+
+  // Summary generation happens inside applyCompressionActions. Re-read only
+  // this thread after it settles so the newly created working-memory snapshot
+  // is reflected immediately instead of waiting for another model request.
+  const latestThread = getLiveThread(threadId)
+  if (latestThread) {
+    const latestUserTurns = latestThread.messages.filter(message => message.role === 'user').length
+    threadStore.setCompressionStats({
+      ...newStats,
+      memoryHealth: calculateWorkingMemoryHealth(latestThread.contextSummary, latestUserTurns),
+      lastUpdatedAt: Date.now(),
+    })
+  }
+
+  return result
 }

@@ -233,6 +233,7 @@ export class StructuredService {
           ...settings,
           ...callOptions,
           providerOptions,
+          timeout: callOptions.timeout ?? 120_000,
         })
 
         const [object, usage, response, warnings] = await Promise.all([

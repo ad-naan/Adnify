@@ -261,11 +261,12 @@ export default function StatusBar() {
     () => currentThreadId ? toolCallLogs.filter(log => log.threadId === currentThreadId).length : 0,
     [currentThreadId, toolCallLogs]
   )
+  const peakRatio = compressionStats?.peakRatio ?? 0
   const layerColorClass =
-    compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
-      compressionStats?.level === 3 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
-        compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
-          compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
+    peakRatio >= 0.95 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
+      peakRatio >= 0.85 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
+        peakRatio >= 0.7 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
+          peakRatio >= 0.5 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
             'text-text-muted group-hover:text-text-primary'
 
   const contextIndicatorCopy = useMemo(() => ({
@@ -274,7 +275,10 @@ export default function StatusBar() {
     switching: t('statusBar.switching', language),
     switched: t('statusBar.switched', language),
   }), [language])
-  const currentContextUsage = compressionStats?.ratio ?? null
+  // The compact footer is a thread-level signal, so keep it stable across the
+  // multiple provider requests that can occur inside one tool loop. The panel
+  // still exposes the latest per-request ratio alongside this thread peak.
+  const threadPeakContextUsage = compressionStats ? peakRatio : null
 
   return (
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-border/30 shadow-[0_-1px_15px_rgba(0,0,0,0.03)]">
@@ -513,7 +517,7 @@ export default function StatusBar() {
                         <Maximize2 className={`w-3 h-3 transition-colors ${layerColorClass}`} />
                       </div>
                       <span className="text-[9px] font-bold font-mono text-text-muted group-hover:text-text-primary transition-colors">
-                        {currentContextUsage !== null ? `${Math.round(currentContextUsage * 100)}%` : '--'}
+                        {threadPeakContextUsage !== null ? `${Math.round(threadPeakContextUsage * 100)}%` : '--'}
                       </span>
                     </div>
                   </motion.div>

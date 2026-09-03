@@ -59,11 +59,12 @@ export default function ContextStatsContent({
   const needsHandoff = compressionStats?.needsHandoff ?? currentLevel >= 4
   const ratio = compressionStats?.ratio ?? 0
   const memoryHealth = compressionStats?.memoryHealth
-  const hasMemoryHealth = Boolean(memoryHealth)
+  const hasMemoryHealth = Boolean(currentThread?.contextSummary && memoryHealth)
   const memoryScore = memoryHealth?.score ?? 0
   const contextLimit = compressionStats?.contextLimit ?? 128000
   const inputTokens = compressionStats?.inputTokens ?? 0
   const peakRatio = compressionStats?.peakRatio ?? ratio
+  const peakInputTokens = Math.round(peakRatio * contextLimit)
   const staleTurns = memoryHealth?.staleTurns ?? 0
 
   const labels = useMemo(() => ({
@@ -75,7 +76,6 @@ export default function ContextStatsContent({
     windowUsage: t('contextStatsContent.perRequestInputWindow', language),
     loadStatus: t('contextStatsContent.currentState', language),
     input: t('contextStatsContent.input', language),
-    inputUse: t('contextStatsContent.inputUse', language),
     strategy: t('contextStatsContent.strategy', language),
     summaryTiming: t('contextStatsContent.whenSummaryStarts', language),
     handoffTiming: t('contextStatsContent.whenNewThreadStarts', language),
@@ -173,11 +173,11 @@ export default function ContextStatsContent({
   }, [hasMemoryHealth, memoryScore])
 
   const inputProgressColor = useMemo(() => {
-    if (ratio >= 0.95) return 'bg-red-500'
-    if (ratio >= 0.85) return 'bg-orange-500'
-    if (ratio >= 0.7) return 'bg-yellow-500'
+    if (peakRatio >= 0.95) return 'bg-red-500'
+    if (peakRatio >= 0.85) return 'bg-orange-500'
+    if (peakRatio >= 0.7) return 'bg-yellow-500'
     return 'bg-blue-500'
-  }, [ratio])
+  }, [peakRatio])
 
   const memoryRiskLabel = memoryHealth?.risk === 'low'
     ? labels.lowRisk
@@ -231,7 +231,7 @@ export default function ContextStatsContent({
 
         <div className="grid grid-cols-3 gap-2 text-center">
           <MetricCard label={labels.input} value={formatK(inputTokens)} />
-          <MetricCard label={labels.inputUse} value={`${Math.round(ratio * 100)}%`} tone="secondary" />
+          <MetricCard label={labels.threadPeakUsage} value={`${Math.round(peakRatio * 100)}%`} tone="secondary" />
           <MetricCard label={labels.strategy} value={`L${currentLevel}`} valueClassName={LEVEL_COLORS[currentLevel]} />
         </div>
       </div>
@@ -246,10 +246,10 @@ export default function ContextStatsContent({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-text-muted">
-                {labels.windowUsage}
+                {labels.threadPeakUsage}
               </div>
               <div className="mt-1 text-lg font-bold font-mono text-text-primary">
-                {formatK(inputTokens)} / {formatK(contextLimit)}
+                {formatK(peakInputTokens)} / {formatK(contextLimit)}
               </div>
             </div>
             <div className={`text-right ${LEVEL_COLORS[currentLevel]}`}>
@@ -268,13 +268,13 @@ export default function ContextStatsContent({
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-text-primary/[0.05]">
             <div
               className={`h-full rounded-full transition-all duration-500 ${inputProgressColor}`}
-              style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+              style={{ width: `${Math.min(peakRatio * 100, 100)}%` }}
             />
           </div>
 
           <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted">
             <span>0%</span>
-            <span>{Math.round(ratio * 100)}%</span>
+            <span>{Math.round(peakRatio * 100)}%</span>
             <span>100%</span>
           </div>
 
@@ -298,7 +298,7 @@ export default function ContextStatsContent({
               {levelDescriptions[currentLevel]}
             </p>
             <div className="mt-3 text-[10px] text-text-muted">
-              {labels.threadPeakUsage}: <span className="font-mono text-text-primary">{Math.round(peakRatio * 100)}%</span>
+              {labels.windowUsage}: <span className="font-mono text-text-primary">{Math.round(ratio * 100)}%</span>
             </div>
           </div>
         </section>

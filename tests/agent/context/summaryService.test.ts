@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStore } from '@store'
-import { generateHandoffDocument } from '@renderer/agent/domains/context/summaryService'
+import { api } from '@renderer/services/electronAPI'
+import { generateHandoffDocument, generateSummary } from '@renderer/agent/domains/context/summaryService'
 import type { ChatMessage, TodoItem } from '@renderer/agent/types'
 
 describe('summaryService handoff', () => {
@@ -14,6 +15,11 @@ describe('summaryService handoff', () => {
         timeout: 30000,
       },
     } as any)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('preserves the latest user request and active todo list in handoff documents', async () => {
@@ -56,5 +62,32 @@ describe('summaryService handoff', () => {
         'Task: 让压缩结果在消息流中可见',
       ])
     )
+  })
+
+  it('falls back to a rule-based summary when the provider request times out', async () => {
+    vi.useFakeTimers()
+    useStore.setState({
+      llmConfig: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        apiKey: 'test-key',
+        baseUrl: '',
+        timeout: 25,
+      },
+    } as any)
+    vi.spyOn(api.llm, 'compactContext').mockReturnValue(new Promise(() => {}))
+
+    const resultPromise = generateSummary([{
+      id: 'u-timeout',
+      role: 'user',
+      content: 'Keep the compression lifecycle responsive.',
+      timestamp: 1,
+    }], { type: 'detailed' })
+
+    await vi.advanceTimersByTimeAsync(25)
+    const result = await resultPromise
+
+    expect(result.source).toBe('rule_based')
+    expect(result.fallbackReason).toContain('timed out')
   })
 })
