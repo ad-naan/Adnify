@@ -81,6 +81,8 @@ export function findPresentingToolId(
   frontierIndex: number,
   settlingFrontier: number | null,
 ): string | undefined {
+  if (frontierIndex < 0 || frontierIndex >= parts.length) return undefined
+
   const part = parts[frontierIndex]
   if (!isToolCallPart(part)) return undefined
   return isPlaybackBarrier(part) || settlingFrontier === frontierIndex

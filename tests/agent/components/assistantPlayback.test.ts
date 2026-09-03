@@ -125,4 +125,12 @@ describe('assistant playback timeline', () => {
     expect(findPresentingToolId(settledParts, 0, 0)).toBe('tool-1')
     expect(findPresentingToolId(settledParts, 0, null)).toBeUndefined()
   })
+
+  it('does not present a tool when the playback frontier is out of bounds', () => {
+    const parts = [tool('running')]
+
+    expect(findPresentingToolId([], -1, null)).toBeUndefined()
+    expect(findPresentingToolId(parts, -1, null)).toBeUndefined()
+    expect(findPresentingToolId(parts, parts.length, null)).toBeUndefined()
+  })
 })
