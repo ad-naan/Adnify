@@ -4,7 +4,7 @@ import { useStore } from '@store'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 import { t } from '@shared/i18n'
 import SmoothCollapse from './SmoothCollapse'
-import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
 import { useDisclosureState } from '@renderer/hooks'
 import type { ToolCall } from '@/renderer/agent/types'
 
@@ -70,8 +70,10 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                     state={activityState}
                     startedAt={timing.startedAt}
                     durationMs={timing.durationMs}
-                    className="mr-1"
                 />
+
+                {/* 占位，与文件修改行的操作图标共用同一条右边界。 */}
+                <span className={TOOL_ROW_ACTION_SLOT_CLASS} aria-hidden="true" />
             </div>
 
             <SmoothCollapse open={isExpanded}>

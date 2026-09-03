@@ -23,7 +23,7 @@ import { ToolApprovalActions } from './ToolApprovalActions'
 import { assessShellCommand } from '@shared/security/executionPolicy'
 import { parseSymbolToolResult } from '@renderer/agent/presentation/symbolToolDisplay'
 import SmoothCollapse from './SmoothCollapse'
-import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -1205,8 +1205,11 @@ const ToolCallCard = memo(function ToolCallCard({
                     state={activityState}
                     startedAt={timing.startedAt}
                     durationMs={timing.durationMs}
-                    className="ml-auto pr-1"
+                    className="ml-auto"
                 />
+
+                {/* 占位，与文件修改行的操作图标共用同一条右边界。 */}
+                <span className={TOOL_ROW_ACTION_SLOT_CLASS} aria-hidden="true" />
             </button>
 
             <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>

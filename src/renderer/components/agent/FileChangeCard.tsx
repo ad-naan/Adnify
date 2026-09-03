@@ -17,7 +17,7 @@ import { RollingNumber } from '@components/ui'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
 import SmoothCollapse from './SmoothCollapse'
-import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -301,12 +301,8 @@ function FileChangeCard({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <ToolElapsedTime
-                            state={activityState}
-                            startedAt={timing.startedAt}
-                            durationMs={timing.durationMs}
-                        />
+                    {/* 行尾顺序：增删统计 → 耗时 → 操作图标，让耗时与其他工具行的右边界对齐。 */}
+                    <div className="flex shrink-0 items-center gap-2">
                         {(isSuccess || newContent) && (
                             <span className="text-[10px] font-mono opacity-80 flex items-center gap-2 px-1.5 py-0.5 bg-text-primary/[0.03] rounded border border-border/50 backdrop-blur-sm shadow-sm select-none">
                                 {diffStats.added > 0 && (
@@ -326,21 +322,33 @@ function FileChangeCard({
                                 )}
                             </span>
                         )}
-                        {isSuccess && onOpenInEditor && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (isLargeWrite) {
-                                        void openFullFile()
-                                        return
-                                    }
-                                    onOpenInEditor(filePath, oldContent, newContent)
-                                }}
-                                className="p-1 text-text-muted hover:text-accent hover:bg-surface-hover rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                                title="Open in Editor"
-                            >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                            </button>
+                        <ToolElapsedTime
+                            state={activityState}
+                            startedAt={timing.startedAt}
+                            durationMs={timing.durationMs}
+                        />
+                        {/* 行尾操作位：图标常驻（弱显示），非成功态也保留占位，
+                            避免耗时/统计的右边界随状态跳动而看起来没对齐。 */}
+                        {onOpenInEditor && (
+                            <span className={`flex items-center justify-center ${TOOL_ROW_ACTION_SLOT_CLASS}`}>
+                                {isSuccess && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (isLargeWrite) {
+                                                void openFullFile()
+                                                return
+                                            }
+                                            onOpenInEditor(filePath, oldContent, newContent)
+                                        }}
+                                        className={`flex items-center justify-center rounded-md text-text-muted opacity-55 transition-all hover:bg-surface-hover hover:text-accent group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/40 ${TOOL_ROW_ACTION_SLOT_CLASS}`}
+                                        title="Open in Editor"
+                                    >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </span>
                         )}
                     </div>
                 </div>

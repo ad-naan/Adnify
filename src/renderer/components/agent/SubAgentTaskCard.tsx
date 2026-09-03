@@ -9,7 +9,7 @@ import { useStore } from '@/renderer/store'
 import { t } from '@shared/i18n'
 import type { ExecutionLaneProjection, ExecutionLaneStatus } from '@shared/types/executionLane'
 import SmoothCollapse from './SmoothCollapse'
-import ToolActivityIndicator, { ToolElapsedTime } from './ToolActivityIndicator'
+import ToolActivityIndicator, { ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
 import { useDisclosureState } from '@renderer/hooks'
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -115,6 +115,8 @@ function SubAgentTaskCard({ toolCall, messageId, presentOnMount }: { toolCall: T
       {waitingApproval && <span className="shrink-0 text-[10px] text-amber-400">{t('subAgentTaskCard.approvalNeeded', language)}</span>}
       {lane && <LaneStatusChip status={lane.status} language={language} className="shrink-0 text-[10px]" />}
       {completedTools > 0 && <span className="shrink-0 text-[10px] tabular-nums text-text-muted/60">{completedTools}</span>}
+      {/* 占位，与文件修改行的操作图标共用同一条右边界。 */}
+      <span className={TOOL_ROW_ACTION_SLOT_CLASS} aria-hidden="true" />
     </button>
 
     <SmoothCollapse open={expanded}><div className="relative pb-3 pl-[26px] pr-3 pt-0">

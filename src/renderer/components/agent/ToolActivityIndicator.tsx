@@ -3,6 +3,12 @@ import type { ToolCall } from '@renderer/agent/types'
 
 type ActivityState = 'idle' | 'running' | 'success' | 'error'
 
+/**
+ * 时间轴行尾的操作位尺寸。文件修改行在这里放"在编辑器中打开"图标，
+ * 其他行渲染同尺寸的占位符，让各类行的耗时列共用同一条右边界。
+ */
+export const TOOL_ROW_ACTION_SLOT_CLASS = 'h-[22px] w-[22px] shrink-0'
+
 interface ToolActivityIndicatorProps {
   state: ActivityState
   startedAt?: number
