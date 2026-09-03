@@ -1346,8 +1346,6 @@ export const zh = {
   'agentSettings.enterSearchEngineId': '输入搜索引擎 ID',
   'agentSettings.exactRepeats': '重复阈值',
   'agentSettings.executionContext': '执行与上下文',
-  'agentSettings.expandExecutionDetailsBy': '默认展开执行过程',
-  'agentSettings.expandsReasoningToolCalls': '聊天中默认展开思考、工具调用和上下文块。只影响显示密度，不影响 Agent 能力。',
   'agentSettings.fileContentLimit': '单文件内容限制',
   'agentSettings.fileEdits': '编辑阈值',
   'agentSettings.freeTier100Searches': '免费额度：每天 100 次搜索。获取密钥：console.cloud.google.com',
@@ -1427,7 +1425,6 @@ export const zh = {
   'chatInput.xHigh': '极高',
 
   // chatMessage
-  'chatMessage.alerts': '提示',
   'chatMessage.checks': '检查',
   'chatMessage.clickToCustomizeMy': '点击定制我的头像与昵称',
   'chatMessage.context': '上下文',

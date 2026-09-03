@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo, memo } from 'react'
-import { Check, X, ChevronDown, ExternalLink } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronDown, ExternalLink, FilePenLine } from 'lucide-react'
 import { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { resolveStreamingEditFilePath } from '@renderer/agent/services/streamingEditPreview'
-import { useToolCardExpansion } from '@renderer/hooks'
+import { useDisclosureState } from '@renderer/hooks'
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { ExpandablePreviewContainer } from './ToolCallCard'
@@ -17,6 +16,8 @@ import { isCreateActionLabel, resolveFileChangeActionLabel } from '@renderer/age
 import { RollingNumber } from '@components/ui'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
+import SmoothCollapse from './SmoothCollapse'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -38,19 +39,26 @@ function FileChangeCard({
     onStop,
     onOpenInEditor,
 }: FileChangeCardProps) {
-    const { openFile, setActiveFile, workspacePath, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
+    const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
         openFile: s.openFile,
         setActiveFile: s.setActiveFile,
         workspacePath: s.workspacePath,
         language: s.language,
-        expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
     })))
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming
-    const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
-        defaultExpanded: expandAgentBlocksByDefault,
-        isActive,
+    const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
+        openWhile: isActive || Boolean(isAwaitingApproval) || isError,
     })
+    const timing = getToolTiming(toolCall)
+    const animateEntry = timing.startedAt !== undefined && Date.now() - timing.startedAt < 1500
+    const activityState = isStreaming || isRunning
+        ? 'running'
+        : isSuccess
+            ? 'success'
+            : isError
+                ? 'error'
+                : 'idle'
 
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || args.relative_path || meta?.filePath) as string || ''
@@ -165,7 +173,7 @@ function FileChangeCard({
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
         if (isError) return 'bg-red-500/5'
-        if (isStreaming || isRunning) return 'bg-accent/5'
+        if (isStreaming || isRunning) return 'bg-accent/[0.035]'
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
@@ -215,46 +223,31 @@ function FileChangeCard({
 
     return (
         <div
-            className={`group my-0.5 relative ${cardStyle} overflow-hidden`}
+            className={`group my-0.5 relative ${animateEntry ? 'tool-row-enter' : ''} ${cardStyle} overflow-hidden`}
         >
-            {/* ToolCall Card Background Sweeping Effect */}
-            {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent tool-card-sweep" />
-                </div>
-            )}
             {/* Header - Flat Outline Style */}
             <div
-                className="flex min-h-[32px] items-center gap-2 py-1.5 cursor-pointer select-none"
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
+                className="relative flex min-h-9 w-full cursor-pointer select-none items-center gap-2 rounded-lg py-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
                 onClick={handleToggleExpanded}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleToggleExpanded()
+                    }
+                }}
             >
                 {/* Expand Toggle (Moved to far left) */}
-                <motion.div
-                    animate={{ rotate: isExpanded ? 90 : 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors"
-                >
-                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
-                </motion.div>
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform duration-300 group-hover:text-text-muted motion-reduce:transition-none ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
 
                 {/* Status Icon */}
-                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-                    {isStreaming || isRunning ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                        </div>
-                    ) : isSuccess ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5 text-green-500" />
-                        </div>
-                    ) : isError ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-red-500" />
-                        </div>
-                    ) : (
-                        <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30" />
-                    )}
-                </div>
+                <ToolActivityIndicator
+                    state={activityState}
+                    startedAt={timing.startedAt}
+                />
+                <FilePenLine className="h-3.5 w-3.5 shrink-0 text-text-muted/55" aria-hidden="true" />
 
                 {/* File Info */}
                 <div className="flex-1 min-w-0 flex items-center justify-between relative z-10">
@@ -307,6 +300,11 @@ function FileChangeCard({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <ToolElapsedTime
+                            state={activityState}
+                            startedAt={timing.startedAt}
+                            durationMs={timing.durationMs}
+                        />
                         {(isSuccess || newContent) && (
                             <span className="text-[10px] font-mono opacity-80 flex items-center gap-2 px-1.5 py-0.5 bg-text-primary/[0.03] rounded border border-border/50 backdrop-blur-sm shadow-sm select-none">
                                 {diffStats.added > 0 && (
@@ -347,21 +345,8 @@ function FileChangeCard({
             </div>
 
             {/* Expanded Content */}
-            {isExpanded && (newContent || isActive || isLargeWrite) && (
-                animateContent ? (
-                    <AnimatePresence initial={false}>
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.16, ease: 'easeOut' }}
-                        >
-                            {contentBody}
-                        </motion.div>
-                    </AnimatePresence>
-                ) : (
-                    contentBody
-                )
+            {(newContent || isActive || isLargeWrite) && (
+                <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>
             )}
 
             {/* Error Message */}

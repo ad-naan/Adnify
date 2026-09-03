@@ -94,7 +94,6 @@ export interface AgentConfig {
   retryBackoffMultiplier?: number
   toolTimeoutMs: number
   enableAutoFix: boolean
-  expandAgentBlocksByDefault: boolean
   enableToolCallLogging: boolean
   keepRecentTurns: number
   deepCompressionTurns: number

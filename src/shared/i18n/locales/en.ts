@@ -1345,8 +1345,6 @@ export const en = {
   'agentSettings.enterSearchEngineId': 'Enter Search Engine ID',
   'agentSettings.exactRepeats': 'Exact Repeats',
   'agentSettings.executionContext': 'Execution & Context',
-  'agentSettings.expandExecutionDetailsBy': 'Expand execution details by default',
-  'agentSettings.expandsReasoningToolCalls': 'Expands reasoning, tool calls, and context blocks in chat. This changes presentation only, not agent capabilities.',
   'agentSettings.fileContentLimit': 'File Content Limit',
   'agentSettings.fileEdits': 'File Edits',
   'agentSettings.freeTier100Searches': 'Free tier: 100 searches/day. Get keys at: console.cloud.google.com',
@@ -1426,7 +1424,6 @@ export const en = {
   'chatInput.xHigh': 'X-High',
 
   // chatMessage
-  'chatMessage.alerts': 'Alerts',
   'chatMessage.checks': 'Checks',
   'chatMessage.clickToCustomizeMy': 'Click to customize my avatar & name',
   'chatMessage.context': 'Context',

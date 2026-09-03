@@ -1117,7 +1117,7 @@ export default function ChatPanel() {
     }
   }, [getCheckpointForMessage, restoreToCheckpoint, toast, language, messages, addContextItem])
 
-  // AgentStatusBar 回调（提取为 useCallback 避免打破 memo）
+  // Status tray callbacks stay referentially stable so its memo boundary holds.
   const handleReviewFile = useCallback(async (filePath: string) => {
     const change = pendingChanges.find(c => c.filePath === filePath)
     if (!change) return

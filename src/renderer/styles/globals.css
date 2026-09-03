@@ -839,10 +839,137 @@ textarea,
   animation: text-shimmer 3.2s ease-in-out infinite;
 }
 
-.tool-card-sweep {
-  animation: shimmer 14s linear infinite;
-  background-size: 240% 100%;
-  opacity: 0.55;
+/* Conversation disclosures interpolate their intrinsic height without JS
+   measurement or max-height guesses. Collapsed content becomes non-focusable
+   through visibility after the transition completes. */
+.agent-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow-anchor: none;
+  visibility: hidden;
+  transition:
+    grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease-in,
+    visibility 0s linear 360ms;
+}
+
+.agent-disclosure.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.agent-disclosure-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tool-activity {
+  display: inline-flex;
+  min-width: 18px;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: rgb(var(--text-muted) / 0.62);
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tool-activity-mark {
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+
+.tool-activity-arc,
+.tool-activity-check,
+.tool-activity-cross {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform-origin: 9px 9px;
+}
+
+.tool-activity-arc {
+  stroke: rgb(var(--accent));
+  stroke-width: 1.6;
+  stroke-dasharray: 24 20;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.tool-activity-check,
+.tool-activity-cross {
+  stroke-width: 1.7;
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  opacity: 0;
+}
+
+.tool-activity[data-state="running"] .tool-activity-arc {
+  opacity: 1;
+  animation: tool-activity-spin 900ms linear infinite;
+}
+
+.tool-activity[data-state="success"] {
+  color: rgb(var(--status-success));
+}
+
+.tool-activity[data-state="success"] .tool-activity-check {
+  stroke: currentColor;
+  opacity: 1;
+  animation: tool-activity-draw 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tool-activity[data-state="error"] {
+  color: rgb(var(--status-error));
+}
+
+.tool-activity[data-state="error"] .tool-activity-cross {
+  stroke: currentColor;
+  opacity: 1;
+  animation: tool-activity-draw 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tool-activity-time {
+  flex: none;
+  white-space: nowrap;
+  color: rgb(var(--status-success) / 0.88);
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tool-row-enter {
+  animation: tool-row-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tool-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tool-activity-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes tool-activity-draw {
+  to { stroke-dashoffset: 0; }
 }
 
 /* Button Sweep Effect */
@@ -935,35 +1062,66 @@ textarea,
   animation: reveal-highlight 2s ease-out forwards;
 }
 
-/* --- Streaming write-head reveal (see streamingTextReveal.ts) --- */
-/* 每一批到达的字符自己淡入，相位由内联的**负** animation-delay 给出，所以 React
-   重排 span、或整段 markdown 重新解析都不会让已经落定的字重新闪一次。
-
-   只动 color 的透明度，不碰 opacity / filter / transform：
-   - blur 会把笔画的墨往外糊一圈，一个字淡入时看着先胖一圈再缩回去 —— 那不叫渐显，
-     那叫放大。
-   - opacity 也不行。非 1 的 opacity 会让这个 span 单独走一遍合成/绘制，里面的文字拿不到
-     次像素抗锯齿；动画一结束样式回到基线，字又「瘦」一下，尾巴上每个字都要闪这么一次。
-   - color 是纯绘制属性：不建合成层，不换抗锯齿，也不会把窗口里那二十来个 span 各自送进
-     GPU 做一遍模糊。关键帧里 color 上的 currentColor 取的是继承来的颜色，所以粗体、链接、
-     引用各自的颜色都还是对的。
-
-   刻意不写 fill-mode: forwards —— 跑完就回到基线样式，落定的字身上不留任何额外样式。
-   改这里的 420ms 要同步改 REVEAL_DURATION_MS，不然年龄和相位会脱钩（有单测盯着）。 */
-@keyframes stream-reveal {
-  from { color: color-mix(in srgb, currentColor 14%, transparent); }
-  to { color: currentColor; }
+/* A single write head: settled glyphs never animate again. Only the newly
+   appended suffix gets a short reveal, followed by one independently breathing
+   tail marker. Keeping the animated area tiny avoids whole-message repaints. */
+@keyframes stream-token-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.stream-reveal {
-  /* 相位本身就是按「距写入头多远」连续铺开的，再叠一条强 ease-out 会把渐变
-     全压到最后一两个字上，看着就是一块字在跳。两头各留一点缓冲让落定不那么硬。 */
-  animation: stream-reveal 420ms cubic-bezier(0.35, 0, 0.65, 1) backwards;
+.stream-token-in {
+  animation: stream-token-in 380ms ease-out forwards;
+}
+
+.stream-tail-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0;
+  vertical-align: -0.18em;
+  transition: opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes stream-tail-breathe {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.15; }
+}
+
+.stream-tail-caret.is-active {
+  opacity: 0.85;
+  animation: stream-tail-breathe 1.1s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-reveal {
+  .stream-token-in,
+  .stream-tail-caret.is-active,
+  .tool-text-shimmer,
+  .tool-activity-arc,
+  .tool-activity-check,
+  .tool-activity-cross {
     animation: none;
+  }
+
+  .stream-token-in {
+    opacity: 1;
+  }
+
+  .tool-row-enter {
+    animation: none;
+  }
+
+  .agent-disclosure,
+  .agent-disclosure.is-open {
+    transition-duration: 0.01ms;
+  }
+
+  .tool-activity[data-state="success"] .tool-activity-check,
+  .tool-activity[data-state="error"] .tool-activity-cross {
+    stroke-dashoffset: 0;
   }
 }
 

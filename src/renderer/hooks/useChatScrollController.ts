@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VirtuosoHandle } from 'react-virtuoso'
+import { AGENT_DISCLOSURE_COLLAPSE_EVENT, AGENT_DISCLOSURE_COLLAPSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 
 const CHAT_BOTTOM_THRESHOLD = 220
 
@@ -30,8 +31,24 @@ export function useChatScrollController({
   const pendingBottomSnapRef = useRef(true)
   const lastScrollTopRef = useRef(0)
   const stickyFrameRef = useRef<number | null>(null)
+  const animationFramesRef = useRef(new Set<number>())
+  const bottomFollowPausedUntilRef = useRef(0)
   const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
+
+  const scheduleFrame = useCallback((callback: FrameRequestCallback) => {
+    const frame = requestAnimationFrame(time => {
+      animationFramesRef.current.delete(frame)
+      callback(time)
+    })
+    animationFramesRef.current.add(frame)
+    return frame
+  }, [])
+
+  const cancelFrame = useCallback((frame: number) => {
+    cancelAnimationFrame(frame)
+    animationFramesRef.current.delete(frame)
+  }, [])
 
   const getBottomMetrics = useCallback(() => {
     const scroller = scrollerRef.current
@@ -65,17 +82,18 @@ export function useChatScrollController({
     atBottomRef.current = true
     setShowScrollButton(false)
 
-    requestAnimationFrame(() => {
+    scheduleFrame(() => {
       virtuosoRef.current?.scrollToIndex({
         index: messageCount - 1,
         align: 'end',
         behavior,
       })
-      requestAnimationFrame(syncBottomStateFromScroller)
+      scheduleFrame(syncBottomStateFromScroller)
     })
-  }, [messageCount, syncBottomStateFromScroller])
+  }, [messageCount, scheduleFrame, syncBottomStateFromScroller])
 
   const stickToBottom = useCallback(() => {
+    if (performance.now() < bottomFollowPausedUntilRef.current) return
     const scroller = scrollerRef.current
     if (!scroller || messageCount <= 0) return
 
@@ -88,28 +106,31 @@ export function useChatScrollController({
     // write the scroll position once and let the next frame settle its state.
     scroller.scrollTop = scroller.scrollHeight
 
-    requestAnimationFrame(() => {
+    scheduleFrame(() => {
       lastScrollTopRef.current = scroller.scrollTop
       isAutoScrollingRef.current = false
     })
-  }, [messageCount])
+  }, [messageCount, scheduleFrame])
 
   const scheduleStickToBottom = useCallback(() => {
+    if (performance.now() < bottomFollowPausedUntilRef.current) return
     if (stickyFrameRef.current !== null) return
-    stickyFrameRef.current = requestAnimationFrame(() => {
+    stickyFrameRef.current = scheduleFrame(() => {
       stickyFrameRef.current = null
+      if (performance.now() < bottomFollowPausedUntilRef.current) return
       stickToBottom()
     })
-  }, [stickToBottom])
+  }, [scheduleFrame, stickToBottom])
 
   const followOutput = useCallback((isListAtBottom: boolean) => {
+    if (performance.now() < bottomFollowPausedUntilRef.current) return false
     return (isListAtBottom || atBottomRef.current) ? 'auto' : false
   }, [])
 
   const handleTotalListHeightChanged = useCallback(() => {
     // Virtuoso already publishes bottom intent using the same threshold below.
     // Reading scrollHeight here would force layout on every streamed row resize.
-    if (!atBottomRef.current) return
+    if (!atBottomRef.current || performance.now() < bottomFollowPausedUntilRef.current) return
 
     setShowScrollButton(false)
     scheduleStickToBottom()
@@ -137,10 +158,10 @@ export function useChatScrollController({
     setScrollerElement(node)
     if (!node) return
 
-    requestAnimationFrame(() => {
+    scheduleFrame(() => {
       syncBottomStateFromScroller()
     })
-  }, [syncBottomStateFromScroller])
+  }, [scheduleFrame, syncBottomStateFromScroller])
 
   useEffect(() => {
     pendingBottomSnapRef.current = true
@@ -158,8 +179,8 @@ export function useChatScrollController({
     if (isSwitchingThread || isHydratingActiveThread || messageCount === 0) return
 
     pendingBottomSnapRef.current = false
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+    scheduleFrame(() => {
+      scheduleFrame(() => {
         // The list now mounts with initialTopMostItemIndex pinned to the last
         // row, so the common case is already at the bottom. Re-running
         // scrollToIndex there would only buy another measurement pass over the
@@ -172,7 +193,7 @@ export function useChatScrollController({
         scrollToBottom('auto')
       })
     })
-  }, [getBottomMetrics, isSwitchingThread, isHydratingActiveThread, messageCount, scrollToBottom, syncBottomStateFromScroller])
+  }, [getBottomMetrics, isSwitchingThread, isHydratingActiveThread, messageCount, scheduleFrame, scrollToBottom, syncBottomStateFromScroller])
 
   useEffect(() => {
     syncBottomStateFromScroller()
@@ -187,6 +208,11 @@ export function useChatScrollController({
       const previousTop = lastScrollTopRef.current
       const currentTop = scroller.scrollTop
       lastScrollTopRef.current = currentTop
+
+      // A disclosure deliberately reduces the last row's height. Treating that
+      // resize as new streamed output pins the bottom edge and makes an upward
+      // collapse look as if the whole card moved down.
+      if (performance.now() < bottomFollowPausedUntilRef.current) return
 
       if (isStreaming && currentTop < previousTop - 2) {
         const { hasOverflow } = getBottomMetrics()
@@ -210,7 +236,20 @@ export function useChatScrollController({
     handleScroll()
     scroller.addEventListener('scroll', handleScroll, { passive: true })
 
+    const handleDisclosureCollapse = (event: Event) => {
+      const durationMs = event instanceof CustomEvent
+        ? Number(event.detail?.durationMs) || AGENT_DISCLOSURE_COLLAPSE_MS
+        : AGENT_DISCLOSURE_COLLAPSE_MS
+      bottomFollowPausedUntilRef.current = performance.now() + durationMs + 48
+      if (stickyFrameRef.current !== null) {
+        cancelFrame(stickyFrameRef.current)
+        stickyFrameRef.current = null
+      }
+    }
+    scroller.addEventListener(AGENT_DISCLOSURE_COLLAPSE_EVENT, handleDisclosureCollapse)
+
     const resizeObserver = new ResizeObserver(() => {
+      if (performance.now() < bottomFollowPausedUntilRef.current) return
       if (isStreaming && atBottomRef.current) {
         setShowScrollButton(false)
         scheduleStickToBottom()
@@ -222,15 +261,16 @@ export function useChatScrollController({
 
     return () => {
       scroller.removeEventListener('scroll', handleScroll)
+      scroller.removeEventListener(AGENT_DISCLOSURE_COLLAPSE_EVENT, handleDisclosureCollapse)
       resizeObserver.disconnect()
     }
-  }, [getBottomMetrics, isStreaming, scheduleStickToBottom, scrollerElement, syncBottomState, syncBottomStateFromScroller])
+  }, [cancelFrame, getBottomMetrics, isStreaming, scheduleStickToBottom, scrollerElement, syncBottomState, syncBottomStateFromScroller])
 
   useEffect(() => {
     return () => {
-      if (stickyFrameRef.current !== null) {
-        cancelAnimationFrame(stickyFrameRef.current)
-      }
+      animationFramesRef.current.forEach(frame => cancelAnimationFrame(frame))
+      animationFramesRef.current.clear()
+      stickyFrameRef.current = null
     }
   }, [])
 

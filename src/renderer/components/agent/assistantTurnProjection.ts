@@ -2,9 +2,6 @@ import type { AssistantPart } from '@renderer/agent/types'
 import { isReasoningPart, isSearchPart, isSystemAlertPart, isTextPart, isToolCallPart, isLintCheckPart, isContextSnapshotPart, isSourcesPart } from '@renderer/agent/types'
 
 export interface AssistantTurnProjectionOptions {
-  isStreaming?: boolean
-  isAwaitingApproval?: boolean
-  expandProcessByDefault?: boolean
   hasContextMeta?: boolean
 }
 
@@ -15,7 +12,6 @@ export interface AssistantProcessSummary {
   hasContext: boolean
   hasSources: boolean
   hasLintCheck: boolean
-  hasSystemAlert: boolean
   hasProcessText: boolean
 }
 
@@ -23,9 +19,7 @@ export interface AssistantTurnProjection {
   finalReplyParts: AssistantPart[]
   alertParts: AssistantPart[]
   processParts: AssistantPart[]
-  hasVisibleFinalReply: boolean
   hasProcessContent: boolean
-  shouldCollapseProcess: boolean
   summary: AssistantProcessSummary
 }
 
@@ -34,29 +28,16 @@ function isNonEmptyTextPart(part: AssistantPart): boolean {
 }
 
 function findFinalReplyRange(parts: AssistantPart[]): { start: number; end: number } | null {
-  let end = -1
+  let textEnd = parts.length - 1
+  while (textEnd >= 0 && isSourcesPart(parts[textEnd])) textEnd -= 1
+  if (textEnd < 0 || !isNonEmptyTextPart(parts[textEnd])) return null
 
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    if (isNonEmptyTextPart(parts[index])) {
-      end = index
-      break
-    }
-  }
-
-  if (end === -1) {
-    return null
-  }
-
-  let start = end
+  let start = textEnd
   while (start > 0 && isNonEmptyTextPart(parts[start - 1])) {
     start -= 1
   }
 
-  while (end + 1 < parts.length && isSourcesPart(parts[end + 1])) {
-    end += 1
-  }
-
-  return { start, end }
+  return { start, end: parts.length - 1 }
 }
 
 function buildSummary(processParts: AssistantPart[], hasContextMeta: boolean): AssistantProcessSummary {
@@ -85,7 +66,6 @@ function buildSummary(processParts: AssistantPart[], hasContextMeta: boolean): A
     hasContext: hasContextMeta,
     hasSources: false,
     hasLintCheck: false,
-    hasSystemAlert: false,
     hasProcessText: false,
   })
 }
@@ -107,17 +87,13 @@ export function projectAssistantTurn(
 
     return index < finalReplyRange.start || index > finalReplyRange.end
   })
-  const hasVisibleFinalReply = finalReplyParts.some(isNonEmptyTextPart)
   const hasProcessContent = processParts.length > 0 || !!options.hasContextMeta
-  const isActiveTurn = !!options.isStreaming || !!options.isAwaitingApproval
 
   return {
     finalReplyParts,
     alertParts,
     processParts,
-    hasVisibleFinalReply,
     hasProcessContent,
-    shouldCollapseProcess: hasProcessContent && !isActiveTurn && !options.expandProcessByDefault,
     summary: buildSummary(processParts, !!options.hasContextMeta),
   }
 }

@@ -3,25 +3,26 @@
  * 在 Agent 编辑文件后自动展示 lint 检查结果
  */
 
-import { useState, memo } from 'react'
-import { Check, ChevronDown, AlertTriangle, ShieldCheck } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { memo } from 'react'
+import { ChevronDown, ShieldCheck } from 'lucide-react'
 import type { LintCheckPart } from '@/renderer/agent/types'
 import { getFileName } from '@shared/utils/pathUtils'
-import { useStore } from '@store'
+import SmoothCollapse from './SmoothCollapse'
+import ToolActivityIndicator from './ToolActivityIndicator'
+import { useDisclosureState } from '@renderer/hooks'
 interface LintCheckCardProps {
     part: LintCheckPart
 }
 
 export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
-    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
-    const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
-
     const totalErrors = part.files.reduce((sum, f) => sum + f.errors.filter(e => e.severity === 'error').length, 0)
     const totalWarnings = part.files.reduce((sum, f) => sum + f.errors.filter(e => e.severity === 'warning').length, 0)
     const filesWithErrors = part.files.filter(f => f.errors.length > 0)
     const isChecking = part.status === 'checking'
     const hasFailed = part.status === 'failed'
+    const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+        openWhile: isChecking || hasFailed,
+    })
 
     const handleFileClick = (filePath: string, line?: number) => {
         window.dispatchEvent(new CustomEvent('editor:open-file', { detail: { path: filePath, line } }))
@@ -36,23 +37,11 @@ export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
             }`}>
                 {/* Header */}
                 <button
-                    onClick={() => setIsExpanded(!isExpanded)}
+                    onClick={toggleExpanded}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
                 >
                     {/* Status icon */}
-                    <div className={`w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0 ${
-                        isChecking ? 'bg-accent/20' :
-                        hasFailed ? 'bg-red-500/10' :
-                        'bg-green-500/10'
-                    }`}>
-                        {isChecking ? (
-                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                        ) : hasFailed ? (
-                            <AlertTriangle className="w-2.5 h-2.5 text-red-500" />
-                        ) : (
-                            <Check className="w-2.5 h-2.5 text-green-500" />
-                        )}
-                    </div>
+                    <ToolActivityIndicator state={isChecking ? 'running' : hasFailed ? 'error' : 'success'} />
 
                     {/* Title */}
                     <span className="text-[11px] font-medium text-text-secondary flex-1">
@@ -79,15 +68,8 @@ export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
                 </button>
 
                 {/* Error details */}
-                <AnimatePresence>
-                    {isExpanded && filesWithErrors.length > 0 && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="overflow-hidden"
-                        >
+                {filesWithErrors.length > 0 && (
+                    <SmoothCollapse open={isExpanded}>
                             <div className="max-h-[260px] overflow-y-auto custom-scrollbar px-3 pb-2.5 space-y-2">
                                 {filesWithErrors.map((file, fi) => (
                                     <div key={fi} className="space-y-0.5">
@@ -119,9 +101,8 @@ export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
                                     </div>
                                 ))}
                             </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                    </SmoothCollapse>
+                )}
             </div>
         </div>
     )

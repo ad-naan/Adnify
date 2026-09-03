@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { InteractiveContent } from '@/renderer/agent/types'
 import { useStore } from '@store'
 import { t } from '@shared/i18n'
+import SmoothCollapse from './SmoothCollapse'
+import { useDisclosureState } from '@renderer/hooks'
 
 interface InteractiveCardProps {
     content: InteractiveContent
@@ -29,13 +31,14 @@ const isCustomOption = (option: { id: string; label: string }) => {
 }
 
 export function InteractiveCard({ content, onSelect, disabled }: InteractiveCardProps) {
-    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+    const initiallySubmitted = Boolean(content.answeredAt || content.selectedIds?.length)
     const [selected, setSelected] = useState<Set<string>>(
         new Set(content.selectedIds || [])
     )
-    const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
-    const initiallySubmitted = Boolean(content.answeredAt || content.selectedIds?.length)
     const [submitted, setSubmitted] = useState(initiallySubmitted)
+    const { isOpen: isExpanded, toggle: toggleExpanded, close: closeExpanded } = useDisclosureState({
+        openWhile: !submitted && !disabled,
+    })
     const submittedRef = useRef(initiallySubmitted)
     const [customText, setCustomText] = useState(content.customResponse || '')
     const [showCustomInput, setShowCustomInput] = useState(false)
@@ -49,10 +52,10 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
             submittedRef.current = true
             setCustomText(content.customResponse || '')
             if (disabled) {
-                setIsExpanded(false)
+                closeExpanded()
             }
         }
-    }, [content.answeredAt, content.customResponse, content.selectedIds, disabled])
+    }, [closeExpanded, content.answeredAt, content.customResponse, content.selectedIds, disabled])
 
     // 聚焦输入框
     useEffect(() => {
@@ -93,13 +96,11 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
         // 单选 + 非自定义：立即提交
         if (!content.multiSelect && !(option && isCustomOption(option))) {
             submittedRef.current = true
-            setTimeout(() => {
-                setSubmitted(true)
-                onSelect([id])
-                setIsExpanded(false)
-            }, 300)
+            setSubmitted(true)
+            onSelect([id])
+            closeExpanded()
         }
-    }, [content.multiSelect, content.options, disabled, submitted, onSelect])
+    }, [closeExpanded, content.multiSelect, content.options, disabled, onSelect])
 
     const handleSubmit = useCallback(() => {
         if (selected.size === 0 || submittedRef.current) return
@@ -114,16 +115,16 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
         submittedRef.current = true
         setSubmitted(true)
         onSelect(selectedArr, hasCustom && customText.trim() ? customText.trim() : undefined)
-        setIsExpanded(false)
-    }, [selected, submitted, onSelect, customText, content.options])
+        closeExpanded()
+    }, [closeExpanded, selected, onSelect, customText, content.options])
 
     const handleCustomSubmit = useCallback(() => {
         if (!customText.trim() || submittedRef.current) return
         submittedRef.current = true
         setSubmitted(true)
         onSelect(Array.from(selected), customText.trim())
-        setIsExpanded(false)
-    }, [customText, submitted, selected, onSelect])
+        closeExpanded()
+    }, [closeExpanded, customText, selected, onSelect])
 
     const toggleCustomInput = useCallback(() => {
         if (disabled || submittedRef.current) return
@@ -147,15 +148,9 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
             {/* Header */}
             <div
                 className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={toggleExpanded}
             >
-                <motion.div
-                    animate={{ rotate: isExpanded ? 90 : 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="shrink-0 text-text-muted/40 hover:text-text-muted"
-                >
-                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
-                </motion.div>
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform duration-300 hover:text-text-muted motion-reduce:transition-none ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
 
                 <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
                     {submitted ? (
@@ -185,15 +180,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
             </div>
 
             {/* Expanded Content */}
-            <AnimatePresence initial={false}>
-                {isExpanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
-                        className="overflow-hidden"
-                    >
+            <SmoothCollapse open={isExpanded}>
                         <div className="pl-[26px] pr-3 pb-2 pt-0 relative border-t-0">
                             <div className="absolute left-[13.5px] top-0 bottom-2 w-[1.5px] bg-border/40 rounded-full" />
 
@@ -340,9 +327,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                 </div>
                             )}
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            </SmoothCollapse>
         </div>
     )
 }

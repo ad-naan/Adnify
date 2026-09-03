@@ -1,9 +1,10 @@
-import { memo, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { memo, useMemo } from 'react'
 import { Archive, ChevronDown, Layers3, ListTodo, MessageSquareQuote, Sparkles } from 'lucide-react'
 import { useStore } from '@store'
 import { t, type Language } from '@shared/i18n'
 import type { ContextSnapshotPart } from '@/renderer/agent/types'
+import SmoothCollapse from './SmoothCollapse'
+import { useDisclosureState } from '@renderer/hooks'
 
 interface CompressionDigestCardProps {
   part: ContextSnapshotPart
@@ -42,8 +43,7 @@ function getCopy(language: Language, part: ContextSnapshotPart, activeTaskCount:
 export const CompressionDigestCard = memo(({ part, variant = 'card' }: CompressionDigestCardProps) => {
   const language = useStore(state => state.language || 'zh')
   const lang = language
-  const expandAgentBlocksByDefault = useStore(state => state.agentConfig.expandAgentBlocksByDefault ?? false)
-  const [expanded, setExpanded] = useState(expandAgentBlocksByDefault && variant === 'card')
+  const { isOpen: expanded, toggle: toggleExpanded } = useDisclosureState({})
   const todos = part.summary.todos || []
   const activeTodos = todos.filter(todo => todo.status !== 'completed')
   const tone = levelTone[part.level] || levelTone[3]
@@ -62,7 +62,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
     return (
       <div className="my-4 w-full">
         <button
-          onClick={() => setExpanded(value => !value)}
+          onClick={toggleExpanded}
           className="group flex w-full items-center gap-3 text-left text-text-muted transition-colors hover:text-text-secondary"
         >
           <div className="h-px flex-1 bg-border/50 transition-colors group-hover:bg-border" />
@@ -75,15 +75,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
           <div className="h-px flex-1 bg-border/50 transition-colors group-hover:bg-border" />
         </button>
 
-        <AnimatePresence initial={false}>
-          {expanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="overflow-hidden"
-            >
+        <SmoothCollapse open={expanded}>
               <div className="mx-8 mt-3 space-y-2 rounded-xl border border-border/40 bg-surface/25 px-3 py-3 text-[11px] text-text-secondary">
                 <div>
                   <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted/70">{copy.objective}</div>
@@ -103,9 +95,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
                   <span className="rounded-full bg-text-primary/[0.04] px-2 py-0.5">{copy.taskStat}</span>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </SmoothCollapse>
       </div>
     )
   }
@@ -113,7 +103,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
   return (
     <div className={`my-3 overflow-hidden rounded-2xl border border-border/50 bg-surface/40 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] transition-all ${tone.glow}`}>
       <button
-        onClick={() => setExpanded(value => !value)}
+        onClick={toggleExpanded}
         className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-text-primary/[0.03]"
       >
         <div className="min-w-0 flex-1">
@@ -146,15 +136,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
         <ChevronDown className={`mt-0.5 h-4 w-4 text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
       </button>
 
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
+      <SmoothCollapse open={expanded}>
             <div className="space-y-3 px-4 pb-4">
               {part.lastUserRequest && (
                 <div className="rounded-xl border border-border/40 bg-background/15 px-3 py-2.5">
@@ -205,9 +187,7 @@ export const CompressionDigestCard = memo(({ part, variant = 'card' }: Compressi
                 </div>
               )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </SmoothCollapse>
     </div>
   )
 })

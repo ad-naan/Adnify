@@ -1,68 +1,55 @@
-import React, { useState, useEffect } from 'react'
-import { CheckCircle2, ChevronDown, Brain } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React from 'react'
+import { ChevronDown, Brain } from 'lucide-react'
 import { useStore } from '@store'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 import { t } from '@shared/i18n'
+import SmoothCollapse from './SmoothCollapse'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
+import { useDisclosureState } from '@renderer/hooks'
+import type { ToolCall } from '@/renderer/agent/types'
 
 interface MemoryApprovalInlineProps {
-    content: unknown
+    toolCall: ToolCall
     isAwaitingApproval: boolean
-    isSuccess?: boolean
-    messageId: string
-    toolCallId: string
-    args: Record<string, any>
 }
 
 export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
-    content,
+    toolCall,
     isAwaitingApproval,
-    isSuccess,
 }) => {
     const language = useStore(s => s.language)
-    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
-    const safeContent = normalizeMemoryContentInput(content)
-    const [isExpanded, setIsExpanded] = useState(!isSuccess && expandAgentBlocksByDefault)
-
-    useEffect(() => {
-        if (isSuccess) {
-            setIsExpanded(false)
-        }
-    }, [isSuccess])
+    const safeContent = normalizeMemoryContentInput(toolCall.arguments.content)
+    const status = toolCall.status
+    const isSuccess = status === 'success'
+    const isError = status === 'error' || status === 'rejected'
+    const isRunning = status === 'pending' || status === 'running' || status === 'awaiting'
+    const activityState = isRunning ? 'running' : isSuccess ? 'success' : isError ? 'error' : 'idle'
+    const timing = getToolTiming(toolCall)
+    const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+        openWhile: isAwaitingApproval || isRunning || isError,
+    })
 
     const statusText = isSuccess
         ? (t('memoryApprovalInline.projectMemoryStored', language))
+        : isError
+            ? `${t('memoryApprovalInline.memoryProposal', language)} · ${t('common.failed', language)}`
         : (t('memoryApprovalInline.memoryProposal', language))
-
-    const isRunning = !isSuccess && !isAwaitingApproval
 
     return (
         <div className="group my-0.5 relative hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden">
             <div
                 className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={toggleExpanded}
             >
-                <motion.div
-                    animate={{ rotate: isExpanded ? 90 : 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="shrink-0 text-text-muted/40 hover:text-text-muted"
-                >
-                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
-                </motion.div>
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform duration-300 hover:text-text-muted motion-reduce:transition-none ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
 
                 <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-                    {isRunning ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                        </div>
-                    ) : isSuccess ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
-                        </div>
-                    ) : (
+                    {isAwaitingApproval ? (
                         <div className="w-3.5 h-3.5 rounded-full bg-purple-500/10 flex items-center justify-center">
                             <Brain className="w-2.5 h-2.5 text-purple-400" />
                         </div>
+                    ) : (
+                        <ToolActivityIndicator state={activityState} startedAt={timing.startedAt} />
                     )}
                 </div>
 
@@ -76,17 +63,15 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                         </span>
                     )}
                 </div>
+                <ToolElapsedTime
+                    state={activityState}
+                    startedAt={timing.startedAt}
+                    durationMs={timing.durationMs}
+                    className="mr-1"
+                />
             </div>
 
-            <AnimatePresence initial={false}>
-                {isExpanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
-                        className="overflow-hidden"
-                    >
+            <SmoothCollapse open={isExpanded}>
                         <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
                             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 
@@ -96,9 +81,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                                 </div>
                             </div>
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            </SmoothCollapse>
         </div>
     )
 }

@@ -1,7 +1,7 @@
 /**
  * 统一状态托盘
  * 
- * 将 AgentStatusBar（执行状态/文件变更）、TodoListPanel（任务列表）、
+ * 将执行状态、文件变更、任务列表、
  * MessageQueuePanel（消息队列）合并为一个紧凑的面板。
  * 
  * 设计思路：
@@ -24,6 +24,8 @@ import { deriveTerminalCommandRule, formatTerminalCommandRule, terminalCommandRu
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { supportsTaskApproval } from './ToolCallGroup'
 import { t, type Language } from '@shared/i18n'
+import SmoothCollapse from './SmoothCollapse'
+import { useDisclosureState } from '@renderer/hooks'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -65,7 +67,6 @@ function UnifiedStatusTray({
   onQueueSendNow,
 }: UnifiedStatusTrayProps) {
   const language = useStore(s => s.language)
-  const expandByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
 
   const queue = useMessageQueueStore(s => s.queue)
   const removeFromQueue = useMessageQueueStore(s => s.remove)
@@ -94,7 +95,9 @@ function UnifiedStatusTray({
   }, [hasApprovals, hasChanges, hasStatus, hasTodos, hasQueue])
 
   const [activeTab, setActiveTab] = useState<TabView>('approvals')
-  const [isExpanded, setIsExpanded] = useState(expandByDefault)
+  const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    openWhile: isAwaitingApproval,
+  })
 
   // 确保 activeTab 在可用范围内
   const currentTab = availableTabs.includes(activeTab)
@@ -255,15 +258,10 @@ function UnifiedStatusTray({
 
             {/* 展开/折叠 */}
             <button
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={toggleExpanded}
               className="p-1 rounded-md text-text-muted/50 hover:text-text-muted transition-colors"
             >
-              <motion.div
-                animate={{ rotate: isExpanded ? 0 : -90 }}
-                transition={{ duration: 0.15 }}
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </motion.div>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none ${isExpanded ? '' : '-rotate-90'}`} />
             </button>
           </div>
         </div>
@@ -278,16 +276,8 @@ function UnifiedStatusTray({
         )}
 
         {/* Content Area */}
-        <AnimatePresence mode="wait">
-          {isExpanded && (
-            <motion.div
-              key={currentTab}
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden border-t border-border/30"
-            >
+        <SmoothCollapse open={isExpanded}>
+            <div className="overflow-hidden border-t border-border/30">
               {currentTab === 'files' && hasChanges && (
                 <FileChangesContent
                   pendingChanges={pendingChanges}
@@ -322,9 +312,8 @@ function UnifiedStatusTray({
                   onReorder={reorderQueue}
                 />
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        </SmoothCollapse>
       </div>
     </motion.div>
       )}

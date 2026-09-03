@@ -67,12 +67,6 @@ export function AgentSettings({
                                 onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoFix: checked })}
                             />
                             <SettingToggle
-                                label={t('agentSettings.expandExecutionDetailsBy', language)}
-                                description={t('agentSettings.expandsReasoningToolCalls', language)}
-                                checked={agentConfig.expandAgentBlocksByDefault ?? false}
-                                onChange={(checked) => setAgentConfig({ ...agentConfig, expandAgentBlocksByDefault: checked })}
-                            />
-                            <SettingToggle
                                 label={t('common.recordToolCallLogs', language)}
                                 description={t('agentSettings.keepsToolRequestsResponses', language)}
                                 checked={agentConfig.enableToolCallLogging ?? false}

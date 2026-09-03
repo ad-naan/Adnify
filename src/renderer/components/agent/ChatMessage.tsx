@@ -40,20 +40,17 @@ import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import { selectLiveState, type LiveSelectorState } from './chatMessageLiveSelector'
 import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import { ImageLightbox } from './ImageLightbox'
-import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
+import type { AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
-import {
-  REVEAL_CLASS,
-  StreamingRevealTracker,
-  assignRevealPhases,
-  rehypeStreamingReveal,
-  type RevealSegment,
-} from './streamingTextReveal'
 import { skillService } from '@/renderer/agent/services/skillService'
 import { logger } from '@shared/utils/Logger'
 import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 import { parseThreadDeepLink } from '@/renderer/agent/threads/threadReference'
+import SmoothCollapse from './SmoothCollapse'
+import { useAssistantPlayback } from './useAssistantPlayback'
+import { createStreamingTailPlugin, StreamingPlainText, useStreamingTailSegments } from './StreamingTail'
+import { useDisclosureState } from '@renderer/hooks'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -73,7 +70,6 @@ interface ChatMessageProps {
 
 interface RenderPartProps {
   part: AssistantPart
-  index: number
   pendingToolId?: string
   onApproveTool?: () => void
   onApproveToolForTask?: () => void
@@ -88,33 +84,60 @@ interface RenderPartProps {
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
 
-/**
- * 纯文本通道的写入头渐显（推理过程、未闭合的代码栅栏）。这里的文字就是源码本身，
- * 最后一个字就是窗口的原点，所以 distanceOfLast = 0。markdown 那条路走
- * rehypeStreamingReveal，好让 span 落在正确的行内元素里。
- */
-const RevealText = React.memo(({ text, segments }: { text: string; segments: readonly RevealSegment[] }) => (
-  <>
-    {assignRevealPhases(text, 0, segments).map((part, index) => (
-      part.ageMs === undefined
-        ? <React.Fragment key={index}>{part.text}</React.Fragment>
-        : (
-          <span
-            key={index}
-            className={REVEAL_CLASS}
-            style={{ animationDelay: `-${Math.round(part.ageMs)}ms` }}
-          >
-            {part.text}
-          </span>
-        )
-    ))}
-  </>
-))
-RevealText.displayName = 'RevealText'
+function useTransientFlag(durationMs: number) {
+  const [active, setActive] = useState(false)
+  const timerRef = React.useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }, [])
+
+  const trigger = useCallback(() => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    setActive(true)
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      setActive(false)
+    }, durationMs)
+  }, [durationMs])
+
+  return [active, trigger] as const
+}
+
+const StreamingMarkdownBlock = React.memo(({
+  content,
+  components,
+  active,
+}: {
+  content: string
+  components: Record<string, React.ComponentType<any> | keyof React.JSX.IntrinsicElements>
+  active: boolean
+}) => {
+  const snapshot = useStreamingTailSegments(content, active)
+
+  const tailPlugin = React.useMemo(
+    () => createStreamingTailPlugin(snapshot.segments, active),
+    [active, snapshot.segments],
+  )
+  const rehypePlugins = React.useMemo(
+    () => [...MARKDOWN_REHYPE_PLUGINS, tailPlugin],
+    [tailPlugin],
+  )
+
+  return (
+    <StableStreamingMarkdownBlock
+      content={snapshot.text}
+      components={components}
+      rehypePlugins={rehypePlugins}
+    />
+  )
+})
+StreamingMarkdownBlock.displayName = 'StreamingMarkdownBlock'
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
-  const [copied, setCopied] = useState(false)
+  const [copied, showCopied] = useTransientFlag(2000)
   const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
   const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
@@ -141,9 +164,8 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
   const handleCopy = useCallback(async () => {
     const success = await writeClipboardText(codeText)
     if (!success) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [codeText])
+    showCopied()
+  }, [codeText, showCopied])
 
   return (
     <div className="relative group/code my-4 rounded-xl overflow-hidden border border-border bg-background-tertiary shadow-sm">
@@ -220,20 +242,21 @@ interface MessageMetaGroupProps {
 
 const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
   // Hooks 必须在所有条件返回之前调用（React 规则）
-  const { openFile, setActiveFile, workspacePath, expandAgentBlocksByDefault, language } = useStore(useShallow(s => ({
+  const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
     openFile: s.openFile,
     setActiveFile: s.setActiveFile,
     workspacePath: s.workspacePath,
-    expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
     language: s.language,
   })))
-  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
   const hasAutoSkills = autoSkills && autoSkills.length > 0
   const hasManualSkills = manualSkills && manualSkills.length > 0
   const hasSearch = searchContent !== undefined || isSearchStreaming
   const hasSkills = hasAutoSkills || hasManualSkills
-  const isStreaming = isSearchStreaming
+  const isStreaming = Boolean(isSearchStreaming)
+  const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    openWhile: isStreaming,
+  })
 
   if (!hasSkills && !hasSearch) return null
 
@@ -322,7 +345,16 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
     <div className="overflow-hidden w-full my-0.5 animate-fade-in relative z-10">
       {/* 标题行 */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpanded}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            toggleExpanded()
+          }
+        }}
         className="flex w-full items-center gap-1.5 py-1 cursor-pointer select-none group text-text-muted/50 hover:text-text-secondary transition-colors"
       >
         <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
@@ -348,22 +380,8 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
       </div>
 
       {/* 展开内容 */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={false}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: -3 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -2 }}
-              transition={{ duration: 0.12, ease: 'easeOut' }}
-              className="pt-1 pb-1.5 pl-[20px] pr-2 space-y-2"
-            >
+      <SmoothCollapse open={isExpanded}>
+        <div className="pt-1 pb-1.5 pl-[20px] pr-2 space-y-2">
               {/* 引用技能 */}
               {hasSkills && (
                 <div className="space-y-1">
@@ -402,10 +420,8 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
                   )}
                 </div>
               )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      </SmoothCollapse>
     </div>
   )
 })
@@ -440,10 +456,6 @@ function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh
     items.push(t('chatMessage.checks', language))
   }
 
-  if (summary.hasSystemAlert) {
-    items.push(t('chatMessage.alerts', language))
-  }
-
   if (summary.hasProcessText) {
     items.push(t('chatMessage.notes', language))
   }
@@ -455,6 +467,7 @@ interface ProcessFoldProps {
   children: React.ReactNode
   language: 'zh' | 'en'
   summary: AssistantProcessSummary
+  isActive: boolean
 }
 
 const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => (
@@ -470,8 +483,10 @@ const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => 
 ))
 ProcessFoldDivider.displayName = 'ProcessFoldDivider'
 
-const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProps) => {
-  const [isExpanded, setIsExpanded] = useState(false)
+const ProcessFold = React.memo(({ children, language, summary, isActive }: ProcessFoldProps) => {
+  const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    openWhile: isActive,
+  })
   const summaryText = buildProcessSummaryText(summary, language)
   const titleText = summaryText || (t('chatMessage.process', language))
   const detailLabel = isExpanded
@@ -483,7 +498,7 @@ const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProp
       <button
         type="button"
         aria-expanded={isExpanded}
-        onClick={() => setIsExpanded(prev => !prev)}
+        onClick={toggleExpanded}
         className="group flex w-full items-center gap-2 text-left text-text-muted/55 transition-colors hover:text-text-secondary"
       >
         <ProcessFoldDivider side="left" />
@@ -495,27 +510,26 @@ const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProp
         <ProcessFoldDivider side="right" />
       </button>
 
-      {isExpanded && (
+      <SmoothCollapse open={isExpanded} className="w-full">
         <div className="mt-2 w-full space-y-1 text-[11px] text-text-secondary [&>*]:my-0.5">
           {children}
         </div>
-      )}
+      </SmoothCollapse>
     </div>
   )
 })
 ProcessFold.displayName = 'ProcessFold'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
-  const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
-  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
+  const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    openWhile: isStreaming,
+  })
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
-
-  // 见 MarkdownContent 里同名的一段：年龄要跟着这一次渲染走，所以不缓存
-  const revealTracker = React.useMemo(() => new StreamingRevealTracker(), [])
-  const revealSegments = revealTracker.update(content, !!isStreaming)
+  const visibleContent = content
+  const isVisuallyStreaming = isStreaming
 
   useEffect(() => {
     if (!startTime || !isStreaming) return
@@ -539,7 +553,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     checkScroll()
     el.addEventListener('scroll', checkScroll)
     return () => el.removeEventListener('scroll', checkScroll)
-  }, [isExpanded, content])
+  }, [isExpanded, visibleContent])
 
 
   // 流式输出时自动滚动到底部
@@ -547,7 +561,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     if (isStreaming && isExpanded && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [content, isStreaming, isExpanded])
+  }, [visibleContent, isStreaming, isExpanded])
 
   const durationText = !isStreaming
     ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
@@ -556,8 +570,10 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   return (
     <div className="my-3 group/think overflow-hidden">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
+        type="button"
+        aria-expanded={isExpanded}
+        onClick={toggleExpanded}
+        className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md py-1.5 text-text-muted/50 transition-colors hover:bg-text-primary/[0.03] hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
           <ChevronDown className="w-3.5 h-3.5" />
@@ -567,18 +583,18 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
         </span>
       </button>
 
-      {isExpanded && (
+      <SmoothCollapse open={isExpanded}>
         <div className={`relative scroll-shadow-container ${isStreaming ? 'animate-slide-down' : ''} ${shadowClass}`}>
           <div
             ref={scrollRef}
             className="max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
           >
-            {content ? (
+            {visibleContent ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
                 className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans"
               >
-                <RevealText text={content} segments={revealSegments} />
+                <StreamingPlainText text={visibleContent} active={isVisuallyStreaming} />
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -587,33 +603,43 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
             )}
           </div>
         </div>
-      )}
+      </SmoothCollapse>
     </div>
   )
 })
 ThinkingBlock.displayName = 'ThinkingBlock'
 
 // Markdown 渲染组件
-const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
-  const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
+const MarkdownContent = React.memo(({
+  content: rawContent,
+  fontSize,
+  isStreaming,
+}: {
+  content: string
+  fontSize: number
+  isStreaming?: boolean
+}) => {
+  const incomingContent = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
+  const content = incomingContent
+  const isVisuallyStreaming = !!isStreaming
   const streamedInThisMountRef = React.useRef(false)
-  if (isStreaming) streamedInThisMountRef.current = true
+  if (isVisuallyStreaming) streamedInThisMountRef.current = true
   const keepStreamingLayout = streamedInThisMountRef.current
 
   // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
     // Live text was filtered before entering the store. Settled and historical
     // messages keep one defensive pass for older persisted data.
-    return isStreaming ? content.trim() : stripToolCallLeaks(content)
-  }, [content, isStreaming])
+    return isVisuallyStreaming ? content : stripToolCallLeaks(content)
+  }, [content, isVisuallyStreaming])
 
   // 检测系统警告
   const systemAlert = React.useMemo(() => {
-    if (!isStreaming) {
+    if (!isVisuallyStreaming) {
       return parseSystemAlert(cleanedContent)
     }
     return null
-  }, [cleanedContent, isStreaming])
+  }, [cleanedContent, isVisuallyStreaming])
 
   // 如果检测到系统警告，移除原始文本中的警告部分
   const contentWithoutAlert = React.useMemo(() => {
@@ -626,18 +652,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   const streamingPartitioner = React.useMemo(() => new StreamingMarkdownPartitioner(), [])
   const streamingPartition = React.useMemo(
-    () => keepStreamingLayout ? streamingPartitioner.update(contentWithoutAlert, !!isStreaming) : null,
-    [contentWithoutAlert, isStreaming, keepStreamingLayout, streamingPartitioner],
+    () => keepStreamingLayout ? streamingPartitioner.update(contentWithoutAlert, isVisuallyStreaming) : null,
+    [contentWithoutAlert, isVisuallyStreaming, keepStreamingLayout, streamingPartitioner],
   )
-
-  // 刻意不 useMemo：年龄必须跟着「这一次渲染」走。缓存在 content 上的话，同一段内容
-  // 因为别的原因（字号变了、父组件更新）再渲染一次时相位会往回跳。update 对状态是幂等的，
-  // 每帧调一次的代价只是遍历十几个批次。
-  const revealTracker = React.useMemo(() => new StreamingRevealTracker(), [])
-  const revealSegments = revealTracker.update(contentWithoutAlert, !!isStreaming)
-  const activeRehypePlugins = revealSegments.length > 0
-    ? [...MARKDOWN_REHYPE_PLUGINS, rehypeStreamingReveal(revealSegments)]
-    : undefined
 
   const workspacePath = useStore(s => s.workspacePath)
 
@@ -755,13 +772,16 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
                 <div key={`active-block-${streamingPartition.completedBlocks.length}`}>
                   {streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
                     <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
-                      <RevealText text={streamingPartition.activeBlock} segments={revealSegments} />
+                      <StreamingPlainText
+                        text={streamingPartition.activeBlock}
+                        active={isVisuallyStreaming}
+                      />
                     </div>
                   ) : (
-                    <StableStreamingMarkdownBlock
+                    <StreamingMarkdownBlock
                       content={streamingPartition.activeBlock}
                       components={markdownComponents as any}
-                      rehypePlugins={activeRehypePlugins}
+                      active={isVisuallyStreaming}
                     />
                   )}
                 </div>
@@ -969,7 +989,7 @@ const AssistantMessageContent = React.memo(({
   onStopTool,
   onOpenDiff,
   fontSize,
-  isStreaming,
+  activePart,
   messageId,
 }: {
   parts: AssistantPart[]
@@ -980,13 +1000,13 @@ const AssistantMessageContent = React.memo(({
   onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   fontSize: number
-  isStreaming?: boolean
+  activePart?: AssistantPart
   messageId: string
 }) => {
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
     const result: Array<
-      | { type: 'part'; part: AssistantPart; index: number; key: string }
+      | { type: 'part'; part: AssistantPart; key: string }
       | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number; key: string }
     > = []
     const stablePartKeys = buildChatMessagePartKeys(parts)
@@ -1004,11 +1024,13 @@ const AssistantMessageContent = React.memo(({
             type: 'tool_group',
             toolCalls: currentToolCalls,
             startIndex,
-            key: `tools:${currentToolCalls.map(toolCall => toolCall.id).join(':')}`,
+            // Keep the group mounted as later tools append; changing the key for
+            // every new id remounts all rows and destroys their transition state.
+            key: `tools:${currentToolCalls[0].id}`,
           })
           currentToolCalls = []
         }
-        result.push({ type: 'part', part, index, key: stablePartKeys[index] })
+        result.push({ type: 'part', part, key: stablePartKeys[index] })
       }
     })
 
@@ -1017,7 +1039,7 @@ const AssistantMessageContent = React.memo(({
         type: 'tool_group',
         toolCalls: currentToolCalls,
         startIndex,
-        key: `tools:${currentToolCalls.map(toolCall => toolCall.id).join(':')}`,
+        key: `tools:${currentToolCalls[0].id}`,
       })
     }
 
@@ -1032,7 +1054,6 @@ const AssistantMessageContent = React.memo(({
             <div key={group.key} className="w-full">
               <RenderPart
                 part={group.part}
-                index={group.index}
                 pendingToolId={pendingToolId}
                 onApproveTool={onApproveTool}
                 onApproveToolForTask={onApproveToolForTask}
@@ -1040,7 +1061,7 @@ const AssistantMessageContent = React.memo(({
                 onStopTool={onStopTool}
                 onOpenDiff={onOpenDiff}
                 fontSize={fontSize}
-                isStreaming={isStreaming}
+                isStreaming={group.part === activePart}
                 messageId={messageId}
               />
             </div>
@@ -1052,7 +1073,6 @@ const AssistantMessageContent = React.memo(({
             <div key={group.key} className="w-full">
               <RenderPart
                 part={parts[group.startIndex]}
-                index={group.startIndex}
                 pendingToolId={pendingToolId}
                 onApproveTool={onApproveTool}
                 onApproveToolForTask={onApproveToolForTask}
@@ -1060,7 +1080,7 @@ const AssistantMessageContent = React.memo(({
                 onStopTool={onStopTool}
                 onOpenDiff={onOpenDiff}
                 fontSize={fontSize}
-                isStreaming={isStreaming}
+                isStreaming={false}
                 messageId={messageId}
               />
             </div>
@@ -1087,6 +1107,143 @@ const AssistantMessageContent = React.memo(({
 })
 AssistantMessageContent.displayName = 'AssistantMessageContent'
 
+interface AssistantTurnContentProps {
+  parts: AssistantPart[]
+  isTransportActive: boolean
+  isAwaitingApproval: boolean
+  hasContextMeta: boolean
+  autoSkills?: any[]
+  manualSkills?: any[]
+  searchContent?: string
+  isSearchStreaming?: boolean
+  pendingToolId?: string
+  onApproveTool?: () => void
+  onApproveToolForTask?: () => void
+  onRejectTool?: () => void
+  onStopTool?: () => void
+  onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
+  fontSize: number
+  language: 'zh' | 'en'
+  messageId: string
+}
+
+const AssistantTurnContent = React.memo(({
+  parts,
+  isTransportActive,
+  isAwaitingApproval,
+  hasContextMeta,
+  autoSkills,
+  manualSkills,
+  searchContent,
+  isSearchStreaming,
+  pendingToolId,
+  onApproveTool,
+  onApproveToolForTask,
+  onRejectTool,
+  onStopTool,
+  onOpenDiff,
+  fontSize,
+  language,
+  messageId,
+}: AssistantTurnContentProps) => {
+  const playback = useAssistantPlayback({
+    parts,
+    isTransportActive,
+    isAwaitingApproval,
+    hasContextMeta,
+  })
+
+  const sharedProps = {
+    pendingToolId,
+    onApproveTool,
+    onApproveToolForTask,
+    onRejectTool,
+    onStopTool,
+    onOpenDiff,
+    fontSize,
+    messageId,
+  }
+
+  return (
+    <div className="prose-custom w-full max-w-none">
+      {playback.hasProcessContent && (
+        <ProcessFold
+          language={language}
+          summary={playback.summary}
+          isActive={playback.isProcessActive}
+        >
+          {hasContextMeta && (
+            <MessageMetaGroup
+              autoSkills={autoSkills}
+              manualSkills={manualSkills}
+              searchContent={searchContent}
+              isSearchStreaming={isSearchStreaming}
+            />
+          )}
+          {playback.processParts.length > 0 && (
+            <AssistantMessageContent
+              {...sharedProps}
+              parts={playback.processParts}
+              activePart={playback.activeProcessPart}
+            />
+          )}
+        </ProcessFold>
+      )}
+
+      {playback.alertParts.length > 0 && (
+        <AssistantMessageContent
+          {...sharedProps}
+          parts={playback.alertParts}
+        />
+      )}
+
+      {playback.finalReplyParts.length > 0 && (
+        <AssistantMessageContent
+          {...sharedProps}
+          parts={playback.finalReplyParts}
+          activePart={playback.activeFinalReplyPart}
+        />
+      )}
+    </div>
+  )
+})
+AssistantTurnContent.displayName = 'AssistantTurnContent'
+
+const AssistantStreamingBadge = React.memo(({ language }: { language: 'zh' | 'en' }) => {
+  const [typingIndex, setTypingIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTypingIndex(previous => (previous + 1) % 8)
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  return (
+    <div className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-surface-hover/50 border border-transparent self-center mt-[1px]">
+      <div className="relative flex h-[5px] w-[5px] items-center justify-center shrink-0">
+        <span className="animate-ping absolute inline-flex h-[8px] w-[8px] rounded-full bg-accent/40 opacity-75" style={{ animationDuration: '2s' }} />
+        <span className="relative inline-flex rounded-full h-[5px] w-[5px] bg-accent" />
+      </div>
+      <div className="relative flex items-center overflow-hidden h-[16px]">
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={typingIndex}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="text-[10px] text-text-muted/80 font-medium whitespace-nowrap tracking-wide"
+          >
+            {t(`agent.typing.${typingIndex}` as any, language)}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+})
+AssistantStreamingBadge.displayName = 'AssistantStreamingBadge'
+
 const ChatMessage = React.memo(({
   message: messageProp,
   onEdit,
@@ -1105,12 +1262,11 @@ const ChatMessage = React.memo(({
 
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, showCopied] = useTransientFlag(2000)
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
-  const { editorConfig, language, expandAgentBlocksByDefault, userAvatarStyle, userAvatarSeed, userDisplayName, setShowAvatarDialog } = useStore(useShallow(s => ({
+  const { editorConfig, language, userAvatarStyle, userAvatarSeed, userDisplayName, setShowAvatarDialog } = useStore(useShallow(s => ({
     editorConfig: s.editorConfig,
     language: s.language,
-    expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
     userAvatarStyle: s.userAvatarStyle,
     userAvatarSeed: s.userAvatarSeed,
     userDisplayName: s.userDisplayName,
@@ -1141,8 +1297,7 @@ const ChatMessage = React.memo(({
   const handleCopy = async () => {
     const success = await writeClipboardText(textContent)
     if (!success) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    showCopied()
   }
 
   const tt = {
@@ -1153,7 +1308,6 @@ const ChatMessage = React.memo(({
     cancel: t('cancel', language),
   }
 
-  const [typingIndex, setTypingIndex] = useState(0)
   // selector 提到了 chatMessageLiveSelector.ts —— 它有引用稳定性要求需要被测试
   // 覆盖（静态消息必须返回恒等引用，否则 overscan 内的每条消息都会跟着流式重渲染）
   const { isStreaming, liveParts, liveInteractive } = useAgentStore(
@@ -1170,15 +1324,6 @@ const ChatMessage = React.memo(({
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
 
-  useEffect(() => {
-    if (isStreaming) {
-      const interval = setInterval(() => {
-        setTypingIndex(prev => (prev + 1) % 8)
-      }, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [isStreaming])
-
   const hasMetaGroup = React.useMemo(() => {
     if (!isAssistantMessage(message)) return false
 
@@ -1188,30 +1333,10 @@ const ChatMessage = React.memo(({
     )
   }, [assistantParts, message])
 
-  const assistantProjection = React.useMemo(() => {
-    if (!isAssistantMessage(message) || !assistantParts) {
-      return null
-    }
-
-    const messageHasPendingApproval = isAwaitingApproval
-      && !!pendingToolId
-      && (message.toolCalls?.some(toolCall => toolCall.id === pendingToolId) ?? false)
-
-    return projectAssistantTurn(assistantParts, {
-      isStreaming,
-      isAwaitingApproval: messageHasPendingApproval,
-      expandProcessByDefault: expandAgentBlocksByDefault,
-      hasContextMeta: hasMetaGroup,
-    })
-  }, [assistantParts, expandAgentBlocksByDefault, hasMetaGroup, isAwaitingApproval, isStreaming, message, pendingToolId])
-
-  const shouldCollapseProcess = assistantProjection?.shouldCollapseProcess ?? false
-  const shouldRenderMetaGroup = isAssistantMessage(message) && !shouldCollapseProcess && hasMetaGroup
-  const alertAssistantParts = assistantProjection?.alertParts ?? []
-  const visibleAssistantParts = shouldCollapseProcess
-    ? (assistantProjection?.finalReplyParts ?? [])
-    : (assistantParts ?? []).filter(part => !isSystemAlertPart(part))
-  const processAssistantParts = assistantProjection?.processParts ?? []
+  const messageHasPendingApproval = isAssistantMessage(message)
+    && isAwaitingApproval
+    && !!pendingToolId
+    && (message.toolCalls?.some(toolCall => toolCall.id === pendingToolId) ?? false)
 
   return (
     <div className={`
@@ -1431,28 +1556,7 @@ const ChatMessage = React.memo(({
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
 
-                {isStreaming && (
-                  <div className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-surface-hover/50 border border-transparent self-center mt-[1px]">
-                    <div className="relative flex h-[5px] w-[5px] items-center justify-center shrink-0">
-                      <span className="animate-ping absolute inline-flex h-[8px] w-[8px] rounded-full bg-accent/40 opacity-75" style={{ animationDuration: '2s' }} />
-                      <span className="relative inline-flex rounded-full h-[5px] w-[5px] bg-accent" />
-                    </div>
-                    <div className="relative flex items-center overflow-hidden h-[16px]">
-                      <AnimatePresence mode="wait">
-                        <motion.span
-                          key={typingIndex}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          transition={{ duration: 0.25, ease: "easeOut" }}
-                          className="text-[10px] text-text-muted/80 font-medium whitespace-nowrap tracking-wide"
-                        >
-                          {t(`agent.typing.${typingIndex}` as any, language)}
-                        </motion.span>
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                )}
+                {isStreaming && <AssistantStreamingBadge language={language} />}
               </div>
 
               {!isStreaming && (
@@ -1472,73 +1576,27 @@ const ChatMessage = React.memo(({
             </div>
 
             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
-              {/* System Context Widget at the top of the content */}
-              {shouldRenderMetaGroup && (
-                <MessageMetaGroup
+              {assistantParts && (
+                <AssistantTurnContent
+                  parts={assistantParts}
+                  isTransportActive={isStreaming}
+                  isAwaitingApproval={messageHasPendingApproval}
+                  hasContextMeta={hasMetaGroup}
                   autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
                   manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
-                  searchContent={assistantParts?.find(isSearchPart)?.content || undefined}
-                  isSearchStreaming={(assistantParts?.find(isSearchPart) as any)?.isStreaming}
+                  searchContent={assistantParts.find(isSearchPart)?.content || undefined}
+                  isSearchStreaming={(assistantParts.find(isSearchPart) as any)?.isStreaming}
+                  pendingToolId={pendingToolId}
+                  onApproveTool={onApproveTool}
+                  onApproveToolForTask={onApproveToolForTask}
+                  onRejectTool={onRejectTool}
+                  onStopTool={onStopTool}
+                  onOpenDiff={onOpenDiff}
+                  fontSize={fontSize}
+                  language={language}
+                  messageId={message.id}
                 />
               )}
-              <div className="prose-custom w-full max-w-none">
-                {shouldCollapseProcess && assistantProjection?.hasProcessContent && (
-                  <ProcessFold key="process" language={language} summary={assistantProjection.summary}>
-                    {hasMetaGroup && (
-                      <MessageMetaGroup
-                        autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
-                        manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
-                        searchContent={assistantParts?.find(isSearchPart)?.content || undefined}
-                        isSearchStreaming={(assistantParts?.find(isSearchPart) as any)?.isStreaming}
-                      />
-                    )}
-                    {processAssistantParts.length > 0 && (
-                      <AssistantMessageContent
-                        parts={processAssistantParts}
-                        pendingToolId={pendingToolId}
-                        onApproveTool={onApproveTool}
-                        onApproveToolForTask={onApproveToolForTask}
-                        onRejectTool={onRejectTool}
-                        onStopTool={onStopTool}
-                        onOpenDiff={onOpenDiff}
-                        fontSize={fontSize}
-                        isStreaming={isStreaming}
-                        messageId={message.id}
-                      />
-                    )}
-                  </ProcessFold>
-                )}
-                {alertAssistantParts.length > 0 && (
-                  <AssistantMessageContent
-                    key="alerts"
-                    parts={alertAssistantParts}
-                    pendingToolId={pendingToolId}
-                    onApproveTool={onApproveTool}
-                    onApproveToolForTask={onApproveToolForTask}
-                    onRejectTool={onRejectTool}
-                    onStopTool={onStopTool}
-                    onOpenDiff={onOpenDiff}
-                    fontSize={fontSize}
-                    isStreaming={isStreaming}
-                    messageId={message.id}
-                  />
-                )}
-                {visibleAssistantParts.length > 0 && (
-                  <AssistantMessageContent
-                    key="visible"
-                    parts={visibleAssistantParts}
-                    pendingToolId={pendingToolId}
-                    onApproveTool={onApproveTool}
-                    onApproveToolForTask={onApproveToolForTask}
-                    onRejectTool={onRejectTool}
-                    onStopTool={onStopTool}
-                    onOpenDiff={onOpenDiff}
-                    fontSize={fontSize}
-                    isStreaming={isStreaming}
-                    messageId={message.id}
-                  />
-                )}
-              </div>
 
               {assistantInteractive && !isStreaming && (
                 <div className="mt-2 w-full">

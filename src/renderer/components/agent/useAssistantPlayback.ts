@@ -1,0 +1,312 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { AssistantPart } from '@renderer/agent/types'
+import {
+  isLintCheckPart,
+  isReasoningPart,
+  isSearchPart,
+  isTextPart,
+  isToolCallPart,
+} from '@renderer/agent/types'
+import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
+import { usePlaybackClock } from './usePlaybackClock'
+import { AGENT_PLAYBACK_RELEASE_MS } from '@renderer/agent/presentation/disclosureMotion'
+
+type TextBearingPart = Extract<AssistantPart, { type: 'text' | 'reasoning' }>
+
+interface AssistantPlaybackOptions {
+  parts: AssistantPart[]
+  isTransportActive: boolean
+  isAwaitingApproval: boolean
+  hasContextMeta: boolean
+}
+
+export interface AssistantPlayback {
+  alertParts: AssistantPart[]
+  finalReplyParts: AssistantPart[]
+  processParts: AssistantPart[]
+  activeFinalReplyPart?: AssistantPart
+  activeProcessPart?: AssistantPart
+  hasProcessContent: boolean
+  isProcessActive: boolean
+  summary: AssistantProcessSummary
+}
+
+function isTextBearingPart(part: AssistantPart): part is TextBearingPart {
+  return isTextPart(part) || isReasoningPart(part)
+}
+
+export function isPlaybackBarrier(part: AssistantPart): boolean {
+  if (isReasoningPart(part) || isSearchPart(part)) return !!part.isStreaming
+  if (isToolCallPart(part)) {
+    return part.toolCall.status === 'pending'
+      || part.toolCall.status === 'awaiting'
+      || part.toolCall.status === 'running'
+  }
+  return isLintCheckPart(part) && part.status === 'checking'
+}
+
+export function findPlaybackFrontier(parts: AssistantPart[]): number {
+  const blockingIndex = parts.findIndex(isPlaybackBarrier)
+  return blockingIndex >= 0 ? blockingIndex : parts.length - 1
+}
+
+export function buildPlayableText(parts: AssistantPart[], frontierIndex: number): string {
+  if (frontierIndex < 0) return ''
+  return parts
+    .slice(0, frontierIndex + 1)
+    .filter(isTextBearingPart)
+    .map(part => part.content)
+    .join('')
+}
+
+interface VisibleTimeline {
+  bySource: Map<AssistantPart, AssistantPart>
+  activeSource?: AssistantPart
+}
+
+interface ReleaseMachine {
+  releasedFrontier: number
+  pendingFrontier: number
+  previousBarrier: number
+  completedBarrier: boolean
+  timer: number | null
+}
+
+export type PlaybackFrontierAction =
+  | 'wait-for-successor'
+  | 'follow-source'
+  | 'reactivate-current'
+  | 'drain-current'
+  | 'collapse-current'
+
+export function decidePlaybackFrontierAction({
+  sourceFrontier,
+  releasedFrontier,
+  activeBarrier,
+  completedBarrier,
+  frontierDrained,
+}: {
+  sourceFrontier: number
+  releasedFrontier: number
+  activeBarrier: number
+  completedBarrier: boolean
+  frontierDrained: boolean
+}): PlaybackFrontierAction {
+  if (sourceFrontier < releasedFrontier) return 'follow-source'
+  if (activeBarrier >= 0 && activeBarrier <= releasedFrontier) return 'reactivate-current'
+  if (sourceFrontier <= releasedFrontier) return 'wait-for-successor'
+  if (!completedBarrier) return 'follow-source'
+  if (!frontierDrained) return 'drain-current'
+  return 'collapse-current'
+}
+
+export function buildVisibleTimeline(
+  parts: AssistantPart[],
+  frontierIndex: number,
+  revealedCharacters: number,
+  isTransportActive: boolean,
+): VisibleTimeline {
+  const bySource = new Map<AssistantPart, AssistantPart>()
+  let textOffset = 0
+  let activeSource: AssistantPart | undefined
+
+  for (let index = 0; index <= frontierIndex; index += 1) {
+    const part = parts[index]
+    if (!part) break
+
+    if (!isTextBearingPart(part)) {
+      bySource.set(part, part)
+      continue
+    }
+
+    const content = part.content
+    const visibleLength = Math.max(0, Math.min(content.length, revealedCharacters - textOffset))
+
+    if (content.length === 0) {
+      if (isPlaybackBarrier(part)) {
+        const visiblePart = isReasoningPart(part)
+          ? { ...part, isStreaming: true }
+          : part
+        bySource.set(part, visiblePart)
+        activeSource = part
+        break
+      }
+      continue
+    }
+
+    if (visibleLength <= 0) break
+
+    const isPartial = visibleLength < content.length
+    const visiblePart = isReasoningPart(part)
+      ? { ...part, content: content.slice(0, visibleLength), isStreaming: isPartial }
+      : { ...part, content: content.slice(0, visibleLength) }
+    bySource.set(part, visiblePart)
+
+    if (isPartial) {
+      activeSource = part
+      break
+    }
+
+    textOffset += content.length
+
+    if (
+      index === frontierIndex
+      && (isPlaybackBarrier(part) || (isTransportActive && frontierIndex === parts.length - 1))
+    ) {
+      activeSource = part
+      if (isReasoningPart(part)) {
+        bySource.set(part, { ...part, isStreaming: true })
+      }
+    }
+  }
+
+  return { activeSource, bySource }
+}
+
+function materializeParts(
+  sourceParts: AssistantPart[],
+  visibleBySource: Map<AssistantPart, AssistantPart>,
+): AssistantPart[] {
+  return sourceParts.flatMap(part => {
+    const visible = visibleBySource.get(part)
+    return visible ? [visible] : []
+  })
+}
+
+/**
+ * Owns the assistant turn's only character clock.
+ *
+ * Source parts stay authoritative and append-only. The first running part is a
+ * barrier: later text is not mounted until that part settles and all preceding
+ * text has drained through this one writer.
+ */
+export function useAssistantPlayback({
+  parts,
+  isTransportActive,
+  isAwaitingApproval,
+  hasContextMeta,
+}: AssistantPlaybackOptions): AssistantPlayback {
+  const projection = useMemo(() => projectAssistantTurn(parts, {
+    hasContextMeta,
+  }), [hasContextMeta, parts])
+
+  const sourceFrontier = useMemo(() => findPlaybackFrontier(parts), [parts])
+  const activeBarrier = parts.findIndex(isPlaybackBarrier)
+  const [frontierIndex, setFrontierIndex] = useState(sourceFrontier)
+  const releaseMachineRef = useRef<ReleaseMachine>({
+    releasedFrontier: sourceFrontier,
+    pendingFrontier: sourceFrontier,
+    previousBarrier: activeBarrier,
+    completedBarrier: false,
+    timer: null,
+  })
+  const playableText = useMemo(
+    () => buildPlayableText(parts, frontierIndex),
+    [frontierIndex, parts],
+  )
+
+  const hasBeenLiveRef = useRef(false)
+  if (isTransportActive || isAwaitingApproval || parts.some(isPlaybackBarrier)) {
+    hasBeenLiveRef.current = true
+  }
+
+  const visibleText = usePlaybackClock(playableText, hasBeenLiveRef.current)
+  const frontierDrained = visibleText.length >= playableText.length
+
+  useEffect(() => {
+    const machine = releaseMachineRef.current
+    machine.pendingFrontier = sourceFrontier
+
+    const clearReleaseTimer = () => {
+      if (machine.timer === null) return
+      window.clearTimeout(machine.timer)
+      machine.timer = null
+    }
+
+    const publishFrontier = (nextFrontier: number) => {
+      machine.releasedFrontier = nextFrontier
+      machine.completedBarrier = false
+      setFrontierIndex(nextFrontier)
+    }
+
+    if (machine.previousBarrier >= 0 && activeBarrier !== machine.previousBarrier) {
+      // Remember the completed stage even when its successor arrives in a later
+      // store publish. This is what prevents the first final glyph from escaping
+      // between Thought completion and the next chunk.
+      machine.completedBarrier = true
+    }
+    machine.previousBarrier = activeBarrier
+
+    const action = decidePlaybackFrontierAction({
+      sourceFrontier,
+      releasedFrontier: machine.releasedFrontier,
+      activeBarrier,
+      completedBarrier: machine.completedBarrier,
+      frontierDrained,
+    })
+
+    switch (action) {
+      case 'follow-source':
+        clearReleaseTimer()
+        publishFrontier(sourceFrontier)
+        break
+      case 'reactivate-current':
+        clearReleaseTimer()
+        machine.completedBarrier = false
+        break
+      case 'wait-for-successor':
+        clearReleaseTimer()
+        break
+      case 'drain-current':
+        break
+      case 'collapse-current':
+        if (machine.timer !== null) break
+        machine.timer = window.setTimeout(() => {
+          machine.timer = null
+          publishFrontier(machine.pendingFrontier)
+        }, AGENT_PLAYBACK_RELEASE_MS)
+        break
+    }
+  }, [activeBarrier, frontierDrained, sourceFrontier])
+
+  useEffect(() => () => {
+    const machine = releaseMachineRef.current
+    if (machine.timer !== null) window.clearTimeout(machine.timer)
+    machine.timer = null
+  }, [])
+
+  const timeline = useMemo(
+    () => buildVisibleTimeline(parts, frontierIndex, visibleText.length, isTransportActive),
+    [frontierIndex, isTransportActive, parts, visibleText.length],
+  )
+
+  const processParts = materializeParts(projection.processParts, timeline.bySource)
+  const finalReplyParts = materializeParts(projection.finalReplyParts, timeline.bySource)
+  const alertParts = materializeParts(projection.alertParts, timeline.bySource)
+  const activeVisiblePart = timeline.activeSource
+    ? timeline.bySource.get(timeline.activeSource)
+    : undefined
+  const hasSourceBarrier = parts.some(isPlaybackBarrier)
+  const sourceStage = parts[sourceFrontier]
+  const processOwnsPendingStage = !!sourceStage && projection.processParts.includes(sourceStage)
+  const isProcessActive = projection.hasProcessContent && (
+    isAwaitingApproval
+    || hasSourceBarrier
+    || (isTransportActive && processOwnsPendingStage)
+  )
+
+  return {
+    alertParts,
+    finalReplyParts,
+    processParts,
+    activeFinalReplyPart: timeline.activeSource && projection.finalReplyParts.includes(timeline.activeSource)
+      ? activeVisiblePart
+      : undefined,
+    activeProcessPart: timeline.activeSource && projection.processParts.includes(timeline.activeSource)
+      ? activeVisiblePart
+      : undefined,
+    hasProcessContent: projection.hasProcessContent,
+    isProcessActive,
+    summary: projection.summary,
+  }
+}

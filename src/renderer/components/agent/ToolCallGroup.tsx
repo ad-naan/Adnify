@@ -1,10 +1,6 @@
 /**
- * 工具调用组组件
- * 简化设计：聚焦当前，简化历史
- *
- * - 正在执行的工具：独立显示，自动展开
- * - 已完成的工具：全部折叠到组中
- * - 用户可以展开折叠组查看历史
+ * Groups adjacent tool rows without owning disclosure state. Each specialized
+ * card follows the shared automatic/manual disclosure state machine.
  */
 
 import { memo } from 'react'
@@ -14,7 +10,6 @@ import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
-import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 import SubAgentTaskCard from './SubAgentTaskCard'
 import { assessShellCommand } from '@shared/security/executionPolicy'
 
@@ -81,12 +76,8 @@ export function renderToolCallCard(
     return (
       <MemoryApprovalInline
         key={tc.id}
-        content={normalizeMemoryContentInput(tc.arguments.content)}
+        toolCall={tc}
         isAwaitingApproval={isPending}
-        isSuccess={tc.status === 'success'}
-        messageId={opts.messageId || ''}
-        toolCallId={tc.id}
-        args={tc.arguments}
       />
     )
   }
@@ -96,7 +87,7 @@ export function renderToolCallCard(
     return null
   }
 
-  // todo_write 通过底部 TodoListPanel 展示，不在聊天流中渲染卡片
+  // todo_write is represented by the unified status tray, not a timeline card.
   if (tc.name === 'todo_write') {
     return null
   }

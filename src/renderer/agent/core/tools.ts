@@ -539,12 +539,19 @@ async function executeSingle(
   const identity = buildToolExecutionIdentity(toolCall, context)
   const startTime = Date.now()
   const toolArguments = await enrichToolArgumentsWithRoutingMeta(toolCall, context)
+  const displayArguments = {
+    ...toolArguments,
+    _meta: {
+      ...(toolArguments._meta as Record<string, unknown> | undefined),
+      startedAt: startTime,
+    },
+  }
 
   if (currentAssistantId) {
     store.startToolExecution(currentAssistantId, {
       id: toolCall.id,
       name: toolCall.name,
-      arguments: toolArguments,
+      arguments: displayArguments,
     }, {
       requestId: context.requestId,
       assistantId: currentAssistantId,
@@ -614,9 +621,15 @@ async function executeSingle(
 
     // 更新状态，并将 meta 数据合并到 arguments._meta
     if (currentAssistantId) {
-      const updatedArguments = Object.keys(meta).length > 0
-        ? { ...toolArguments, _meta: { ...(toolArguments._meta as Record<string, unknown> | undefined), ...meta } }
-        : toolArguments
+      const updatedArguments = {
+        ...toolArguments,
+        _meta: {
+          ...(toolArguments._meta as Record<string, unknown> | undefined),
+          ...meta,
+          startedAt: startTime,
+          durationMs: duration,
+        },
+      }
 
       const newStatus = result.success ? 'success' : 'error'
 
@@ -675,6 +688,14 @@ async function executeSingle(
       store.finishToolExecution(currentAssistantId, toolCall.id, {
         status: 'error',
         result: errorMsg,
+        arguments: {
+          ...toolArguments,
+          _meta: {
+            ...(toolArguments._meta as Record<string, unknown> | undefined),
+            startedAt: startTime,
+            durationMs: duration,
+          },
+        },
         streamingState: undefined,  // 清除流式状态
       }, {
         name: toolCall.name,

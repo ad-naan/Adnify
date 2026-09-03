@@ -418,17 +418,20 @@ export const useAgentStore = create<AgentStore>()(
                 },
             }
 
-            // 重写 finalizeAssistant 先刷新 StreamingBuffer
+            // Structural completion must commit this message's pending chunks first.
+            // Flushing the singleton globally here also commits unrelated background
+            // threads and can reorder their UI, so completion is deliberately scoped.
             const originalFinalizeAssistant = messageSlice.finalizeAssistant
             messageSlice.finalizeAssistant = (messageId: string, targetThreadId?: string) => {
-                streamingBuffer.flushNow()
+                streamingBuffer.flushMessage(messageId)
                 originalFinalizeAssistant(messageId, targetThreadId)
             }
 
-            // 同理：推理段结束前先刷新缓冲，否则最后一批推理 token 会丢失
+            // Reasoning must drain before its barrier is marked complete. Otherwise a
+            // late buffered delta can set isStreaming=true again after final text starts.
             const originalFinalizeReasoningPart = messageSlice.finalizeReasoningPart
             messageSlice.finalizeReasoningPart = (messageId: string, partId: string, targetThreadId?: string) => {
-                streamingBuffer.flushNow()
+                streamingBuffer.flushMessage(messageId)
                 originalFinalizeReasoningPart(messageId, partId, targetThreadId)
             }
 

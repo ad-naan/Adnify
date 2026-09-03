@@ -1,9 +1,10 @@
 /**
- * 流式响应节流缓冲区 —— 界面节奏的**唯一权威**。
+ * Streaming ingress batcher.
  *
- * 分工：主进程只负责压住 IPC 频率上限（`keyedLeadingEdgeThrottle`，16ms），到了渲染端
- * 由这里独占决定「多久把累积的 token 写进 store 一次」。两边都做节奏会相乘，表现为
- * 输出一顿一顿的。
+ * This class only limits how often transport chunks publish immutable store
+ * snapshots. It does not decide presentation speed; the assistant playback
+ * clock owns that responsibility. Keeping these roles separate prevents store
+ * churn without giving two different components control of visible ordering.
  *
  * 三条不变量：
  *   1. **前沿触发**：首个 token 立刻落地，不等一个间隔。等待首帧是「点了发送之后空白

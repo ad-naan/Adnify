@@ -1,13 +1,12 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Server, Terminal, X } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Server, Terminal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
 import { t, type Language } from '@shared/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
-import { useToolCardExpansion } from '@renderer/hooks'
+import { useDisclosureState } from '@renderer/hooks'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
@@ -23,6 +22,8 @@ import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/secur
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { assessShellCommand } from '@shared/security/executionPolicy'
 import { parseSymbolToolResult } from '@renderer/agent/presentation/symbolToolDisplay'
+import SmoothCollapse from './SmoothCollapse'
+import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -31,7 +32,6 @@ interface ToolCallCardProps {
     onApproveForTask?: () => void
     onReject?: () => void
     onStop?: () => void
-    defaultExpanded?: boolean
 }
 
 type ToolArgs = Record<string, unknown>
@@ -72,6 +72,19 @@ const TOOL_LABELS: Record<string, string> = {
     uiux_recommend: 'UI/UX Recommend',
     apply_skill: 'Apply Skill',
     todo_write: 'Task List',
+}
+
+
+function ToolKindIcon({ name }: { name: string }) {
+    if (name === 'run_command') return <Terminal className="h-3.5 w-3.5" />
+    if (name === 'read_image') return <ImageIcon className="h-3.5 w-3.5" />
+    if (name.includes('remote') || name === 'upload_to_remote' || name === 'download_from_remote') {
+        return <Server className="h-3.5 w-3.5" />
+    }
+    if (name.includes('search') || name === 'find_symbol' || name === 'find_references') {
+        return <Search className="h-3.5 w-3.5" />
+    }
+    return <FileCode className="h-3.5 w-3.5" />
 }
 
 const guessLanguage = (filename: string) => {
@@ -1064,13 +1077,11 @@ const ToolCallCard = memo(function ToolCallCard({
     onApproveForTask,
     onReject,
     onStop,
-    defaultExpanded,
 }: ToolCallCardProps) {
-    const { language, setTerminalVisible, currentTheme, expandAgentBlocksByDefault } = useStore(useShallow(state => ({
+    const { language, setTerminalVisible, currentTheme } = useStore(useShallow(state => ({
         language: state.language,
         setTerminalVisible: state.setTerminalVisible,
         currentTheme: state.currentTheme,
-        expandAgentBlocksByDefault: state.agentConfig.expandAgentBlocksByDefault ?? false,
     })))
     const { args, effectiveName, isSuccess, isError, isRejected, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming || Boolean(isAwaitingApproval)
@@ -1100,10 +1111,18 @@ const ToolCallCard = memo(function ToolCallCard({
         )
         onApprove?.()
     }
-    const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
-        defaultExpanded: defaultExpanded ?? (Boolean(isAwaitingApproval) || expandAgentBlocksByDefault),
-        isActive,
+    const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
+        openWhile: isActive || Boolean(isAwaitingApproval) || isError,
     })
+    const timing = getToolTiming(toolCall)
+    const animateEntry = timing.startedAt !== undefined && Date.now() - timing.startedAt < 1500
+    const activityState = isStreaming || isRunning
+        ? 'running'
+        : isSuccess
+            ? 'success'
+            : isError || isRejected
+                ? 'error'
+                : 'idle'
 
     const statusText = useMemo(
         () => getStatusText(effectiveName, args, toolCall.status, isStreaming),
@@ -1113,7 +1132,7 @@ const ToolCallCard = memo(function ToolCallCard({
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border border-yellow-500/20 bg-yellow-500/5 rounded-lg shadow-sm shadow-yellow-500/5 overflow-hidden'
         if (isError) return 'bg-red-500/5 rounded-lg overflow-hidden'
-        if (isStreaming || isRunning) return 'bg-accent/5 rounded-lg overflow-hidden'
+        if (isStreaming || isRunning) return 'bg-accent/[0.035] rounded-lg overflow-hidden'
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
@@ -1152,39 +1171,23 @@ const ToolCallCard = memo(function ToolCallCard({
     )
 
     return (
-        <div className={`group my-0.5 relative ${cardStyle}`}>
-            {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent tool-card-sweep" />
-                </div>
-            )}
+        <div className={`group my-0.5 relative ${animateEntry ? 'tool-row-enter' : ''} ${cardStyle}`}>
+            <button
+                type="button"
+                aria-expanded={isExpanded}
+                className="relative flex min-h-9 w-full cursor-pointer select-none items-center gap-2 rounded-lg py-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
+                onClick={handleToggleExpanded}
+            >
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform duration-300 group-hover:text-text-muted motion-reduce:transition-none ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
 
-            <div className="flex min-h-[32px] items-center gap-2 py-1.5 cursor-pointer select-none" onClick={handleToggleExpanded}>
-                <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 hover:text-text-muted">
-                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
-                </motion.div>
+                <ToolActivityIndicator
+                    state={activityState}
+                    startedAt={timing.startedAt}
+                />
 
-                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
-                    {isStreaming || isRunning ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                        </div>
-                    ) : isSuccess ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5 text-green-500" />
-                        </div>
-                    ) : isError ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-red-500" />
-                        </div>
-                    ) : isRejected ? (
-                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-yellow-500" />
-                        </div>
-                    ) : (
-                        <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30" />
-                    )}
-                </div>
+                <span className="shrink-0 text-text-muted/55" aria-hidden="true">
+                    <ToolKindIcon name={effectiveName} />
+                </span>
 
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
@@ -1195,24 +1198,16 @@ const ToolCallCard = memo(function ToolCallCard({
                         )}
                     </span>
                 </div>
-            </div>
 
-            {isExpanded && (
-                animateContent ? (
-                    <AnimatePresence initial={false}>
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.16, ease: 'easeOut' }}
-                        >
-                            {contentBody}
-                        </motion.div>
-                    </AnimatePresence>
-                ) : (
-                    contentBody
-                )
-            )}
+                <ToolElapsedTime
+                    state={activityState}
+                    startedAt={timing.startedAt}
+                    durationMs={timing.durationMs}
+                    className="ml-auto pr-1"
+                />
+            </button>
+
+            <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>
 
             {isAwaitingApproval && (
                 <div className="border-t border-yellow-500/10 bg-yellow-500/5 px-3 py-2">
