@@ -1013,6 +1013,13 @@ export const zh = {
   'tool.directExecutionNoTerminal': '这条命令为了保证可靠性走的是直执行，因此没有创建可实时查看的终端会话。',
   'fileChangeCard.openInEditor': '在编辑器中打开',
 
+  // Lint Check Row
+  'lintCheckCard.checking': '正在检查问题',
+  'lintCheckCard.allPassed': '检查全部通过',
+  'lintCheckCard.filesAffected': '{count} 个文件',
+  'lintCheckCard.errorCount': '{count} 个错误',
+  'lintCheckCard.warningCount': '{count} 个警告',
+
   // File Preview
   'filePreview.cannotLoadImage': '无法加载图片',
   'filePreview.cannotOpenFile': '无法在编辑器中打开此文件',

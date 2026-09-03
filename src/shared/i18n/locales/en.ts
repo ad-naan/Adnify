@@ -1013,6 +1013,13 @@ export const en = {
   'tool.directExecutionNoTerminal': 'This command was executed directly for reliability, so no live terminal session was created.',
   'fileChangeCard.openInEditor': 'Open in editor',
 
+  // Lint Check Row
+  'lintCheckCard.checking': 'Checking for problems',
+  'lintCheckCard.allPassed': 'All checks passed',
+  'lintCheckCard.filesAffected': '{count} files',
+  'lintCheckCard.errorCount': '{count} errors',
+  'lintCheckCard.warningCount': '{count} warnings',
+
   // File Preview
   'filePreview.cannotLoadImage': 'Cannot load image',
   'filePreview.cannotOpenFile': 'Cannot open this file in editor',
