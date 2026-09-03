@@ -11,8 +11,10 @@ import {
   getDirPath,
   getFileName,
   getExtension,
+  resolvePathLexically,
   // pathEquals,
   pathStartsWith,
+  validatePath,
   // toFullPath,
   toRelativePath,
 } from '@shared/utils/pathUtils'
@@ -30,6 +32,54 @@ describe('pathUtils', () => {
     it('should handle mixed separators', () => {
       expect(normalizePath('C:\\Users/test\\file.txt')).toBe('C:/Users/test/file.txt')
     })
+  })
+
+  describe('resolvePathLexically', () => {
+    it('resolves parent segments against a Windows workspace', () => {
+      expect(resolvePathLexically('..\\external\\file.ts', 'C:\\work\\repo'))
+        .toBe('C:/work/external/file.ts')
+    })
+
+    it('preserves UNC roots while resolving path segments', () => {
+      expect(resolvePathLexically('..\\shared\\file.ts', '\\\\server\\team\\repo'))
+        .toBe('//server/team/shared/file.ts')
+    })
+  })
+
+  describe('validatePath', () => {
+    it('classifies a resolved parent path as outside the workspace', () => {
+      expect(validatePath('../external/file.ts', '/home/user/project'))
+        .toMatchObject({ valid: false, error: 'Path is outside workspace' })
+    })
+
+    it('allows a resolved parent path when outside-workspace access is enabled', () => {
+      expect(validatePath('../external/file.ts', '/home/user/project', {
+        allowOutsideWorkspace: true,
+      })).toEqual({
+        valid: true,
+        sanitizedPath: '/home/user/external/file.ts',
+      })
+    })
+
+    it('checks sensitive paths after resolving parent segments', () => {
+      expect(validatePath('../.ssh/id_rsa', '/home/user/project', {
+        allowOutsideWorkspace: true,
+      })).toMatchObject({ valid: false, error: 'Access to sensitive path denied' })
+    })
+
+    it('checks normalized Windows system paths after resolving parent segments', () => {
+      expect(validatePath('..\\..\\Windows\\System32\\config\\SAM', 'C:\\work\\repo', {
+        allowOutsideWorkspace: true,
+      })).toMatchObject({ valid: false, error: 'Access to sensitive path denied' })
+    })
+
+    it.each(['%2e%2e/secret', '%252e%252e/secret', 'safe\0secret'])(
+      'rejects an unsafe path payload: %s',
+      path => {
+        expect(validatePath(path, '/home/user/project', { allowOutsideWorkspace: true }))
+          .toMatchObject({ valid: false, error: 'Path traversal detected' })
+      },
+    )
   })
 
   describe('joinPath', () => {

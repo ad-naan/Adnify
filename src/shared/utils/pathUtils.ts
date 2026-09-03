@@ -6,6 +6,7 @@
 import {
   isSensitivePath as sharedIsSensitivePath,
   hasPathTraversal as sharedHasPathTraversal,
+  hasUnsafePathPayload,
 } from '@shared/constants'
 
 // ============ 安全验证函数 ============
@@ -48,16 +49,18 @@ export function validatePath(
   if (!path || typeof path !== 'string') {
     return { valid: false, error: 'Invalid path: empty or not a string' }
   }
-  if (hasPathTraversal(path)) {
+  if (hasUnsafePathPayload(path)) {
     return { valid: false, error: 'Path traversal detected' }
   }
-  if (!allowSensitive && isSensitivePath(path)) {
+
+  const resolvedPath = resolvePathLexically(path, workspacePath)
+  if (!allowSensitive && isSensitivePath(resolvedPath)) {
     return { valid: false, error: 'Access to sensitive path denied' }
   }
-  if (!allowOutsideWorkspace && workspacePath && !isPathInWorkspace(path, workspacePath)) {
+  if (!allowOutsideWorkspace && workspacePath && !isPathInWorkspace(resolvedPath, workspacePath)) {
     return { valid: false, error: 'Path is outside workspace' }
   }
-  return { valid: true, sanitizedPath: toFullPath(path, workspacePath) }
+  return { valid: true, sanitizedPath: resolvedPath }
 }
 
 // ============ 基础路径函数 ============
@@ -68,6 +71,71 @@ function coercePathString(path: unknown): string {
 
 export function normalizePath(path: unknown): string {
   return coercePathString(path).replace(/\\/g, '/')
+}
+
+/**
+ * Resolve `.` and `..` segments without touching the filesystem.
+ *
+ * This is intentionally lexical: existence and symlink checks belong to the
+ * main-process file handlers, which remain the final security authority.
+ */
+export function resolvePathLexically(inputPath: string, workspacePath: string | null): string {
+  const normalizedInput = normalizePath(inputPath)
+  const normalizedWorkspace = normalizePath(workspacePath)
+  const fullPath = normalizedWorkspace && !isPortableAbsolutePath(normalizedInput)
+    ? `${normalizedWorkspace.replace(/\/$/, '')}/${normalizedInput}`
+    : normalizedInput
+
+  const { root, remainder, absolute } = splitPortablePathRoot(fullPath)
+  const segments: string[] = []
+
+  for (const segment of remainder.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (segments.length > 0 && segments[segments.length - 1] !== '..') {
+        segments.pop()
+      } else if (!absolute) {
+        segments.push(segment)
+      }
+      continue
+    }
+    segments.push(segment)
+  }
+
+  if (!root) return segments.join('/') || '.'
+  if (root === '/') return `/${segments.join('/')}`
+  if (root.endsWith('/')) return `${root}${segments.join('/')}`
+  return segments.length > 0 ? `${root}/${segments.join('/')}` : root
+}
+
+function isPortableAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[a-zA-Z]:\//.test(path)
+}
+
+function splitPortablePathRoot(path: string): {
+  root: string
+  remainder: string
+  absolute: boolean
+} {
+  const uncMatch = path.match(/^\/\/([^/]+)\/([^/]+)(?:\/(.*))?$/)
+  if (uncMatch) {
+    return {
+      root: `//${uncMatch[1]}/${uncMatch[2]}`,
+      remainder: uncMatch[3] || '',
+      absolute: true,
+    }
+  }
+
+  const driveMatch = path.match(/^([a-zA-Z]:)\/(.*)$/)
+  if (driveMatch) {
+    return { root: `${driveMatch[1]}/`, remainder: driveMatch[2], absolute: true }
+  }
+
+  if (path.startsWith('/')) {
+    return { root: '/', remainder: path.slice(1), absolute: true }
+  }
+
+  return { root: '', remainder: path, absolute: false }
 }
 
 /** 路径比较（忽略大小写和分隔符差异） */

@@ -74,6 +74,7 @@ vi.mock('@/renderer/store', () => ({
   useStore: {
     getState: vi.fn(() => ({
       setTerminalVisible: vi.fn(),
+      securitySettings: { strictWorkspaceMode: false },
     })),
   },
 }))
@@ -376,6 +377,15 @@ describe('document read tool executors', () => {
       embeddedImageCount: 1,
       embeddedImagesAnalyzed: 1,
     })
+  })
+
+  it('resolves an external parent path when strict workspace mode is disabled', async () => {
+    vi.mocked(api.file.readFull).mockResolvedValue('export const shared = true\n')
+
+    const result = await toolExecutors.read_file({ path: '../shared/file.ts' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(api.file.readFull).toHaveBeenCalledWith('/shared/file.ts')
   })
 
   it('supports mixed multi-file reads across text and rich documents', async () => {

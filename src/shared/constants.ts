@@ -65,10 +65,10 @@ export const PLAN_HISTORY_WINDOW = 200
 /** 敏感文件/目录模式 - 禁止访问 */
 export const SENSITIVE_PATH_PATTERNS = [
   // 系统目录 - Windows
-  /^C:\\Windows/i,
-  /^C:\\Program Files/i,
-  /^C:\\Program Files \(x86\)/i,
-  /^C:\\ProgramData/i,
+  /^C:\/Windows(?:\/|$)/i,
+  /^C:\/Program Files(?:\/|$)/i,
+  /^C:\/Program Files \(x86\)(?:\/|$)/i,
+  /^C:\/ProgramData(?:\/|$)/i,
   // 系统目录 - Unix
   /^\/etc\//i,
   /^\/var\//i,
@@ -96,6 +96,13 @@ export const DANGEROUS_PATH_PATTERNS = [
   /%252e%252e/i,
 ] as const
 
+/** Path payloads that cannot be made safe through lexical normalization. */
+export const UNSAFE_PATH_PAYLOAD_PATTERNS = [
+  /\0/,
+  /%2e%2e/i,
+  /%252e%252e/i,
+] as const
+
 export function isSensitivePath(path: string): boolean {
   const normalized = path.replace(/\\/g, '/')
   return SENSITIVE_PATH_PATTERNS.some(pattern => pattern.test(normalized))
@@ -103,4 +110,8 @@ export function isSensitivePath(path: string): boolean {
 
 export function hasPathTraversal(path: string): boolean {
   return DANGEROUS_PATH_PATTERNS.some(pattern => pattern.test(path))
+}
+
+export function hasUnsafePathPayload(path: string): boolean {
+  return UNSAFE_PATH_PAYLOAD_PATTERNS.some(pattern => pattern.test(path))
 }
