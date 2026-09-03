@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useCallback, useMemo, memo } from 'react'
-import { X, Check, ExternalLink, Square, ChevronDown, FileCode, FilePlus, FileX, CheckCheck, XCircle, FolderOpen, ListTodo, Layers, ShieldCheck, Play, Pencil, Trash2, ChevronUp, } from 'lucide-react'
+import { X, Check, ExternalLink, Square, ChevronDown, FileCode, FilePlus, FileX, CheckCheck, XCircle, FolderOpen, ListTodo, Layers, ShieldCheck, Play, Pencil, Trash2, ChevronUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
@@ -265,6 +265,7 @@ function UnifiedStatusTray({
             </button>
           </div>
         </div>
+
 
         {pendingCommand && (
           <div className="border-t border-yellow-500/10 bg-yellow-500/[0.04] px-3 py-2">

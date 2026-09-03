@@ -97,6 +97,10 @@ export async function executeAutoHandoff(threadId: string, handoffCreatedAt: num
     return false
   }
 
+  if (Agent.isThreadRunning(threadId)) {
+    Agent.abort(threadId)
+  }
+
   logger.agent.info('[AutoHandoffService] Creating handoff session', { threadId, handoffCreatedAt })
   const result = state.createHandoffSession(threadId)
   if (!result) {
@@ -106,15 +110,16 @@ export async function executeAutoHandoff(threadId: string, handoffCreatedAt: num
 
   completedAutoHandoffKey = handoffKey
 
-  try {
-    await continueAutoHandoff(result)
-    return true
-  } catch (error) {
-    completedAutoHandoffKey = null
-    logger.agent.error('[AutoHandoffService] Failed to continue handoff thread', {
-      threadId: result.threadId,
-      error,
+  // 异步启动新会话，确保旧循环能够先行退出并释放执行栈
+  setTimeout(() => {
+    void continueAutoHandoff(result).catch((error) => {
+      completedAutoHandoffKey = null
+      logger.agent.error('[AutoHandoffService] Failed to continue handoff thread', {
+        threadId: result.threadId,
+        error,
+      })
     })
-    return false
-  }
+  }, 0)
+
+  return true
 }

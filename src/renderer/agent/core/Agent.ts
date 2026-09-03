@@ -144,7 +144,7 @@ export class AgentClass {
         planTaskId: executionOptions?.planTaskId,
         loopState: 'running',
       })
-      threadStore.setStreamState({ requestId, assistantId, phase: 'streaming' })
+      threadStore.setStreamState({ requestId, assistantId, phase: 'streaming', laneNotice: undefined })
 
       // 2. 记录任务并绑定助手消息 ID
       this.runningTasks.set(threadId, {
@@ -168,7 +168,14 @@ export class AgentClass {
       })
       executionWorkspacePath = laneAssignment.workspacePath
       if (laneAssignment.fallbackNotice) {
-        this.showLaneNotice('warning', translateAgentText('worktreeLane.fallbackTitle'), laneNoticeText(laneAssignment.fallbackNotice, getAgentLanguage()), assistantId, threadId)
+        threadStore.setStreamState({
+          laneNotice: {
+            type: 'warning',
+            title: translateAgentText('worktreeLane.fallbackTitle'),
+            message: laneNoticeText(laneAssignment.fallbackNotice, getAgentLanguage()),
+            code: laneAssignment.fallbackNotice.code,
+          },
+        })
       }
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染

@@ -4,8 +4,15 @@ import { AGENT_DISCLOSURE_CLOSE_DELAY_MS } from '@renderer/agent/presentation/di
 interface UseDisclosureStateOptions {
   /** 有活内容时自动展开：正在跑、正在流、等审批、出错。 */
   openWhile?: boolean
-  /** 按住已经自动展开的抽屉，不负责展开它。落下的那一刻才允许收起。 */
-  holdOpenWhile?: boolean
+  /**
+   * 自动展开的抽屉是否也自动收起。
+   *
+   * 时间轴上的行要传 false。收起是向下的：钉在底部的滚动容器里，一行变矮会把它上面的
+   * 所有内容往下拽一段（浏览器把 scrollTop 夹回去）。自动展开再自动收起就是一涨一缩，
+   * 幅度等于抽屉里那坨内容的高度 —— 用户看到的"内容上下摆动"就是它。
+   * 单向只涨读起来是时间轴在长，人能接受；来回动不行。
+   */
+  autoClose?: boolean
   closeDelayMs?: number
 }
 
@@ -13,35 +20,32 @@ export type DisclosureAction = 'open' | 'hold' | 'close' | 'idle'
 
 /**
  * 自动展开的唯一判据，抽成纯函数是因为每个分支都对应时间轴上一次可见的高度变化。
- *
- * 关键是 `hold` 和 `close` 的分工：内容跑完时不立刻收（那会在下一行出现前先塌一次），
- * 而是按住到这一行不再是当前呈现的阶段 —— 也就是后继行挂载的那一刻 —— 再收。
  */
 export function decideDisclosureAction({
   openWhile,
-  holdOpenWhile,
+  autoClose,
   wasAutoOpen,
   userControlled,
 }: {
   openWhile: boolean
-  holdOpenWhile: boolean
+  autoClose: boolean
   wasAutoOpen: boolean
   userControlled: boolean
 }): DisclosureAction {
   if (userControlled) return 'idle'
   if (openWhile) return 'open'
-  if (holdOpenWhile) return 'hold'
-  return wasAutoOpen ? 'close' : 'idle'
+  if (!wasAutoOpen) return 'idle'
+  return autoClose ? 'close' : 'hold'
 }
 
 /** One state machine for automatic disclosures. Explicit user choice wins. */
 export function useDisclosureState({
   openWhile = false,
-  holdOpenWhile = false,
+  autoClose = true,
   closeDelayMs = AGENT_DISCLOSURE_CLOSE_DELAY_MS,
 }: UseDisclosureStateOptions) {
   const [isOpen, setIsOpen] = useState(openWhile)
-  const previousAutoOpenRef = useRef(openWhile || holdOpenWhile)
+  const previousAutoOpenRef = useRef(openWhile)
   const userControlledRef = useRef(false)
   const closeTimerRef = useRef<number | null>(null)
 
@@ -53,8 +57,6 @@ export function useDisclosureState({
 
   const scheduleClose = useCallback(() => {
     clearPendingClose()
-    // 交接式收起（delay 0）要落在触发它的那次提交里，绕一趟 setTimeout 就会晚一帧，
-    // 后继行的入场动画已经开始了，一涨一缩就抵不掉。
     if (closeDelayMs <= 0) {
       setIsOpen(false)
       return
@@ -67,11 +69,11 @@ export function useDisclosureState({
 
   useEffect(() => {
     const wasAutoOpen = previousAutoOpenRef.current
-    previousAutoOpenRef.current = openWhile || holdOpenWhile
+    previousAutoOpenRef.current = openWhile
 
     switch (decideDisclosureAction({
       openWhile,
-      holdOpenWhile,
+      autoClose,
       wasAutoOpen,
       userControlled: userControlledRef.current,
     })) {
@@ -88,7 +90,7 @@ export function useDisclosureState({
       case 'idle':
         break
     }
-  }, [clearPendingClose, holdOpenWhile, openWhile, scheduleClose])
+  }, [autoClose, clearPendingClose, openWhile, scheduleClose])
 
   useEffect(() => clearPendingClose, [clearPendingClose])
 

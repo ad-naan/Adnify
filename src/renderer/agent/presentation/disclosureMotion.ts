@@ -2,25 +2,31 @@ export const AGENT_DISCLOSURE_COLLAPSE_EVENT = 'agent-disclosure-collapse'
 export const AGENT_DISCLOSURE_COLLAPSE_MS = 460
 export const AGENT_DISCLOSURE_CLOSE_DELAY_MS = 850
 
+/** globals.css 里 `tool-row-enter` 的时长：新行入场时动画的是真高度（0fr → 1fr）。 */
+export const AGENT_ROW_ENTER_MS = 480
+
+/**
+ * 收起之后底部跟随要停多久，才不会把"这一行主动变矮"当成新输出去追。
+ * 收起时长由事件带过来（不同抽屉可以不一样），这里只是那点余量。
+ */
+export const AGENT_BOTTOM_FOLLOW_PAUSE_PADDING_MS = 48
+export const AGENT_BOTTOM_FOLLOW_PAUSE_MS = AGENT_DISCLOSURE_COLLAPSE_MS + AGENT_BOTTOM_FOLLOW_PAUSE_PADDING_MS
+
 /**
  * 阶段节拍：一个阶段落定后，隔多久放出下一个。
  *
- * 曾经写成 CLOSE_DELAY + COLLAPSE，那是"等上一行自己收完，再放下一行"的预算。收起改成交接式
- * （见 AGENT_DISCLOSURE_HANDOFF_CLOSE_MS）之后这个预算变成了循环等待：时间轴在等一次要由时间轴
- * 自己触发的收起。现在它只负责"一行一行地出" —— 取入场动画（globals.css 的 tool-row-enter
- * 480ms）的一半，下一行在上一行入场到一半时开始，读起来是级联而不是齐刷刷一片。
+ * 这个值不能比"一次高度动画"短，否则时间轴永远处在有东西在动的状态：
  *
- * 它同时是时间轴落后于实时界面（状态托盘的待处理改动、编辑器里的文件）的上限：每个待放阶段一拍。
- * 一拍 1310ms 时，一轮里连着几次工具调用就够让托盘先列出暂存文件、几秒后卡片才出现；而且工具跑得
- * 快一点，卡片挂载时状态已经是成功 —— 于是它没有"活内容"可展开，看起来就是"有的行一直不展开"。
- */
-export const AGENT_PLAYBACK_RELEASE_MS = 240
-
-/**
- * 交接式收起：不再自己计时，收起由"下一阶段接手呈现"这件事触发。
+ * - 入场动画有 480ms，节拍比它短的话，好几行同时在长高。Virtuoso 开着
+ *   `skipAnimationFrameInResizeObserver`，每一帧的高度变化都会同步走一遍它的补偿逻辑，
+ *   而我们的 `stickToBottom` 也在同一帧写 `scrollTop` —— 两个写者抢一个滚动位置，
+ *   正在流的文字就会抖。
+ * - 收起会让底部跟随停 `AGENT_BOTTOM_FOLLOW_PAUSE_MS`（508ms）。节拍比它短的话，
+ *   下一次收起会在上一次的停顿里续上，底部跟随被连续掐着：文字照长、视口不跟，
+ *   等某次停顿终于过期再一把拽回底部 —— 那一下就是"文字抖动"。
  *
- * 时间轴钉在底部，收起最后一行会让浏览器把 scrollTop 夹回去 —— 视觉上整屏内容往下掉。
- * 所以延时必须是 0：收起和后继行的挂载落在同一次提交里，一涨一缩互相抵掉，
- * 而不是先掉一次、隔一拍再涨一次（那就是用户看到的上下摆动）。
+ * 所以取两者的上界再留一点余量。它同时是时间轴落后实时界面（状态托盘的待处理改动）的上限：
+ * 每个待放阶段一拍。曾经是 1310ms（CLOSE_DELAY + COLLAPSE，那是收起还自己计时时的预算），
+ * 一轮里连着几次工具调用就能让托盘先列出暂存文件、几秒后卡片才出现。
  */
-export const AGENT_DISCLOSURE_HANDOFF_CLOSE_MS = 0
+export const AGENT_PLAYBACK_RELEASE_MS = Math.max(AGENT_ROW_ENTER_MS, AGENT_BOTTOM_FOLLOW_PAUSE_MS) + 12

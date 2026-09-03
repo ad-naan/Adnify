@@ -6,6 +6,7 @@ import { useAgentStore, type HandoffSessionResult } from '../store/AgentStore'
 import type { ChatThread } from '../types'
 import { getMessageText, type UserMessage } from '../types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
+import { Agent } from '../core/Agent'
 
 export interface PreparedHandoffResult {
   handoff: HandoffDocument
@@ -157,6 +158,10 @@ export async function prepareHandoffForThread(
 
 export async function createManualHandoffSession(threadId: string): Promise<HandoffSessionResult> {
   await prepareHandoffForThread(threadId)
+
+  if (Agent.isThreadRunning(threadId)) {
+    Agent.abort(threadId)
+  }
 
   const result = useAgentStore.getState().createHandoffSession(threadId)
   if (!result) {

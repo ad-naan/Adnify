@@ -146,6 +146,7 @@ export interface ThreadBoundStore {
     setCompressionPhase: (phase: import('../types').CompressionPhase) => void
     setHandoffState: (handoff: ThreadHandoffState) => void
     clearHandoffState: () => void
+    dismissLaneNotice: () => void
     setIsCompacting: (compacting: boolean) => void
 
     // Reasoning 操作
@@ -494,6 +495,7 @@ export const useAgentStore = create<AgentStore>()(
                 setCompressionPhase: (phase) => threadSlice.setCompressionPhase(phase, threadId),
                 setHandoffState: (handoff) => threadSlice.setHandoffState(handoff, threadId),
                 clearHandoffState: () => threadSlice.clearHandoffState(threadId),
+                dismissLaneNotice: () => threadSlice.dismissLaneNotice(threadId),
                 setIsCompacting: (compacting) => threadSlice.setIsCompacting(compacting, threadId),
 
                 // Reasoning 操作

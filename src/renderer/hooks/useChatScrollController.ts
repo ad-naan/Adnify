@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VirtuosoHandle } from 'react-virtuoso'
-import { AGENT_DISCLOSURE_COLLAPSE_EVENT, AGENT_DISCLOSURE_COLLAPSE_MS } from '@renderer/agent/presentation/disclosureMotion'
+import { AGENT_BOTTOM_FOLLOW_PAUSE_PADDING_MS, AGENT_DISCLOSURE_COLLAPSE_EVENT, AGENT_DISCLOSURE_COLLAPSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 
 const CHAT_BOTTOM_THRESHOLD = 220
 
@@ -240,7 +240,7 @@ export function useChatScrollController({
       const durationMs = event instanceof CustomEvent
         ? Number(event.detail?.durationMs) || AGENT_DISCLOSURE_COLLAPSE_MS
         : AGENT_DISCLOSURE_COLLAPSE_MS
-      bottomFollowPausedUntilRef.current = performance.now() + durationMs + 48
+      bottomFollowPausedUntilRef.current = performance.now() + durationMs + AGENT_BOTTOM_FOLLOW_PAUSE_PADDING_MS
       if (stickyFrameRef.current !== null) {
         cancelFrame(stickyFrameRef.current)
         stickyFrameRef.current = null

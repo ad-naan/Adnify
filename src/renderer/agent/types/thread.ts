@@ -89,6 +89,13 @@ export interface ThreadExecutionMeta {
   loopState?: 'idle' | 'running' | 'waiting_for_tools' | 'waiting_for_user' | 'completed' | 'failed' | 'aborted'
 }
 
+export interface LaneNoticeState {
+  type: 'warning' | 'info' | 'error'
+  title: string
+  message: string
+  code?: string
+}
+
 /** Thread-local streaming state for the current agent run. */
 export interface StreamState {
   phase: StreamPhase
@@ -99,6 +106,7 @@ export interface StreamState {
   statusText?: string
   requestId?: string
   assistantId?: string
+  laneNotice?: LaneNoticeState
 }
 
 export interface HandoffResumeMeta {

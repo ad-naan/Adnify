@@ -10,7 +10,6 @@ import { t } from '@shared/i18n'
 import type { ExecutionLaneProjection, ExecutionLaneStatus } from '@shared/types/executionLane'
 import SmoothCollapse from './SmoothCollapse'
 import ToolActivityIndicator, { ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
-import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 import { useDisclosureState } from '@renderer/hooks'
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -42,7 +41,7 @@ function StepIcon({ state }: { state: SubAgentStepState }) {
   return <Circle className="h-2.5 w-2.5 text-text-muted/30" />
 }
 
-function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: ToolCall, messageId?: string, isPresenting?: boolean }) {
+function SubAgentTaskCard({ toolCall, messageId }: { toolCall: ToolCall, messageId?: string }) {
   const language = useStore(state => state.language)
   const workspacePath = useStore(state => state.workspacePath)
   const meta = asRecord(toolCall.arguments._meta)
@@ -60,8 +59,7 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
   const currentTool = childThread?.streamState?.currentToolCall
   const { isOpen: expanded, toggle: toggleExpanded } = useDisclosureState({
     openWhile: isRunning || isError || waitingApproval,
-    holdOpenWhile: isPresenting,
-    closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
+    autoClose: false,
   })
 
   const completedTools = useMemo(() => {

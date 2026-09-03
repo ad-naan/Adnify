@@ -168,6 +168,7 @@ export function useAgentCommands() {
 export function useAgentActions() {
   return useMemo(() => ({
     createThread: getAgentActions().createThread,
+    dismissLaneNotice: (threadId?: string | null) => useAgentStore.getState().dismissLaneNotice(threadId),
     renameThread: getAgentActions().renameThread,
     switchThread: getAgentActions().switchThread,
     deleteThread: getAgentActions().deleteThread,
@@ -249,6 +250,7 @@ export function useAgentViewState() {
     pendingChanges,
     messageCheckpoints,
     currentThreadId,
+    laneNotice: streamState.laneNotice,
   }
 }
 

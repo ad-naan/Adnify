@@ -50,6 +50,7 @@ export interface ThreadActions {
     setCompressionPhase: (phase: CompressionPhase, threadId?: string) => void
     setHandoffState: (handoff: ThreadHandoffState, threadId?: string) => void
     clearHandoffState: (threadId?: string) => void
+    dismissLaneNotice: (threadId?: string | null) => void
     setIsCompacting: (compacting: boolean, threadId?: string) => void
 
     setTodos: (todos: TodoItem[], threadId?: string) => void
@@ -442,12 +443,29 @@ export const createThreadSlice: StateCreator<
                     statusText: undefined,
                     requestId: undefined,
                     assistantId: undefined,
+                    laneNotice: undefined,
                 }
                 : { ...thread.streamState, phase }
 
             return {
                 threads: updateThreadEphemeral(state.threads, targetId, {
                     streamState: nextStreamState,
+                }),
+            }
+        })
+    },
+
+    dismissLaneNotice: (threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => {
+            const thread = state.threads[targetId]
+            if (!thread?.streamState?.laneNotice) return state
+
+            return {
+                threads: updateThreadEphemeral(state.threads, targetId, {
+                    streamState: { ...thread.streamState, laneNotice: undefined },
                 }),
             }
         })
