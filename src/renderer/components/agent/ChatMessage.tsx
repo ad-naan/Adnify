@@ -49,7 +49,7 @@ import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 import { parseThreadDeepLink } from '@/renderer/agent/threads/threadReference'
 import SmoothCollapse from './SmoothCollapse'
 import { useAssistantPlayback } from './useAssistantPlayback'
-import { createStreamingTailPlugin, StreamingPlainText, useStreamingTailSegments } from './StreamingTail'
+import { StreamingPlainText } from './StreamingTail'
 import { useDisclosureState } from '@renderer/hooks'
 
 interface ChatMessageProps {
@@ -104,36 +104,6 @@ function useTransientFlag(durationMs: number) {
 
   return [active, trigger] as const
 }
-
-const StreamingMarkdownBlock = React.memo(({
-  content,
-  components,
-  active,
-}: {
-  content: string
-  components: Record<string, React.ComponentType<any> | keyof React.JSX.IntrinsicElements>
-  active: boolean
-}) => {
-  const snapshot = useStreamingTailSegments(content, active)
-
-  const tailPlugin = React.useMemo(
-    () => createStreamingTailPlugin(snapshot.segments, active),
-    [active, snapshot.segments],
-  )
-  const rehypePlugins = React.useMemo(
-    () => [...MARKDOWN_REHYPE_PLUGINS, tailPlugin],
-    [tailPlugin],
-  )
-
-  return (
-    <StableStreamingMarkdownBlock
-      content={snapshot.text}
-      components={components}
-      rehypePlugins={rehypePlugins}
-    />
-  )
-})
-StreamingMarkdownBlock.displayName = 'StreamingMarkdownBlock'
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
@@ -770,18 +740,19 @@ const MarkdownContent = React.memo(({
               ))}
               {streamingPartition.activeBlock && (
                 <div key={`active-block-${streamingPartition.completedBlocks.length}`}>
-                  {streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
+                  {/* Keep the live write head structurally stable. Re-parsing the
+                      active Markdown block would remount its tail on every tick. */}
+                  {isVisuallyStreaming ? (
                     <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
                       <StreamingPlainText
                         text={streamingPartition.activeBlock}
-                        active={isVisuallyStreaming}
+                        active
                       />
                     </div>
                   ) : (
-                    <StreamingMarkdownBlock
+                    <StableStreamingMarkdownBlock
                       content={streamingPartition.activeBlock}
                       components={markdownComponents as any}
-                      active={isVisuallyStreaming}
                     />
                   )}
                 </div>
@@ -991,6 +962,7 @@ const AssistantMessageContent = React.memo(({
   fontSize,
   activePart,
   messageId,
+  presentingToolId,
 }: {
   parts: AssistantPart[]
   pendingToolId?: string
@@ -1002,28 +974,26 @@ const AssistantMessageContent = React.memo(({
   fontSize: number
   activePart?: AssistantPart
   messageId: string
+  presentingToolId?: string
 }) => {
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
     const result: Array<
       | { type: 'part'; part: AssistantPart; key: string }
-      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number; key: string }
+      | { type: 'tool_group'; toolCalls: ToolCall[]; key: string }
     > = []
     const stablePartKeys = buildChatMessagePartKeys(parts)
 
     let currentToolCalls: ToolCall[] = []
-    let startIndex = -1
 
     parts.forEach((part, index) => {
       if (isToolCallPart(part)) {
-        if (currentToolCalls.length === 0) startIndex = index
         currentToolCalls.push(part.toolCall)
       } else {
         if (currentToolCalls.length > 0) {
           result.push({
             type: 'tool_group',
             toolCalls: currentToolCalls,
-            startIndex,
             // Keep the group mounted as later tools append; changing the key for
             // every new id remounts all rows and destroys their transition state.
             key: `tools:${currentToolCalls[0].id}`,
@@ -1038,7 +1008,6 @@ const AssistantMessageContent = React.memo(({
       result.push({
         type: 'tool_group',
         toolCalls: currentToolCalls,
-        startIndex,
         key: `tools:${currentToolCalls[0].id}`,
       })
     }
@@ -1068,25 +1037,6 @@ const AssistantMessageContent = React.memo(({
           )
         }
 
-        if (group.toolCalls.length === 1) {
-          return (
-            <div key={group.key} className="w-full">
-              <RenderPart
-                part={parts[group.startIndex]}
-                pendingToolId={pendingToolId}
-                onApproveTool={onApproveTool}
-                onApproveToolForTask={onApproveToolForTask}
-                onRejectTool={onRejectTool}
-                onStopTool={onStopTool}
-                onOpenDiff={onOpenDiff}
-                fontSize={fontSize}
-                isStreaming={false}
-                messageId={messageId}
-              />
-            </div>
-          )
-        }
-
         return (
           <div key={group.key} className="w-full">
             <ToolCallGroup
@@ -1098,6 +1048,7 @@ const AssistantMessageContent = React.memo(({
               onStopTool={onStopTool}
               onOpenDiff={onOpenDiff}
               messageId={messageId}
+              presentingToolId={presentingToolId}
             />
           </div>
         )
@@ -1185,6 +1136,7 @@ const AssistantTurnContent = React.memo(({
               {...sharedProps}
               parts={playback.processParts}
               activePart={playback.activeProcessPart}
+              presentingToolId={playback.presentingToolId}
             />
           )}
         </ProcessFold>

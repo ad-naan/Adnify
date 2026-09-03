@@ -4,7 +4,9 @@ import {
   buildPlayableText,
   buildVisibleTimeline,
   decidePlaybackFrontierAction,
+  findNextPlaybackFrontier,
   findPlaybackFrontier,
+  findPresentingToolId,
 } from '@renderer/components/agent/useAssistantPlayback'
 
 function reasoning(content: string, isStreaming: boolean): AssistantPart {
@@ -15,10 +17,10 @@ function text(content: string): AssistantPart {
   return { type: 'text', content }
 }
 
-function tool(status: ToolCall['status']): AssistantPart {
+function tool(status: ToolCall['status'], id = 'tool-1'): AssistantPart {
   return {
     type: 'tool_call',
-    toolCall: { id: 'tool-1', name: 'read_file', arguments: {}, status },
+    toolCall: { id, name: 'read_file', arguments: {}, status },
   }
 }
 
@@ -98,5 +100,29 @@ describe('assistant playback timeline', () => {
       completedBarrier: true,
       frontierDrained: false,
     })).toBe('drain-current')
+  })
+
+  it('releases adjacent completed tools one visual stage at a time', () => {
+    const parts = [tool('success', 'tool-1'), tool('success', 'tool-2'), text('answer')]
+
+    expect(findNextPlaybackFrontier(parts, -1, 2)).toBe(0)
+    expect(findNextPlaybackFrontier(parts, 0, 2)).toBe(1)
+    expect(findNextPlaybackFrontier(parts, 1, 2)).toBe(2)
+  })
+
+  it('coalesces plain text with the next visual stage', () => {
+    const parts = [text('intro'), tool('success'), text('answer')]
+
+    expect(findNextPlaybackFrontier(parts, -1, 2)).toBe(1)
+    expect(findNextPlaybackFrontier(parts, 1, 2)).toBe(2)
+  })
+
+  it('presents only the current live or settling tool', () => {
+    const runningParts = [tool('running')]
+    const settledParts = [tool('success')]
+
+    expect(findPresentingToolId(runningParts, 0, null)).toBe('tool-1')
+    expect(findPresentingToolId(settledParts, 0, 0)).toBe('tool-1')
+    expect(findPresentingToolId(settledParts, 0, null)).toBeUndefined()
   })
 })

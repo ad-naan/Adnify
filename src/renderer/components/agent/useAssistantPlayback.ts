@@ -28,6 +28,7 @@ export interface AssistantPlayback {
   activeProcessPart?: AssistantPart
   hasProcessContent: boolean
   isProcessActive: boolean
+  presentingToolId?: string
   summary: AssistantProcessSummary
 }
 
@@ -50,6 +51,43 @@ export function findPlaybackFrontier(parts: AssistantPart[]): number {
   return blockingIndex >= 0 ? blockingIndex : parts.length - 1
 }
 
+function isPresentationStage(part: AssistantPart | undefined): boolean {
+  return !!part && (
+    isReasoningPart(part)
+    || isSearchPart(part)
+    || isToolCallPart(part)
+    || isLintCheckPart(part)
+  )
+}
+
+/** Release at most one visual stage from an accumulated source update. */
+export function findNextPlaybackFrontier(
+  parts: AssistantPart[],
+  releasedFrontier: number,
+  sourceFrontier: number,
+): number {
+  const target = Math.min(sourceFrontier, parts.length - 1)
+  if (target <= releasedFrontier) return target
+
+  for (let index = releasedFrontier + 1; index <= target; index += 1) {
+    if (isPresentationStage(parts[index])) return index
+  }
+
+  return target
+}
+
+export function findPresentingToolId(
+  parts: AssistantPart[],
+  frontierIndex: number,
+  settlingFrontier: number | null,
+): string | undefined {
+  const part = parts[frontierIndex]
+  if (!isToolCallPart(part)) return undefined
+  return isPlaybackBarrier(part) || settlingFrontier === frontierIndex
+    ? part.toolCall.id
+    : undefined
+}
+
 export function buildPlayableText(parts: AssistantPart[], frontierIndex: number): string {
   if (frontierIndex < 0) return ''
   return parts
@@ -69,6 +107,7 @@ interface ReleaseMachine {
   pendingFrontier: number
   previousBarrier: number
   completedBarrier: boolean
+  releaseReadyAt: number | null
   timer: number | null
 }
 
@@ -192,14 +231,34 @@ export function useAssistantPlayback({
 
   const sourceFrontier = useMemo(() => findPlaybackFrontier(parts), [parts])
   const activeBarrier = parts.findIndex(isPlaybackBarrier)
-  const [frontierIndex, setFrontierIndex] = useState(sourceFrontier)
-  const releaseMachineRef = useRef<ReleaseMachine>({
-    releasedFrontier: sourceFrontier,
-    pendingFrontier: sourceFrontier,
-    previousBarrier: activeBarrier,
-    completedBarrier: false,
-    timer: null,
-  })
+  const startsLive = isTransportActive || isAwaitingApproval || activeBarrier >= 0
+  const initialFrontierRef = useRef<number | null>(null)
+  if (initialFrontierRef.current === null) {
+    initialFrontierRef.current = startsLive
+      ? findNextPlaybackFrontier(parts, -1, sourceFrontier)
+      : sourceFrontier
+  }
+  const initialFrontier = initialFrontierRef.current ?? sourceFrontier
+  const [frontierIndex, setFrontierIndex] = useState(initialFrontier)
+  const initialPart = parts[initialFrontier]
+  const [settlingFrontier, setSettlingFrontier] = useState<number | null>(() => (
+    startsLive && isPresentationStage(initialPart) && !isPlaybackBarrier(initialPart)
+      ? initialFrontier
+      : null
+  ))
+  const partsRef = useRef(parts)
+  partsRef.current = parts
+  const releaseMachineRef = useRef<ReleaseMachine | null>(null)
+  if (releaseMachineRef.current === null) {
+    releaseMachineRef.current = {
+      releasedFrontier: initialFrontier,
+      pendingFrontier: sourceFrontier,
+      previousBarrier: activeBarrier,
+      completedBarrier: startsLive && isPresentationStage(initialPart) && !isPlaybackBarrier(initialPart),
+      releaseReadyAt: null,
+      timer: null,
+    }
+  }
   const playableText = useMemo(
     () => buildPlayableText(parts, frontierIndex),
     [frontierIndex, parts],
@@ -214,7 +273,7 @@ export function useAssistantPlayback({
   const frontierDrained = visibleText.length >= playableText.length
 
   useEffect(() => {
-    const machine = releaseMachineRef.current
+    const machine = releaseMachineRef.current!
     machine.pendingFrontier = sourceFrontier
 
     const clearReleaseTimer = () => {
@@ -224,18 +283,57 @@ export function useAssistantPlayback({
     }
 
     const publishFrontier = (nextFrontier: number) => {
+      const nextPart = partsRef.current[nextFrontier]
+      const isSettledStage = isPresentationStage(nextPart) && !isPlaybackBarrier(nextPart)
+      const shouldPresentSettledStage = hasBeenLiveRef.current && isSettledStage
       machine.releasedFrontier = nextFrontier
-      machine.completedBarrier = false
+      machine.completedBarrier = shouldPresentSettledStage
+      machine.releaseReadyAt = null
+      setSettlingFrontier(shouldPresentSettledStage ? nextFrontier : null)
       setFrontierIndex(nextFrontier)
     }
 
-    if (machine.previousBarrier >= 0 && activeBarrier !== machine.previousBarrier) {
+    const scheduleRelease = () => {
+      if (machine.timer !== null) return
+      const remaining = Math.max(
+        0,
+        (machine.releaseReadyAt ?? Date.now() + AGENT_PLAYBACK_RELEASE_MS) - Date.now(),
+      )
+      machine.timer = window.setTimeout(() => {
+        machine.timer = null
+        if (machine.pendingFrontier > machine.releasedFrontier) {
+          publishFrontier(findNextPlaybackFrontier(
+            partsRef.current,
+            machine.releasedFrontier,
+            machine.pendingFrontier,
+          ))
+          return
+        }
+        machine.completedBarrier = false
+        machine.releaseReadyAt = null
+        setSettlingFrontier(current => (
+          current === machine.releasedFrontier ? null : current
+        ))
+      }, remaining)
+    }
+
+    if (
+      machine.previousBarrier >= 0
+      && machine.previousBarrier <= machine.releasedFrontier
+      && activeBarrier !== machine.previousBarrier
+    ) {
       // Remember the completed stage even when its successor arrives in a later
       // store publish. This is what prevents the first final glyph from escaping
       // between Thought completion and the next chunk.
       machine.completedBarrier = true
+      machine.releaseReadyAt = Date.now() + AGENT_PLAYBACK_RELEASE_MS
+      setSettlingFrontier(machine.releasedFrontier)
     }
     machine.previousBarrier = activeBarrier
+
+    if (machine.completedBarrier && frontierDrained && machine.releaseReadyAt === null) {
+      machine.releaseReadyAt = Date.now() + AGENT_PLAYBACK_RELEASE_MS
+    }
 
     const action = decidePlaybackFrontierAction({
       sourceFrontier,
@@ -248,29 +346,31 @@ export function useAssistantPlayback({
     switch (action) {
       case 'follow-source':
         clearReleaseTimer()
-        publishFrontier(sourceFrontier)
+        publishFrontier(findNextPlaybackFrontier(
+          parts,
+          machine.releasedFrontier,
+          sourceFrontier,
+        ))
         break
       case 'reactivate-current':
         clearReleaseTimer()
         machine.completedBarrier = false
+        machine.releaseReadyAt = null
+        setSettlingFrontier(null)
         break
       case 'wait-for-successor':
-        clearReleaseTimer()
+        if (machine.completedBarrier && frontierDrained) scheduleRelease()
         break
       case 'drain-current':
         break
       case 'collapse-current':
-        if (machine.timer !== null) break
-        machine.timer = window.setTimeout(() => {
-          machine.timer = null
-          publishFrontier(machine.pendingFrontier)
-        }, AGENT_PLAYBACK_RELEASE_MS)
+        scheduleRelease()
         break
     }
-  }, [activeBarrier, frontierDrained, sourceFrontier])
+  }, [activeBarrier, frontierDrained, frontierIndex, parts, sourceFrontier])
 
   useEffect(() => () => {
-    const machine = releaseMachineRef.current
+    const machine = releaseMachineRef.current!
     if (machine.timer !== null) window.clearTimeout(machine.timer)
     machine.timer = null
   }, [])
@@ -289,11 +389,15 @@ export function useAssistantPlayback({
   const hasSourceBarrier = parts.some(isPlaybackBarrier)
   const sourceStage = parts[sourceFrontier]
   const processOwnsPendingStage = !!sourceStage && projection.processParts.includes(sourceStage)
+  const settlingStage = settlingFrontier === null ? undefined : parts[settlingFrontier]
+  const processOwnsSettlingStage = !!settlingStage && projection.processParts.includes(settlingStage)
   const isProcessActive = projection.hasProcessContent && (
     isAwaitingApproval
     || hasSourceBarrier
+    || processOwnsSettlingStage
     || (isTransportActive && processOwnsPendingStage)
   )
+  const presentingToolId = findPresentingToolId(parts, frontierIndex, settlingFrontier)
 
   return {
     alertParts,
@@ -307,6 +411,7 @@ export function useAssistantPlayback({
       : undefined,
     hasProcessContent: projection.hasProcessContent,
     isProcessActive,
+    presentingToolId,
     summary: projection.summary,
   }
 }

@@ -41,7 +41,7 @@ function StepIcon({ state }: { state: SubAgentStepState }) {
   return <Circle className="h-2.5 w-2.5 text-text-muted/30" />
 }
 
-function SubAgentTaskCard({ toolCall, messageId }: { toolCall: ToolCall, messageId?: string }) {
+function SubAgentTaskCard({ toolCall, messageId, presentOnMount }: { toolCall: ToolCall, messageId?: string, presentOnMount?: boolean }) {
   const language = useStore(state => state.language)
   const workspacePath = useStore(state => state.workspacePath)
   const meta = asRecord(toolCall.arguments._meta)
@@ -59,6 +59,7 @@ function SubAgentTaskCard({ toolCall, messageId }: { toolCall: ToolCall, message
   const currentTool = childThread?.streamState?.currentToolCall
   const { isOpen: expanded, toggle: toggleExpanded } = useDisclosureState({
     openWhile: isRunning || isError || waitingApproval,
+    presentOnMount,
   })
 
   const completedTools = useMemo(() => {
@@ -91,9 +92,7 @@ function SubAgentTaskCard({ toolCall, messageId }: { toolCall: ToolCall, message
       : isRunning
         ? 'bg-accent/5'
         : 'hover:bg-text-primary/[0.02]'
-  const animateEntry = startedAt !== undefined && Date.now() - startedAt < 1500
-
-  return <div className={`group relative my-0.5 overflow-hidden rounded-lg transition-colors motion-reduce:transition-none ${animateEntry ? 'tool-row-enter' : ''} ${cardStyle}`}>
+  return <div className={`group relative my-0.5 overflow-hidden rounded-lg transition-colors motion-reduce:transition-none ${cardStyle}`}>
     <button type="button" aria-expanded={expanded} onClick={toggleExpanded} className="relative z-10 flex min-h-[32px] w-full items-center gap-2 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40">
       <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform group-hover:text-text-muted motion-reduce:transition-none ${expanded ? 'rotate-0' : '-rotate-90'}`} />
       <span className="flex shrink-0 items-center justify-center">

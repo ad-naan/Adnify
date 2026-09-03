@@ -1,6 +1,6 @@
 /**
- * Groups adjacent tool rows without owning disclosure state. Each specialized
- * card follows the shared automatic/manual disclosure state machine.
+ * Groups adjacent tool rows and applies the timeline-owned entrance stage. Each
+ * specialized card still owns only its explicit automatic/manual disclosure.
  */
 
 import { memo } from 'react'
@@ -50,6 +50,7 @@ export function renderToolCallCard(
     onStopTool?: () => void
     onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
+    presentOnMount?: boolean
   },
 ): ReactNode {
   const isPending = tc.id === opts.pendingToolId
@@ -67,6 +68,7 @@ export function renderToolCallCard(
         onStop={isPending ? opts.onStopTool : undefined}
         onOpenInEditor={opts.onOpenDiff}
         messageId={opts.messageId}
+        presentOnMount={opts.presentOnMount}
       />
     )
   }
@@ -78,6 +80,7 @@ export function renderToolCallCard(
         key={tc.id}
         toolCall={tc}
         isAwaitingApproval={isPending}
+        presentOnMount={opts.presentOnMount}
       />
     )
   }
@@ -93,7 +96,7 @@ export function renderToolCallCard(
   }
 
   if (tc.name === 'task') {
-    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} />
+    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} presentOnMount={opts.presentOnMount} />
   }
 
   // 其他工具使用 ToolCallCard
@@ -102,6 +105,7 @@ export function renderToolCallCard(
       key={tc.id}
       toolCall={tc}
       isAwaitingApproval={isPending}
+      presentOnMount={opts.presentOnMount}
       onApprove={isPending ? opts.onApproveTool : undefined}
       onApproveForTask={isPending && supportsTaskApproval(tc) ? opts.onApproveToolForTask : undefined}
       onReject={isPending ? opts.onRejectTool : undefined}
@@ -119,6 +123,7 @@ interface ToolCallGroupProps {
   onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   messageId?: string
+  presentingToolId?: string
 }
 
 function ToolCallGroup({
@@ -130,14 +135,20 @@ function ToolCallGroup({
   onStopTool,
   onOpenDiff,
   messageId,
+  presentingToolId,
 }: ToolCallGroupProps) {
   const opts = { pendingToolId, onApproveTool, onApproveToolForTask, onRejectTool, onStopTool, onOpenDiff, messageId }
 
   return (
     <div className="my-2 space-y-2">
       {toolCalls.map(tc => (
-        <div key={tc.id}>
-          {renderToolCallCard(tc, opts)}
+        <div key={tc.id} className={tc.id === presentingToolId ? 'tool-row-enter' : ''}>
+          <div className={tc.id === presentingToolId ? 'tool-row-enter-clip' : ''}>
+            {renderToolCallCard(tc, {
+              ...opts,
+              presentOnMount: tc.id === presentingToolId,
+            })}
+          </div>
         </div>
       ))}
     </div>

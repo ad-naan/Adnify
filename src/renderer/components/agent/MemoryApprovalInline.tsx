@@ -11,11 +11,13 @@ import type { ToolCall } from '@/renderer/agent/types'
 interface MemoryApprovalInlineProps {
     toolCall: ToolCall
     isAwaitingApproval: boolean
+    presentOnMount?: boolean
 }
 
 export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     toolCall,
     isAwaitingApproval,
+    presentOnMount,
 }) => {
     const language = useStore(s => s.language)
     const safeContent = normalizeMemoryContentInput(toolCall.arguments.content)
@@ -27,6 +29,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     const timing = getToolTiming(toolCall)
     const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
         openWhile: isAwaitingApproval || isRunning || isError,
+        presentOnMount,
     })
 
     const statusText = isSuccess

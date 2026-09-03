@@ -849,9 +849,9 @@ textarea,
   overflow-anchor: none;
   visibility: hidden;
   transition:
-    grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease-in,
-    visibility 0s linear 360ms;
+    grid-template-rows 460ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 320ms ease-in,
+    visibility 0s linear 460ms;
 }
 
 .agent-disclosure.is-open {
@@ -950,17 +950,23 @@ textarea,
 }
 
 .tool-row-enter {
-  animation: tool-row-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow-anchor: none;
+  animation: tool-row-enter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tool-row-enter-clip {
+  min-height: 0;
+  overflow: hidden;
 }
 
 @keyframes tool-row-enter {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    grid-template-rows: 0fr;
   }
   to {
-    opacity: 1;
-    transform: translateY(0);
+    grid-template-rows: 1fr;
   }
 }
 
@@ -1066,12 +1072,12 @@ textarea,
    appended suffix gets a short reveal, followed by one independently breathing
    tail marker. Keeping the animated area tiny avoids whole-message repaints. */
 @keyframes stream-token-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { color: color-mix(in srgb, currentColor 42%, transparent); }
+  to { color: currentColor; }
 }
 
 .stream-token-in {
-  animation: stream-token-in 380ms ease-out forwards;
+  animation: stream-token-in 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .stream-tail-caret {

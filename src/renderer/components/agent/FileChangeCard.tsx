@@ -22,6 +22,7 @@ import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolAct
 interface FileChangeCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
+    presentOnMount?: boolean
     onApprove?: () => void
     onApproveForTask?: () => void
     onReject?: () => void
@@ -33,6 +34,7 @@ interface FileChangeCardProps {
 function FileChangeCard({
     toolCall,
     isAwaitingApproval,
+    presentOnMount,
     onApprove,
     onApproveForTask,
     onReject,
@@ -49,9 +51,9 @@ function FileChangeCard({
     const isActive = isRunning || isStreaming
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
+        presentOnMount,
     })
     const timing = getToolTiming(toolCall)
-    const animateEntry = timing.startedAt !== undefined && Date.now() - timing.startedAt < 1500
     const activityState = isStreaming || isRunning
         ? 'running'
         : isSuccess
@@ -223,7 +225,7 @@ function FileChangeCard({
 
     return (
         <div
-            className={`group my-0.5 relative ${animateEntry ? 'tool-row-enter' : ''} ${cardStyle} overflow-hidden`}
+            className={`group my-0.5 relative ${cardStyle} overflow-hidden`}
         >
             {/* Header - Flat Outline Style */}
             <div

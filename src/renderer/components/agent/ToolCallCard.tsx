@@ -28,6 +28,7 @@ import ToolActivityIndicator, { getToolTiming, ToolElapsedTime } from './ToolAct
 interface ToolCallCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
+    presentOnMount?: boolean
     onApprove?: () => void
     onApproveForTask?: () => void
     onReject?: () => void
@@ -1073,6 +1074,7 @@ function ToolPreview({
 const ToolCallCard = memo(function ToolCallCard({
     toolCall,
     isAwaitingApproval,
+    presentOnMount,
     onApprove,
     onApproveForTask,
     onReject,
@@ -1113,9 +1115,9 @@ const ToolCallCard = memo(function ToolCallCard({
     }
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
+        presentOnMount,
     })
     const timing = getToolTiming(toolCall)
-    const animateEntry = timing.startedAt !== undefined && Date.now() - timing.startedAt < 1500
     const activityState = isStreaming || isRunning
         ? 'running'
         : isSuccess
@@ -1171,7 +1173,7 @@ const ToolCallCard = memo(function ToolCallCard({
     )
 
     return (
-        <div className={`group my-0.5 relative ${animateEntry ? 'tool-row-enter' : ''} ${cardStyle}`}>
+        <div className={`group my-0.5 relative ${cardStyle}`}>
             <button
                 type="button"
                 aria-expanded={isExpanded}
