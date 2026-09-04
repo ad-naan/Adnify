@@ -31,6 +31,7 @@ publicHoistPattern:
 # 安全 override：把传递依赖顶到已修复的补丁版本。
 #
 overrides:
+  electron@39.8.10>extract-zip: '-'
   brace-expansion@<1.1.18: ^1.1.18
   brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
   brace-expansion@>=4.0.0 <5.0.9: ^5.0.9
@@ -47,11 +48,15 @@ overrides:
   sharp@<0.35.0: ^0.35.1
   protobufjs@<7.6.3: ^7.6.3
 
-# Electron installs through extract-zip 2.0.1 and upstream has no fixed
-# release. The repository patch preserves internal symlinks while rejecting
-# targets that resolve outside the extraction root.
+# Backport Electron's official extractor migration without changing the runtime.
+# Keep this version aligned with package.json and the installer patch below.
+packageExtensions:
+  electron@39.8.10:
+    dependencies:
+      '@electron-internal/extract-zip': 1.0.5
+
 patchedDependencies:
-  'extract-zip@2.0.1': patches/extract-zip@2.0.1.patch
+  'electron@39.8.10': patches/electron@39.8.10.patch
 
 # minimumReleaseAge 策略说明：
 # pnpm v11+ 默认要求包发布后至少等待 1440 分钟（24小时）才能安装，

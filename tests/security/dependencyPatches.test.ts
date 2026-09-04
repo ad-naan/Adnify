@@ -1,14 +1,13 @@
 import { promises as fs } from 'fs'
 import os from 'os'
 import path from 'path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import extract from 'extract-zip'
+import { afterEach, describe, expect, it } from 'vitest'
+import { extract } from '@electron-internal/extract-zip'
 import JSZip from 'jszip'
 
 const tempRoots: string[] = []
 
 afterEach(async () => {
-  vi.restoreAllMocks()
   await Promise.all(tempRoots.splice(0).map(root => fs.rm(root, { recursive: true, force: true })))
 })
 
@@ -25,11 +24,39 @@ describe('dependency security patches', () => {
     await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer', platform: 'UNIX' }))
 
     await expect(extract(archivePath, { dir: destination }))
-      .rejects.toThrow('Out of bound symlink target')
+      .rejects.toThrow(/target (?:escapes destination|is absolute or empty)/)
     await expect(fs.lstat(path.join(destination, 'nested/link'))).rejects.toThrow()
   })
 
-  it('preserves internal relative symlinks needed by Electron archives', async () => {
+  it('extracts regular files used by Electron archives', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
+    tempRoots.push(root)
+    const archivePath = path.join(root, 'files.zip')
+    const destination = path.join(root, 'destination')
+    const archive = new JSZip()
+    archive.file('nested/target.txt', 'internal data')
+    await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer', platform: 'UNIX' }))
+
+    await extract(archivePath, { dir: destination })
+    expect(await fs.readFile(path.join(destination, 'nested/target.txt'), 'utf8')).toBe('internal data')
+  })
+
+  it('rejects traversal through another archive symlink', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
+    tempRoots.push(root)
+    const archivePath = path.join(root, 'chain.zip')
+    const destination = path.join(root, 'destination')
+    const archive = new JSZip()
+    archive.file('nested/link', 'inside/../outside.txt', { unixPermissions: 0o120777 })
+    archive.file('nested/inside', '..', { unixPermissions: 0o120777 })
+    await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer', platform: 'UNIX' }))
+
+    await expect(extract(archivePath, { dir: destination })).rejects.toThrow('target escapes destination')
+    await expect(fs.lstat(path.join(destination, 'nested/link'))).rejects.toThrow()
+  })
+
+  // Windows requires symlink privileges; Linux CI exercises real links without mocking the extractor.
+  it.skipIf(process.platform === 'win32')('preserves internal relative symlinks needed by Electron archives', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
     tempRoots.push(root)
     const archivePath = path.join(root, 'internal.zip')
@@ -38,11 +65,10 @@ describe('dependency security patches', () => {
     archive.file('target.txt', 'internal data')
     archive.file('nested/link', '../target.txt', { unixPermissions: 0o120777 })
     await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer', platform: 'UNIX' }))
-    // Windows symlink creation requires privileges; verify the extraction decision on every platform.
-    const symlink = vi.spyOn(fs, 'symlink').mockResolvedValue(undefined)
     await extract(archivePath, { dir: destination })
-    expect(symlink).toHaveBeenCalledWith('../target.txt', path.join(await fs.realpath(destination), 'nested/link'))
     expect(await fs.readFile(path.join(destination, 'target.txt'), 'utf8')).toBe('internal data')
+    expect(await fs.readlink(path.join(destination, 'nested/link'))).toBe('../target.txt')
+    expect(await fs.readFile(path.join(destination, 'nested/link'), 'utf8')).toBe('internal data')
   })
 
   it('keeps onnx-proto encoding compatible with the patched protobufjs runtime', async () => {
