@@ -51,15 +51,20 @@ jobs:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
         run: |
           cd "$GITHUB_WORKSPACE"
+          eslint_status=0
           node "$RUNNER_TEMP/eslint-tools/node_modules/eslint/bin/eslint.js" . \
             --no-eslintrc \
             --ignore-path .gitignore \
             --config "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs" \
             --resolve-plugins-relative-to "$RUNNER_TEMP/eslint-tools" \
             --ext .js,.jsx,.ts,.tsx \
-            --format @microsoft/eslint-formatter-sarif \
-            --output-file "$GITHUB_WORKSPACE/eslint-results.sarif"
-        continue-on-error: true
+            --format "$RUNNER_TEMP/eslint-tools/node_modules/@microsoft/eslint-formatter-sarif" \
+            --output-file "$GITHUB_WORKSPACE/eslint-results.sarif" || eslint_status=$?
+          # Exit 1 reports lint findings; exit 2 means the scanner failed to run.
+          if [ "$eslint_status" -gt 1 ]; then
+            exit "$eslint_status"
+          fi
+          test -s "$GITHUB_WORKSPACE/eslint-results.sarif"
 
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@v4
