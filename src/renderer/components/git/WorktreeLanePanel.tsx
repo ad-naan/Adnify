@@ -24,13 +24,14 @@ import { t, type Language } from '@shared/i18n'
 import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 
 interface WorktreeLanePanelProps {
+  flat?: boolean
   lane: ExecutionLaneProjection
   workspacePath: string | null
   language: Language
   onResolved: (status: ExecutionLaneProjection['status'], diagnosis?: Pick<ExecutionLaneProjection, 'notice' | 'error' | 'conflicts'>) => void
 }
 
-export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }: WorktreeLanePanelProps) {
+export function WorktreeLanePanel({ lane, workspacePath, language, onResolved, flat = false }: WorktreeLanePanelProps) {
   const [busy, setBusy] = useState<'merge' | 'drop' | null>(null)
 
   // 只有归档保留的车道需要人工处理；已合并/已丢弃的车道在仓库里什么都不剩。
@@ -84,7 +85,7 @@ export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }:
     }
   }
 
-  return <section className="mt-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.05] px-3.5 py-3">
+  return <section className={flat ? 'mt-2 py-2' : 'mt-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.05] px-3.5 py-3'}>
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-500">

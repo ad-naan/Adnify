@@ -17,6 +17,9 @@ export const en = {
   'toolPayload.copied': 'Copied',
   'toolPayload.copyFailed': 'Copy failed. Please try again.',
   'toolPayload.waiting': 'Waiting for response…',
+  'toolPayload.details': 'Tool details',
+  'toolPayload.expandSize': 'Expand to maximum height',
+  'toolPayload.restoreSize': 'Restore compact height',
   'assets.jobId': 'Job ID',
   'assets.storagePath': 'Storage location',
   'assets.errorServiceDetail': 'The service returned HTTP {status}: {detail}',
@@ -762,7 +765,6 @@ export const en = {
   'toolReject': 'Reject',
   'toolCopyResult': 'Copy result',
   'toolTruncated': '... (truncated)',
-  'toolExpand': 'Expand to {height}',
   'toolCollapse': 'Collapse',
   'confirmLargeFile': 'This file is large ({size} MB) and may affect performance. Continue?',
 

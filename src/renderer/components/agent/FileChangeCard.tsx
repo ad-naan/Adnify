@@ -8,7 +8,7 @@ import { useDisclosureState } from '@renderer/hooks'
 import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
-import { ExpandablePreviewContainer } from './ToolCallCard'
+import { ToolDetailsView } from './ToolDetailsView'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -176,23 +176,14 @@ function FileChangeCard({
         resolveFileChangeActionLabel(toolCall.name, meta, oldContent, newContent)
     ), [toolCall.name, meta, oldContent, newContent])
     const isCreateAction = isCreateActionLabel(changeLabel)
-    // Card style only; visual design remains unchanged.
-    const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
-        if (isError) return 'bg-red-500/5'
-        if (isStreaming || isRunning) return 'bg-accent/[0.035]'
-        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
-    }, [isAwaitingApproval, isError, isStreaming, isRunning])
-
     const contentBody = (
         <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
-            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-
             <div className="relative z-10">
-                <ExpandablePreviewContainer language={language}>
-                    <div className="relative min-h-[60px] p-2">
+                <ToolDetailsView args={Object.fromEntries(Object.entries(args).filter(([key]) => !key.startsWith('_')))} response={toolCall.error || toolCall.result} language={language} isError={isError}>
+                    <div className="relative">
+                        {toolCall.error && <p className="mb-2 whitespace-pre-wrap break-words text-[11px] text-status-error">{toolCall.error}</p>}
                         {isLargeWrite && !isStreaming && !isRunning ? (
-                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-text-secondary">
+                            <div className="py-1 text-[11px] text-text-secondary">
                                 <div className="font-medium text-amber-400">
                                     Large file preview is deferred to keep the UI responsive.
                                 </div>
@@ -207,7 +198,7 @@ function FileChangeCard({
                                             e.stopPropagation()
                                             void openFullFile()
                                         }}
-                                        className="rounded-md border border-border bg-surface-hover px-2.5 py-1.5 text-[11px] font-medium text-text-primary transition-colors hover:border-accent hover:text-accent"
+                                        className="py-1 text-[11px] font-medium text-accent hover:underline"
                                     >
                                         Open full file
                                     </button>
@@ -223,14 +214,14 @@ function FileChangeCard({
                             />
                         )}
                     </div>
-                </ExpandablePreviewContainer>
+                </ToolDetailsView>
             </div>
         </div>
     )
 
     return (
         <div
-            className={`group my-0.5 relative ${cardStyle} overflow-hidden`}
+            className="group my-0.5 relative overflow-hidden"
         >
             {/* Header - Flat Outline Style */}
             <div
@@ -308,7 +299,7 @@ function FileChangeCard({
                     {/* 行尾顺序：增删统计 → 耗时 → 操作图标，让耗时与其他工具行的右边界对齐。 */}
                     <div className="flex shrink-0 items-center gap-2">
                         {(isSuccess || newContent) && (
-                            <span className="text-[10px] font-mono opacity-80 flex items-center gap-2 px-1.5 py-0.5 bg-text-primary/[0.03] rounded border border-border/50 backdrop-blur-sm shadow-sm select-none">
+                            <span className="text-[10px] font-mono opacity-80 flex items-center gap-2 px-1.5 py-0.5 select-none">
                                 {diffStats.added > 0 && (
                                     <span className="flex items-center gap-0.5 text-green-400 font-semibold">
                                         <span>+</span>
@@ -359,22 +350,11 @@ function FileChangeCard({
             </div>
 
             {/* Expanded Content */}
-            {(newContent || isActive || isLargeWrite) && (
-                <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>
-            )}
-
-            {/* Error Message */}
-            {toolCall.error && isExpanded && (
-                <div className="px-3 pb-3 pl-9">
-                    <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
-                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
-                    </div>
-                </div>
-            )}
+            <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>
 
             {/* Approval Actions */}
             {isAwaitingApproval && (
-                <div className="border-t border-yellow-500/10 bg-yellow-500/5 px-3 py-2">
+                <div className="px-3 py-2">
                     <ToolApprovalActions
                         language={language}
                         onApprove={onApprove}

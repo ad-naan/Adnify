@@ -72,17 +72,17 @@ const RichContentItem = memo(function RichContentItem({
 
 // =================== 内部工具：通用容器 ===================
 const ContentCard = ({ title, icon: Icon, actions, children, noPadding = false }: { title: string, icon: any, actions?: React.ReactNode, children: React.ReactNode, noPadding?: boolean }) => (
-  <div className="mt-2 text-[11px]">
-    <div className="flex items-center justify-between gap-1.5 text-text-muted mb-1 group/title">
+  <div className="rich-content-card mt-2 text-[11px]">
+    <div className="rich-content-title flex items-center justify-between gap-1.5 text-text-muted mb-1 group/title">
       <div className="flex items-center gap-1.5">
         <Icon className="w-3 h-3" />
         <span>{title}</span>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover/title:opacity-100 transition-opacity">
+      <div className="rich-content-actions flex items-center gap-1 opacity-0 group-hover/title:opacity-100 transition-opacity">
         {actions}
       </div>
     </div>
-    <div className={`pl-2 ml-1 ${noPadding ? '' : 'py-1'}`}>
+    <div className={`rich-content-body pl-2 ml-1 ${noPadding ? '' : 'py-1'}`}>
       {children}
     </div>
   </div>

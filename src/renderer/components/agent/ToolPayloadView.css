@@ -1,0 +1,28 @@
+.tool-payload {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    height: min(120px, 60vh);
+    min-height: min(72px, 60vh);
+    max-height: min(560px, 60vh);
+    resize: vertical;
+    overflow: hidden;
+}
+
+.tool-payload-toolbar { min-height: 36px; }
+
+@container (max-width: 260px) {
+    .tool-payload-field { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* This panel owns scrolling; rich payloads must not create nested viewports. */
+.tool-payload-body pre,
+.tool-payload-body .overflow-auto { max-height: none; }
+.tool-payload-body .overflow-auto { overflow-y: visible; }
+.tool-payload-body img { max-height: 220px; }
+.tool-payload-body .rich-content-card { margin-top: 0; }
+.tool-payload-body .rich-content-title { margin-bottom: 8px; }
+.tool-payload-body .rich-content-body { margin-left: 0; padding-left: 0; }
+.tool-payload-body .rich-content-actions { opacity: 1; }

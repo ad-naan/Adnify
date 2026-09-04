@@ -1,5 +1,5 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, FileCode, Image as ImageIcon, Search, Server, Terminal } from 'lucide-react'
+import { memo, useMemo, useState } from 'react'
+import { ChevronDown, FileCode, Globe, Image as ImageIcon, Search, Server, Terminal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
@@ -12,7 +12,7 @@ import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
 import AssetToolCard from './AssetToolCard'
-import { ToolPayloadView } from './ToolPayloadView'
+import { ToolDetailsView } from './ToolDetailsView'
 import InlineDiffPreview, { countContentLines } from './InlineDiffPreview'
 import { getExtension, getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
@@ -80,6 +80,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 
 function ToolKindIcon({ name }: { name: string }) {
+    if (name.startsWith('browser_')) return <Globe className="h-3.5 w-3.5" />
     if (name === 'run_command') return <Terminal className="h-3.5 w-3.5" />
     if (name === 'read_image' || name.startsWith('asset_')) return <ImageIcon className="h-3.5 w-3.5" />
     if (name.includes('remote') || name === 'upload_to_remote' || name === 'download_from_remote') {
@@ -392,16 +393,6 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
     return isRunning ? 'Processing...' : ''
 }
 
-const getHeightPx = (heightClass: string): number => {
-    const bracketMatch = heightClass.match(/\[(\d+)px\]/)
-    if (bracketMatch) return Number(bracketMatch[1])
-
-    const remMatch = heightClass.match(/max-h-(\d+)/)
-    if (remMatch) return Number(remMatch[1]) * 4
-
-    return 200
-}
-
 function PendingPreviewSkeleton() {
     return (
         <div className="p-2 space-y-1.5 opacity-70" aria-hidden="true">
@@ -420,21 +411,21 @@ function ExecutionTargetBadge({ args }: { args: ToolArgs }) {
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
+                <span className={`inline-flex items-center gap-1 py-0.5 ${
                     isRemote
-                        ? 'bg-sky-500/10 text-sky-300 border-sky-500/20'
-                        : 'bg-surface-elevated text-text-muted border-border/60'
+                        ? 'text-status-info'
+                        : 'text-text-muted'
                 }`}>
                     {isRemote ? <Server className="w-3 h-3" /> : <Terminal className="w-3 h-3" />}
                     {isRemote ? 'Remote' : 'Local'}
                 </span>
                 {routeMeta.serverName && (
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-surface-elevated text-text-secondary border border-border/60">
+                    <span className="inline-flex items-center gap-1 py-0.5 text-text-secondary">
                         {routeMeta.serverName}
                     </span>
                 )}
                 {routeMeta.resolvedBy && (
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-surface-elevated text-text-muted border border-border/60">
+                    <span className="inline-flex items-center gap-1 py-0.5 text-text-muted">
                         via {getRouteSourceLabel(routeMeta.resolvedBy)}
                     </span>
                 )}
@@ -461,91 +452,21 @@ function ExecutionTargetBadge({ args }: { args: ToolArgs }) {
     )
 }
 
-export function ExpandablePreviewContainer({
-    children,
-    maxHeight = 'max-h-[200px]',
-    expandedHeight = 'max-h-[350px]',
-    language,
-}: {
-    children: React.ReactNode
-    maxHeight?: string
-    expandedHeight?: string
-    language: Language
-}) {
-    const [expanded, setExpanded] = useState(false);
-    const contentRef = useRef<HTMLDivElement>(null);
-    const innerRef = useRef<HTMLDivElement>(null);
-    const [isOverflowing, setIsOverflowing] = useState(false);
-    const [measuredHeight, setMeasuredHeight] = useState(0);
-
-    const collapsedMaxHeight = useMemo(() => getHeightPx(maxHeight), [maxHeight])
-    const expandedMaxHeight = useMemo(() => getHeightPx(expandedHeight), [expandedHeight])
-    const activeMaxHeight = expanded ? expandedMaxHeight : collapsedMaxHeight
-
-    useLayoutEffect(() => {
-        const content = contentRef.current
-        const inner = innerRef.current
-        if (!content || !inner) return
-
-        const measure = () => {
-            const contentHeight = inner.scrollHeight
-            const totalHeight = contentHeight
-            const nextHeight = Math.max(1, Math.min(totalHeight, activeMaxHeight))
-            const nextOverflowing = totalHeight > activeMaxHeight + 10
-
-            setIsOverflowing(nextOverflowing)
-            setMeasuredHeight(nextHeight)
-        }
-
-        measure()
-        const resizeObserver = new ResizeObserver(measure)
-        resizeObserver.observe(content)
-        resizeObserver.observe(inner)
-        return () => resizeObserver.disconnect()
-    }, [children, expanded, activeMaxHeight]);
-
-    const heightValue = useMemo(() => {
-        const match = expandedHeight.match(/\[(.*?)\]/);
-        return match ? match[1] : expandedHeight.replace('max-h-', '');
-    }, [expandedHeight]);
-
-    return (
-        <div className="mt-1 relative overflow-hidden">
-            <div
-                ref={contentRef}
-                className="overflow-y-auto custom-scrollbar transition-[height,background-color] duration-300 ease-out relative"
-                style={{ height: measuredHeight || undefined, maxHeight: activeMaxHeight }}
-            >
-                <div ref={innerRef}>
-                    {children}
-                </div>
-            </div>
-            {isOverflowing && !expanded && (
-                <div
-                    onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-                    className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-surface/80 via-surface/40 to-transparent flex items-end justify-center pb-2 cursor-pointer transition-all opacity-90 hover:opacity-100"
-                >
-                    <div className="flex items-center gap-1 font-medium pb-0.5 pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-3 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
-                        <ChevronDown className="w-3 h-3" />
-                        {t('toolExpand', language, { height: heightValue })}
-                    </div>
-                </div>
-            )}
-            {isOverflowing && expanded && (
-                <div
-                    onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
-                    className="w-full text-center py-2 mt-1 cursor-pointer flex items-center justify-center"
-                >
-                    <div className="flex items-center gap-1 font-medium pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-4 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
-                        <ChevronDown className="w-3 h-3 rotate-180 pointer-events-none" />
-                        {t('toolCollapse', language)}
-                    </div>
-                </div>
-            )}
-        </div>
-    )
+/** The shared tool detail panel owns sizing and scrolling for every preview. */
+function ToolPreviewContent({ children }: { children: React.ReactNode }) {
+    return <div className="min-w-0">{children}</div>
 }
 
+function hasSpecializedPreview(name: string, toolCall: ToolCall): boolean {
+    return Boolean(toolCall.richContent?.length) || [
+        'run_command', 'send_terminal_input', 'stop_terminal', 'read_terminal_output',
+        'search_files', 'codebase_search', 'web_search', 'uiux_search',
+        'list_directory', 'list_remote_directory', 'edit_file', 'write_file',
+        'create_directory', 'delete_file_or_folder', 'read_file', 'read_multiple_files',
+        'read_remote_file', 'read_image', 'read_url', 'find_symbol', 'get_document_symbols',
+        'get_diagnostics', 'find_references', 'navigate_symbol', 'get_hover_info',
+    ].includes(name)
+}
 function ToolPreview({
     toolCall,
     args,
@@ -567,12 +488,12 @@ function ToolPreview({
 }) {
     const stringResult = typeof toolCall.result === 'string' ? toolCall.result : ''
     const pendingPreview = (label = 'Waiting for output...') => (
-        <ExpandablePreviewContainer language={language}>
+        <ToolPreviewContent>
             <div className="p-2 text-[11px] text-text-muted italic">
                 {label}
             </div>
             <PendingPreviewSkeleton />
-        </ExpandablePreviewContainer>
+        </ToolPreviewContent>
     )
 
     if (effectiveName === 'run_command') {
@@ -630,12 +551,12 @@ function ToolPreview({
                     </button>
                 </div>
                 {stringResult ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 font-mono text-[11px]">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Waiting for terminal output...')
                 )}
@@ -681,11 +602,11 @@ function ToolPreview({
                     <span className="opacity-50 text-[10px]">{asString(args.terminal_id)}</span>
                 </div>
                 {stringResult.length > 0 ? (
-                    <ExpandablePreviewContainer language={language}>
-                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 bg-surface/50">
+                    <ToolPreviewContent>
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2">
                             {stringResult}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Waiting for terminal output...')
                 )}
@@ -705,9 +626,9 @@ function ToolPreview({
                     <span className="text-text-primary font-medium truncate">"{query}"</span>
                 </div>
                 {toolCall.result ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Searching...')
                 )}
@@ -727,12 +648,12 @@ function ToolPreview({
                     <span className="text-text-primary font-medium" title={path || undefined}>{displayName}</span>
                 </div>
                 {stringResult ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <div className="p-2 font-mono text-text-secondary whitespace-pre">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview(effectiveName === 'list_remote_directory' ? 'Reading remote directory...' : 'Reading directory...')
                 )}
@@ -785,11 +706,11 @@ function ToolPreview({
                         {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
                     </div>
                     {isLargeWrite && !isStreaming ? (
-                        <div className="ml-1 rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-2 text-[11px] text-text-muted">
+                        <div className="ml-1 px-2 py-2 text-[11px] text-status-warning">
                             Large file preview deferred. Open the file to inspect the full content safely.
                         </div>
                     ) : bypassStreamingDiff ? (
-                        <div className="ml-1 rounded-md border border-accent/20 bg-accent/5 px-2 py-2 text-[11px] text-text-muted">
+                        <div className="ml-1 px-2 py-2 text-[11px] text-text-muted">
                             Large file streaming · diff will render after completion.
                         </div>
                     ) : (
@@ -804,11 +725,11 @@ function ToolPreview({
                         </div>
                     )}
                     {stringResult && !isStreaming && (
-                        <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
+                        <ToolPreviewContent>
                             <div className="p-2 text-[11px] text-text-muted">
                                 {stringResult.slice(0, 1000)}
                             </div>
-                        </ExpandablePreviewContainer>
+                        </ToolPreviewContent>
                     )}
                 </div>
             )
@@ -832,11 +753,11 @@ function ToolPreview({
                     <span className="text-text-primary break-all" title={path || undefined}>{displayName}</span>
                 </div>
                 {stringResult && (
-                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
+                    <ToolPreviewContent>
                         <div className="p-2 text-[11px] text-text-muted">
                             <TextWithFileLinks text={stringResult.slice(0, 1000)} />
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 )}
             </div>
         )
@@ -865,7 +786,7 @@ function ToolPreview({
                     </span>
                 </div>
                 {stringResult ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         {isDocumentRead ? (
                             <div className="p-2 text-[11px] leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
                                 <TextWithFileLinks text={stringResult.slice(0, 5000)} />
@@ -884,7 +805,7 @@ function ToolPreview({
                                 {stringResult.slice(0, 5000)}
                             </SyntaxHighlighter>
                         )}
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview(effectiveName === 'read_remote_file' ? 'Reading remote file...' : 'Reading file...')
                 )}
@@ -904,18 +825,18 @@ function ToolPreview({
                     </span>
                 </div>
                 {toolCall.richContent && toolCall.richContent.length > 0 ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <div className="p-2">
                             <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-full" />
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : stringResult ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <div className="p-2 text-[11px] text-text-secondary whitespace-pre-wrap break-words">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Analyzing image...')
                 )}
@@ -943,12 +864,12 @@ function ToolPreview({
                     </a>
                 </div>
                 {stringResult ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <div className="p-2 text-[11px] text-text-secondary whitespace-pre-wrap break-all">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Reading URL...')
                 )}
@@ -972,10 +893,10 @@ function ToolPreview({
                     {symbols.length > 0 && <span className="shrink-0 text-text-muted/60">· {symbols.length}</span>}
                 </div>
                 {symbols.length > 0 ? (
-                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[220px]" expandedHeight="max-h-[440px]">
+                    <ToolPreviewContent>
                         <div className="space-y-1">
                             {symbols.map((symbol, index) => (
-                                <div key={`${symbol.relativePath}-${symbol.namePath}-${index}`} className="rounded-md bg-text-primary/[0.025] px-2 py-1.5">
+                                <div key={`${symbol.relativePath}-${symbol.namePath}-${index}`} className="px-2 py-1.5">
                                     <div className="flex min-w-0 items-center gap-2">
                                         <code className="min-w-0 flex-1 truncate font-mono text-text-primary">{symbol.namePath}</code>
                                         {symbol.kindName && <span className="shrink-0 text-[9px] text-text-muted/60">{symbol.kindName}</span>}
@@ -983,15 +904,15 @@ function ToolPreview({
                                     {symbol.relativePath && <div className="mt-0.5 truncate text-[10px] text-text-muted">
                                         <TextWithFileLinks text={`${symbol.relativePath}${symbol.line ? `:${symbol.line}` : ''}`} />
                                     </div>}
-                                    {symbol.body && <ExpandablePreviewContainer language={language} maxHeight="max-h-[180px]">
+                                    {symbol.body && <ToolPreviewContent>
                                         <pre className="overflow-auto whitespace-pre p-2 font-mono text-[10px] leading-4 text-text-secondary custom-scrollbar">{symbol.body}</pre>
-                                    </ExpandablePreviewContainer>}
+                                    </ToolPreviewContent>}
                                 </div>
                             ))}
                         </div>
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : toolCall.result ? (
-                    <div className="rounded-md bg-text-primary/[0.025] px-2 py-1.5 text-text-muted">{toolCall.result}</div>
+                    <div className="px-2 py-1.5 text-text-muted">{toolCall.result}</div>
                 ) : (isRunning || isStreaming) && pendingPreview('Analyzing...')}
             </div>
         )
@@ -1011,9 +932,9 @@ function ToolPreview({
                     {line && <span className="text-text-muted/60">:{line}</span>}
                 </div>
                 {toolCall.result ? (
-                    <ExpandablePreviewContainer language={language}>
+                    <ToolPreviewContent>
                         <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
-                    </ExpandablePreviewContainer>
+                    </ToolPreviewContent>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Analyzing...')
                 )}
@@ -1021,22 +942,8 @@ function ToolPreview({
         )
     }
 
-    const filteredArgs = Object.fromEntries(Object.entries(args).filter(([key]) => !key.startsWith('_')))
     const hasRichContent = !!toolCall.richContent?.length
-
-    return (
-        <div className="min-w-0 space-y-2 pt-1 text-[11px]">
-            {Object.keys(filteredArgs).length > 0 && (
-                <ToolPayloadView data={filteredArgs} label={t('toolPayload.arguments', language)} language={language} />
-            )}
-            {(toolCall.result || hasRichContent) && (
-                <ToolPayloadView data={toolCall.result || undefined} label={t('toolPayload.response', language)} language={language} isError={toolCall.status === 'error'}>
-                    {hasRichContent && <RichContentRenderer content={toolCall.richContent!} maxHeight="max-h-full" />}
-                </ToolPayloadView>
-            )}
-            {!toolCall.result && !hasRichContent && (isRunning || isStreaming) && pendingPreview(t('toolPayload.waiting', language))}
-        </div>
-    )
+    return hasRichContent ? <RichContentRenderer content={toolCall.richContent!} maxHeight="max-h-full" /> : null
 }
 
 const ToolCallCard = memo(function ToolCallCard({
@@ -1101,40 +1008,40 @@ const ToolCallCard = memo(function ToolCallCard({
         [effectiveName, args, toolCall.status, isStreaming]
     )
 
-    const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border border-yellow-500/20 bg-yellow-500/5 rounded-lg shadow-sm shadow-yellow-500/5 overflow-hidden'
-        if (isError) return 'bg-red-500/5 rounded-lg overflow-hidden'
-        if (isStreaming || isRunning) return 'bg-accent/[0.035] rounded-lg overflow-hidden'
-        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
-    }, [isAwaitingApproval, isError, isStreaming, isRunning])
-
     if (effectiveName.startsWith('asset_')) return <AssetToolCard toolCall={toolCall} isPresenting={isPresenting} isAwaitingApproval={isAwaitingApproval} onApprove={onApprove} onReject={onReject} onStop={onStop} />
 
     const contentBody = (
         <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
-            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-
             <div className="relative z-10 space-y-2 mt-1">
-                <ToolPreview
-                    toolCall={toolCall}
-                    args={args}
-                    effectiveName={effectiveName}
-                    isRunning={isRunning}
-                    isStreaming={isStreaming}
+                <ToolDetailsView
+                    args={Object.fromEntries(Object.entries(args).filter(([key]) => !key.startsWith('_')))}
+                    response={toolCall.error || toolCall.result}
                     language={language}
-                    currentTheme={currentTheme}
-                    setTerminalVisible={setTerminalVisible}
-                />
+                    isError={isError}
+                >
+                    {hasSpecializedPreview(effectiveName, toolCall) ? (
+                        <>
+                            <ToolPreview
+                                toolCall={toolCall}
+                                args={args}
+                                effectiveName={effectiveName}
+                                isRunning={isRunning}
+                                isStreaming={isStreaming}
+                                language={language}
+                                currentTheme={currentTheme}
+                                setTerminalVisible={setTerminalVisible}
+                            />
+                            {toolCall.error && <p className="mt-2 whitespace-pre-wrap break-words text-status-error">{toolCall.error}</p>}
+                        </>
+                    ) : undefined}
+                </ToolDetailsView>
                 <ExecutionTargetBadge args={args} />
-                {toolCall.error && (
-                    <ToolPayloadView data={toolCall.error} label={t('toolPayload.error', language)} language={language} isError />
-                )}
             </div>
         </div>
     )
 
     return (
-        <div className={`group my-0.5 relative ${cardStyle}`}>
+        <div className="group my-0.5 relative overflow-hidden">
             <button
                 type="button"
                 aria-expanded={isExpanded}
@@ -1175,13 +1082,13 @@ const ToolCallCard = memo(function ToolCallCard({
             <SmoothCollapse open={isExpanded}>{contentBody}</SmoothCollapse>
 
             {isAwaitingApproval && (
-                <div className="border-t border-yellow-500/10 bg-yellow-500/5 px-3 py-2">
+                <div className="px-3 py-2">
                     {showApproveRule && approvalRule && (
-                        <div className="mb-2.5 rounded-lg border border-accent/25 bg-background/75 p-2.5">
+                        <div className="mb-2.5 p-2.5">
                             <div className="mb-1 text-[11px] font-medium text-text-primary">
                                 {t('common.alwaysAllowSimilarCommands', language)}
                             </div>
-                            <div className="flex items-center gap-2 rounded-md border border-border/70 bg-surface/60 p-2">
+                            <div className="flex items-center gap-2 py-2">
                                 <div className="min-w-0 flex-1">
                                     <code className="block truncate text-[11px] text-text-primary">{formatTerminalCommandRule(approvalRule)} <span className="text-text-muted">…</span></code>
                                     {approvalRule.description && <p className="mt-1 text-[10px] leading-4 text-text-muted">{approvalRule.description}</p>}

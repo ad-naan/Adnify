@@ -9,6 +9,7 @@ import { useStore } from '@/renderer/store'
 import { t } from '@shared/i18n'
 import type { ExecutionLaneProjection, ExecutionLaneStatus } from '@shared/types/executionLane'
 import SmoothCollapse from './SmoothCollapse'
+import { ToolDetailsView } from './ToolDetailsView'
 import ToolActivityIndicator, { ToolElapsedTime, TOOL_ROW_ACTION_SLOT_CLASS } from './ToolActivityIndicator'
 import { useDisclosureState } from '@renderer/hooks'
 import { AGENT_DISCLOSURE_HANDOFF_CLOSE_MS } from '@renderer/agent/presentation/disclosureMotion'
@@ -88,15 +89,8 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
   }), [completedTools, currentTool?.name, isError, isRunning, isSuccess, language, threadId, waitingApproval])
 
   const description = asString(toolCall.arguments.description) || (t('subAgentTaskCard.subAgentTask', language))
-  const cardStyle = waitingApproval
-    ? 'border border-yellow-500/20 bg-yellow-500/5 shadow-sm shadow-yellow-500/5'
-    : isError
-      ? 'bg-red-500/5'
-      : isRunning
-        ? 'bg-accent/5'
-        : 'hover:bg-text-primary/[0.02]'
-  return <div className={`group relative my-0.5 overflow-hidden rounded-lg transition-colors motion-reduce:transition-none ${cardStyle}`}>
-    <button type="button" aria-expanded={expanded} onClick={toggleExpanded} className="relative z-10 flex min-h-[32px] w-full items-center gap-2 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40">
+  return <div className="group relative my-0.5 overflow-hidden">
+    <button type="button" aria-expanded={expanded} onClick={toggleExpanded} className="relative z-10 flex min-h-9 w-full items-center gap-2 py-1.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40">
       <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform group-hover:text-text-muted motion-reduce:transition-none ${expanded ? 'rotate-0' : '-rotate-90'}`} />
       <span className="flex shrink-0 items-center justify-center">
         {waitingApproval
@@ -122,7 +116,7 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
     </button>
 
     <SmoothCollapse open={expanded}><div className="relative pb-3 pl-[26px] pr-3 pt-0">
-      <div className="absolute bottom-4 left-[13.5px] top-0 w-[1.5px] rounded-full bg-border/40" />
+      <ToolDetailsView args={Object.fromEntries(Object.entries(toolCall.arguments).filter(([key]) => !key.startsWith('_')))} response={toolCall.error || toolCall.result} language={language} isError={isError}>
       <ol className="relative z-10 space-y-1 pt-1">
         {steps.map(step => <li key={step.id} className="flex min-h-7 items-start gap-2">
           <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center"><StepIcon state={step.state} /></span>
@@ -140,11 +134,13 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
         <button type="button" onClick={() => Agent.approve(childThread?.streamState?.requestId)} className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover">{t('toolApprove', language)}</button>
       </div>}
 
-      {(toolCall.result || toolCall.error) && !isRunning && <div className={`ml-6 mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-md px-2.5 py-2 text-[10px] leading-5 custom-scrollbar ${isError ? 'bg-red-500/10 text-red-300' : 'bg-text-primary/[0.025] text-text-secondary'}`}>{toolCall.result || toolCall.error}</div>}
+      {(toolCall.result || toolCall.error) && !isRunning && <div className={`ml-6 mt-2 whitespace-pre-wrap break-words py-2 text-[11px] leading-5 ${isError ? 'text-status-error' : 'text-text-secondary'}`}>{toolCall.error || toolCall.result}</div>}
+      </ToolDetailsView>
       {/* 子代理跑在独立车道里时，改动可能没能自动合并 —— 提交只留在 adnify/lane-* 分支上。
           恢复入口必须挂在这张卡上：子代理没有任务面板，聊天流是用户唯一能看到它的地方。 */}
       {lane && <div className="ml-6">
         <WorktreeLanePanel
+          flat
           lane={lane}
           workspacePath={workspacePath}
           language={language}

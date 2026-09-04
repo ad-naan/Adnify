@@ -17,6 +17,9 @@ export const zh = {
   'toolPayload.copied': '已复制',
   'toolPayload.copyFailed': '复制失败，请重试。',
   'toolPayload.waiting': '等待工具响应…',
+  'toolPayload.details': '工具详情',
+  'toolPayload.expandSize': '展开至最大高度',
+  'toolPayload.restoreSize': '恢复紧凑高度',
   'assets.jobId': '任务 ID',
   'assets.storagePath': '保存位置',
   'assets.errorServiceDetail': '服务返回 HTTP {status}：{detail}',
@@ -761,7 +764,6 @@ export const zh = {
   'toolReject': '拒绝',
   'toolCopyResult': '复制结果',
   'toolTruncated': '... (已截断)',
-  'toolExpand': '展开到 {height}',
   'toolCollapse': '收起',
   'confirmLargeFile': '此文件较大（{size} MB），可能影响性能。是否继续？',
 

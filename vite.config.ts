@@ -55,6 +55,8 @@ const aliases = {
 }
 
 export default defineConfig({
+  // Keep the running renderer isolated from alternate Vite configs and previews.
+  cacheDir: 'node_modules/.vite/adnify-renderer',
   plugins: [
     react(),
     electron([
@@ -219,6 +221,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     entries: ['index.html'],
-    include: ['monaco-editor']
+    include: ['monaco-editor', 'fast-json-stable-stringify']
   }
 })
