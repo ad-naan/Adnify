@@ -9,6 +9,7 @@ import { USER_PREFERENCE_KEYS, type UserPreferenceName } from '@/renderer/settin
 import { normalizeMode, type WorkMode } from '@/renderer/modes/types'
 import { normalizeEmotionWelcome, type EmotionWelcomePreference } from '@/renderer/agent/emotion/welcomePreference'
 import { normalizeIndexPreference, type IndexPreference } from '@/renderer/settings/indexPreference'
+import { DEFAULT_ASSET_CONFIGURATION, normalizeAssetConfiguration, type AssetConfiguration } from '@shared/assets/configuration'
 
 export interface UserPreferenceDefinition<T> {
   storageKey: string
@@ -92,6 +93,11 @@ function restoreShellState(imported: ShellState, current: ShellState): ShellStat
 }
 
 export const USER_PREFERENCES = {
+  assetConfiguration: {
+    ...USER_PREFERENCE_KEYS.assetConfiguration,
+    fallback: DEFAULT_ASSET_CONFIGURATION,
+    normalize: normalizeAssetConfiguration,
+  } satisfies UserPreferenceDefinition<AssetConfiguration>,
   emotionPanelSettings: {
     ...USER_PREFERENCE_KEYS.emotionPanelSettings,
     fallback: DEFAULT_EMOTION_PANEL_SETTINGS,

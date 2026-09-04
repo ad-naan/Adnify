@@ -59,7 +59,7 @@ export function ToolElapsedTime({ state, startedAt, durationMs, className = '' }
 
   if (elapsed === undefined || elapsed <= 0) return null
 
-  return <span className={`tool-activity-time ${className}`}>{formatDuration(elapsed)}</span>
+  return <span className={`tool-activity-time ${className}`} data-state={state}>{formatDuration(elapsed)}</span>
 }
 
 // Icon state is a pure view of the conversation timeline, not another clock.

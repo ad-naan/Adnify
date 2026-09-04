@@ -208,6 +208,7 @@ interface OpenFilesPayload {
 }
 
 export interface ElectronAPI {
+  assetRequest: (action: import('@shared/types/assets').AssetAction) => Promise<{ ok: boolean; value?: unknown; error?: string }>
   // App lifecycle
   appReady: () => void
   systemPrivilegeGetStatus: () => Promise<SystemPrivilegeStatus>
@@ -551,6 +552,7 @@ export interface ElectronAPI {
 // =================== 暴露 API ===================
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  assetRequest: (action: import('@shared/types/assets').AssetAction) => ipcRenderer.invoke('assets:request', action),
   appReady: () => ipcRenderer.send('app:ready'),
   systemPrivilegeGetStatus: () => ipcRenderer.invoke('systemPrivilege:getStatus'),
   systemPrivilegeRequestElevation: (request: ElevationRequest) => ipcRenderer.invoke('systemPrivilege:requestElevation', request),

@@ -404,6 +404,7 @@ export interface ToolExecutionResult {
 }
 
 export type ToolRichContentType =
+    | 'asset-job'
     | 'text'
     | 'image'
     | 'code'
@@ -415,6 +416,7 @@ export type ToolRichContentType =
     | 'table'
 
 export interface ToolRichContent {
+    jobId?: string
     type: ToolRichContentType
     text?: string
     data?: string
@@ -430,6 +432,11 @@ export interface ToolRichContent {
 }
 
 export interface ToolExecutionContext {
+    abortSignal?: AbortSignal
+    /** Update the existing tool presentation without producing another model tool call. */
+    onProgress?: (update: Pick<ToolExecutionResult, 'meta' | 'richContent'>) => void
+    isSubAgent?: boolean
+    planPhase?: 'planning' | 'executing'
     workspacePath: string | null
     currentAssistantId?: string | null
     chatMode?: import('@/renderer/modes/types').WorkMode

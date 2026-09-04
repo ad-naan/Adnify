@@ -25,6 +25,7 @@ import { registerProviderCredentialHandlers } from './providerCredentials'
 import { registerSessionStorageHandlers } from './sessionStorage'
 import { registerFormatterHandlers } from './formatter'
 import { registerSystemPrivilegeHandlers } from './systemPrivilege'
+import { registerAssetHandlers, cleanupAssetHandlers } from './assets'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -133,6 +134,7 @@ export function registerAllHandlers(context: IPCContext) {
   registerSkillsHandlers()
 
   registerProviderCredentialHandlers()
+  registerAssetHandlers(context)
 
   registerSessionStorageHandlers({
     getWindowWorkspace: context.getWindowWorkspace,
@@ -146,6 +148,7 @@ export function registerAllHandlers(context: IPCContext) {
  * 清理所有资源
  */
 export function cleanupAllHandlers() {
+  cleanupAssetHandlers()
   logger.ipc.info('[IPC] Cleaning up all handlers...')
   cleanupTerminals()
   cleanupSecureFileWatcher()

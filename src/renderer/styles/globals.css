@@ -952,6 +952,11 @@ textarea,
   line-height: 1;
 }
 
+.tool-activity-time[data-state="error"],
+.tool-activity-time[data-state="idle"] {
+  color: rgb(var(--text-muted));
+}
+
 .tool-row-enter {
   display: grid;
   grid-template-rows: 1fr;

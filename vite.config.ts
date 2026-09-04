@@ -8,6 +8,9 @@ const EXTERNAL_DEPS = [
   'electron',
   'electron-store',
   'electron-updater',
+  // Native image processing must resolve its binaries from the installed package.
+  // Bundling sharp's ESM entry into CJS breaks createRequire(import.meta.url).
+  'sharp',
   '@anthropic-ai/sdk',
   'openai',
   '@google/genai',
@@ -111,6 +114,17 @@ export default defineConfig({
             }
           }
         }
+      },
+      {
+        entry: 'src/main/services/assets/assetStorage.worker.ts',
+        vite: {
+          resolve: { alias: aliases },
+          build: {
+            outDir: 'dist/main',
+            lib: { entry: 'src/main/services/assets/assetStorage.worker.ts', formats: ['cjs'], fileName: () => 'assetStorage.worker.js' },
+            rollupOptions: { external: ['node:sqlite'] },
+          },
+        },
       },
       {
         entry: 'src/main/indexing/structuralIndexStore.worker.ts',

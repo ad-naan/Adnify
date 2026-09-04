@@ -47,6 +47,7 @@ export {
   toolManager,
   builtinToolProvider,
   mcpToolProvider,
+  assetToolProvider,
   McpToolProvider,
   initializeToolProviders,
   setToolLoadingContext,

@@ -5,7 +5,7 @@
 
 import { logger } from '@utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { getToolMetadata } from '@/shared/config/tools'
+import { getToolMetadata as getBuiltinToolMetadata } from '@/shared/config/tools'
 import type { ToolProvider, ToolMeta } from './types'
 import type {
   ToolDefinition,
@@ -17,6 +17,9 @@ import type {
 } from '@/shared/types'
 
 class ToolManager {
+  getMetadata(toolName: string) {
+    return this.findProviderForTool(toolName)?.getMetadata?.(toolName) ?? getBuiltinToolMetadata(toolName)
+  }
   private providers = new Map<string, ToolProvider>()
   private providerPriorities = new Map<string, number>()
   private providerOrder: string[] = []
@@ -161,7 +164,7 @@ class ToolManager {
   }
 
   private inferRetryable(toolName: string, errorCategory?: ToolExecutionEnvelope['errorCategory']): boolean {
-    const retryPolicy = getToolMetadata(toolName)?.retryPolicy
+    const retryPolicy = this.getMetadata(toolName)?.retryPolicy
     if (!retryPolicy || retryPolicy.maxAttempts <= 1) {
       return false
     }
@@ -212,7 +215,7 @@ class ToolManager {
     args: Record<string, unknown>,
     context: ToolExecutionContext
   ): { valid: boolean; error?: string } {
-    const metadata = getToolMetadata(toolName)
+    const metadata = this.getMetadata(toolName)
     if (!metadata || metadata.validationLevel === 'schema') {
       return { valid: true }
     }

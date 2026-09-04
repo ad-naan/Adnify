@@ -349,6 +349,7 @@ export type DebugEvent =
 // ============================================
 
 export interface ElectronAPI {
+  assetRequest: (action: import('@shared/types/assets').AssetAction) => Promise<{ ok: boolean; value?: unknown; error?: string }>
   // App
   appReady: () => void
   systemPrivilegeGetStatus: () => Promise<import('@shared/types/systemPrivilege').SystemPrivilegeStatus>

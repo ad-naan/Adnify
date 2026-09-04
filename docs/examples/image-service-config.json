@@ -1,0 +1,34 @@
+{
+  "id": "my_image_service",
+  "revision": 1,
+  "name": "图片生成",
+  "description": "根据描述生成图片。",
+  "enabled": true,
+  "kind": "image",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "prompt": { "type": "string", "description": "画面描述" } },
+    "required": ["prompt"],
+    "additionalProperties": false
+  },
+  "request": {
+    "url": "",
+    "headers": { "Accept": "application/json" },
+    "timeoutSeconds": 180,
+    "body": {
+      "model": "your-model-id",
+      "prompt": { "$input": "/prompt" },
+      "n": 1,
+      "quality": "auto",
+      "response_format": "b64_json"
+    }
+  },
+  "auth": { "header": "Cookie", "prefix": "" },
+  "output": {
+    "itemsPath": "/data",
+    "base64Path": "/b64_json",
+    "mimeType": "image/png",
+    "allowedOrigins": [],
+    "maxFileMB": 20
+  }
+}

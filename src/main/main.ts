@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, clipboard, crashReporter, dialog, ipcMain, net, shell } from 'electron'
+import { app, BrowserWindow, Menu, clipboard, crashReporter, dialog, ipcMain, net, shell, protocol } from 'electron'
 import { randomUUID } from 'crypto'
 import * as os from 'os'
 import * as path from 'path'
@@ -55,6 +55,7 @@ const WINDOW_CONFIG = {
 } as const
 
 logger.setProductionMode(app.isPackaged)
+protocol.registerSchemesAsPrivileged([{ scheme: 'adnify-asset', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
 // 主进程没有 Chrome 的 performance.memory，堆上限只能由这里注入，
 // 否则 performanceMonitor 的 OOM 预警在主进程恒不触发。
@@ -505,7 +506,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
             "frame-src 'self' https: http://127.0.0.1:* http://localhost:*",
             "child-src 'self' https: http://127.0.0.1:* http://localhost:*",
             "font-src 'self' data:",
-            "media-src 'self'",
+            "media-src 'self' adnify-asset:",
           ].join('; ')
         }
       })
@@ -962,6 +963,9 @@ app.whenReady().then(async () => {
     await initializeModules(firstWin)
   } catch (err) {
     logger.system.error('[Main] Module initialization failed:', err)
+    // Do not load a renderer whose required IPC handlers never registered.
+    // The outer startup handler reports the original error and exits cleanly.
+    throw err
   }
 
   // 6. 模块就绪，加载页面内容

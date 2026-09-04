@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Server, Terminal } from 'lucide-react'
+import { ChevronDown, FileCode, Image as ImageIcon, Search, Server, Terminal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
@@ -11,12 +11,13 @@ import { useDisclosureState } from '@renderer/hooks'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
+import AssetToolCard from './AssetToolCard'
+import { ToolPayloadView } from './ToolPayloadView'
 import InlineDiffPreview, { countContentLines } from './InlineDiffPreview'
 import { getExtension, getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
-import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { resolveWriteFileStatusText } from '@renderer/agent/utils/fileWriteDisplay'
 import { deriveTerminalCommandRule, validateTerminalCommandRuleProposal } from '@renderer/agent/utils/commandApproval'
 import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
@@ -80,7 +81,7 @@ const TOOL_LABELS: Record<string, string> = {
 
 function ToolKindIcon({ name }: { name: string }) {
     if (name === 'run_command') return <Terminal className="h-3.5 w-3.5" />
-    if (name === 'read_image') return <ImageIcon className="h-3.5 w-3.5" />
+    if (name === 'read_image' || name.startsWith('asset_')) return <ImageIcon className="h-3.5 w-3.5" />
     if (name.includes('remote') || name === 'upload_to_remote' || name === 'download_from_remote') {
         return <Server className="h-3.5 w-3.5" />
     }
@@ -553,7 +554,6 @@ function ToolPreview({
     isStreaming,
     language,
     currentTheme,
-    onCopyResult,
     setTerminalVisible,
 }: {
     toolCall: ToolCall
@@ -563,7 +563,6 @@ function ToolPreview({
     isStreaming: boolean
     language: Language
     currentTheme: string
-    onCopyResult: () => void
     setTerminalVisible: (visible: boolean) => void
 }) {
     const stringResult = typeof toolCall.result === 'string' ? toolCall.result : ''
@@ -1022,53 +1021,20 @@ function ToolPreview({
         )
     }
 
-    const hasArgs = Object.keys(args).some(key => !key.startsWith('_'))
     const filteredArgs = Object.fromEntries(Object.entries(args).filter(([key]) => !key.startsWith('_')))
+    const hasRichContent = !!toolCall.richContent?.length
 
     return (
-        <div className="space-y-1 mt-1 text-[11px]">
-            {hasArgs && (
-                <>
-                    <div className="flex items-center gap-1.5 text-text-muted">
-                        <FileCode className="w-3 h-3" />
-                        <span>Arguments:</span>
-                    </div>
-                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[150px]">
-                        <JsonHighlight data={filteredArgs} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={1500} />
-                    </ExpandablePreviewContainer>
-                </>
+        <div className="min-w-0 space-y-2 pt-1 text-[11px]">
+            {Object.keys(filteredArgs).length > 0 && (
+                <ToolPayloadView data={filteredArgs} label={t('toolPayload.arguments', language)} language={language} />
             )}
-            {toolCall.richContent && toolCall.richContent.length > 0 && (
-                <ExpandablePreviewContainer language={language}>
-                    <div className="p-2">
-                        <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-full" />
-                    </div>
-                </ExpandablePreviewContainer>
+            {(toolCall.result || hasRichContent) && (
+                <ToolPayloadView data={toolCall.result || undefined} label={t('toolPayload.response', language)} language={language} isError={toolCall.status === 'error'}>
+                    {hasRichContent && <RichContentRenderer content={toolCall.richContent!} maxHeight="max-h-full" />}
+                </ToolPayloadView>
             )}
-            {toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (
-                <>
-                    <div className="flex items-center justify-between gap-1.5 text-text-muted mt-2 group/title">
-                        <div className="flex items-center gap-1.5">
-                            <Terminal className="w-3 h-3" />
-                            <span>Result:</span>
-                        </div>
-                        <button
-                            onClick={event => {
-                                event.stopPropagation()
-                                onCopyResult()
-                            }}
-                            className="opacity-0 group-hover/title:opacity-100 transition-opacity p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary"
-                            title="Copy Result"
-                        >
-                            <Copy className="w-3 h-3" />
-                        </button>
-                    </div>
-                    <ExpandablePreviewContainer language={language}>
-                        <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
-                    </ExpandablePreviewContainer>
-                </>
-            )}
-            {!toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (isRunning || isStreaming) && pendingPreview()}
+            {!toolCall.result && !hasRichContent && (isRunning || isStreaming) && pendingPreview(t('toolPayload.waiting', language))}
         </div>
     )
 }
@@ -1142,6 +1108,8 @@ const ToolCallCard = memo(function ToolCallCard({
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
+    if (effectiveName.startsWith('asset_')) return <AssetToolCard toolCall={toolCall} isAwaitingApproval={isAwaitingApproval} onApprove={onApprove} onReject={onReject} onStop={onStop} />
+
     const contentBody = (
         <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
@@ -1155,22 +1123,11 @@ const ToolCallCard = memo(function ToolCallCard({
                     isStreaming={isStreaming}
                     language={language}
                     currentTheme={currentTheme}
-                    onCopyResult={() => {
-                        if (toolCall.result) {
-                            writeClipboardText(toolCall.result)
-                        }
-                    }}
                     setTerminalVisible={setTerminalVisible}
                 />
                 <ExecutionTargetBadge args={args} />
                 {toolCall.error && (
-                    <div className="px-3 py-2 bg-red-500/10 rounded-md">
-                        <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Error
-                        </div>
-                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
-                    </div>
+                    <ToolPayloadView data={toolCall.error} label={t('toolPayload.error', language)} language={language} isError />
                 )}
             </div>
         </div>
@@ -1198,7 +1155,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
                         {statusText || (
                             <span className="opacity-50 inline-flex items-center gap-1.5">
-                                <span>{TOOL_LABELS[effectiveName] || effectiveName}</span>
+                                <span>{effectiveName.startsWith('asset__') ? t('assets.generate', language) : TOOL_LABELS[effectiveName] || effectiveName}</span>
                             </span>
                         )}
                     </span>

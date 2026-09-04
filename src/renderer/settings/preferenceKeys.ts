@@ -5,6 +5,7 @@
  * userPreferences.ts may depend on feature normalizers without creating cycles.
  */
 export const USER_PREFERENCE_KEYS = {
+  assetConfiguration: { storageKey: 'assetConfiguration', legacyStorageKey: 'adnify-asset-configuration' },
   emotionPanelSettings: {
     storageKey: 'emotionPanelSettings',
     legacyStorageKey: 'adnify-emotion-panel-settings',

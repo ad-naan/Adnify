@@ -5,6 +5,7 @@
  */
 
 import { sanitizePersistedLLMConfig } from './llmPersistence'
+import { normalizeAssetConfiguration } from '../assets/configuration'
 import { sanitizePersistedModelRoutingConfig } from './modelRouting'
 import { normalizeSecuritySettings } from './securitySettings'
 import type { TerminalCommandRule } from './types'
@@ -421,6 +422,8 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
   if (value === null || value === undefined) return value
 
   switch (key) {
+    case 'assetConfiguration':
+      return normalizeAssetConfiguration(value)
     case 'editorConfig':
       return typeof value === 'object' ? cleanEditorConfig(value as Record<string, unknown>) : value
 
@@ -458,6 +461,7 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
       const input = value as Record<string, unknown>
       const cleaned: Record<string, unknown> = {}
+      if (input.assetConfigMigrated === true) cleaned.assetConfigMigrated = true
       if (input.legacyCacheMigrated === true) cleaned.legacyCacheMigrated = true
       if (input.legacyMigrated && typeof input.legacyMigrated === 'object' && !Array.isArray(input.legacyMigrated)) {
         const migrations: Record<string, boolean> = {}

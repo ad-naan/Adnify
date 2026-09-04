@@ -14,6 +14,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { SafeMarkdownHTML, SafeHTML } from '@components/common/SafeHTML'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { ImageLightbox } from './ImageLightbox'
+import { AssetJobCard } from './AssetJobCard'
 
 interface RichContentRendererProps {
   content: ToolRichContent[]
@@ -45,6 +46,8 @@ const RichContentItem = memo(function RichContentItem({
   maxHeight: string
 }) {
   switch (item.type) {
+    case 'asset-job':
+      return item.jobId ? <AssetJobCard jobId={item.jobId} /> : null
     case 'image':
       return <ImageContent item={item} />
     case 'code':

@@ -20,6 +20,8 @@ export { McpToolProvider, mcpToolProvider } from './McpToolProvider'
 import { toolManager } from './ToolManager'
 import { builtinToolProvider } from './BuiltinToolProvider'
 import { mcpToolProvider } from './McpToolProvider'
+import { assetToolProvider } from './AssetToolProvider'
+export { assetToolProvider } from './AssetToolProvider'
 import type { ToolLoadingContext } from '@/shared/config/toolGroups'
 
 let initialized = false
@@ -31,6 +33,7 @@ export function initializeToolProviders(): void {
   if (initialized) return
   toolManager.registerProvider(builtinToolProvider, 0)
   toolManager.registerProvider(mcpToolProvider, 10)
+  toolManager.registerProvider(assetToolProvider, 5)
   initialized = true
 }
 
@@ -40,4 +43,5 @@ export function initializeToolProviders(): void {
 export function setToolLoadingContext(context: ToolLoadingContext): void {
   builtinToolProvider.setContext(context)
   mcpToolProvider.setContext(context)
+  assetToolProvider.setContext(context)
 }

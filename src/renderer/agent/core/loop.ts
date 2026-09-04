@@ -404,6 +404,7 @@ export async function runLoop(
   const toolRuntime = await importToolRuntime()
   await toolRuntime.initializeTools()
   toolRuntime.initializeToolProviders()
+  await toolRuntime.assetToolProvider?.refresh().catch(error => logger.agent.warn('[Assets] Cannot refresh asset tools', error))
   toolRuntime.setToolLoadingContext({
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
@@ -810,6 +811,8 @@ export async function runLoop(
         requestId,
         chatMode: context.chatMode,
         checkpointId: context.checkpointId,
+        isSubAgent: context.isSubAgent,
+        planPhase: context.planPhase,
       },
       threadStore,
       context.abortSignal

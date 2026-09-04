@@ -36,6 +36,7 @@ const SkillSettings = lazy(() =>
 const McpSettings = lazy(() =>
     import('./tabs/McpSettings'),
 )
+const AssetSettings = lazy(() => import('./tabs/AssetSettings'))
 const LspSettings = lazy(() =>
     import('./tabs/LspSettings').then(module => ({ default: module.LspSettings })),
 )
@@ -467,6 +468,7 @@ export default function SettingsModal() {
         { id: 'indexing', group: 'workspace', label: t('settingsModal.codeIndexing', language), description: t('settingsModal.semanticIndexEmbeddingsAnd', language), icon: <Database className="w-4 h-4" /> },
         { id: 'skills', group: 'extensions', label: 'Skills', description: t('settingsModal.manageSpecializedAgentCapabilities', language), icon: <Zap className="w-4 h-4" /> },
         { id: 'mcp', group: 'extensions', label: 'MCP', description: t('settingsModal.connectAndManageExternal', language), icon: <Plug className="w-4 h-4" /> },
+        { id: 'assets', group: 'extensions', label: t('assets.assetCapabilities', language), description: t('assets.customGenerationToolsHTTPAPIsAndAsset', language), icon: <Database className="w-4 h-4" /> },
         { id: 'security', group: 'app', label: t('settingsModal.securityApprovals', language), description: t('settingsModal.approvalPolicyWorkspaceBoundaries', language), icon: <Shield className="w-4 h-4" /> },
         { id: 'system', group: 'app', label: t('settingsModal.appData', language), description: t('settingsModal.networkStorageLogsBackup', language), icon: <Monitor className="w-4 h-4" /> },
     ] as const, [language])
@@ -563,6 +565,8 @@ export default function SettingsModal() {
                 return <SkillSettings language={language} onOpenFile={handleOpenFileFromSettings} />
             case 'mcp':
                 return <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} onOpenFile={handleOpenFileFromSettings} />
+            case 'assets':
+                return <AssetSettings language={language} />
             case 'lsp':
                 return <LspSettings language={language} />
             case 'keybindings':

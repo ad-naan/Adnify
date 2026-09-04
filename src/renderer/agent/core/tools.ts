@@ -13,7 +13,7 @@ import pLimit from 'p-limit'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
-import { getToolApprovalType, getToolMetadata, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
+import { getToolApprovalType, getToolMetadata as getBuiltinToolMetadata, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
 import { pathStartsWith, joinPath, isPathInWorkspace, isSensitivePath, toFullPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
@@ -43,6 +43,7 @@ import {
 import { isDangerousOperationWorkspaceTrusted } from '@shared/config/securitySettings'
 
 // ===== 文件快照 =====
+const getToolMetadata = (name: string) => toolManager.getMetadata?.(name) ?? getBuiltinToolMetadata(name)
 
 /**
  * 在工具执行前保存文件快照到检查点
@@ -175,6 +176,7 @@ const taskApprovals = new Set<string>()
 const rejectedApprovalScopes = new Set<string>()
 
 function toolApprovalScope(toolCall: ToolCall, context: ToolExecutionContext): string {
+  if (toolCall.name.startsWith('asset_')) return `tool:${toolCall.name}:${JSON.stringify(toolCall.arguments)}`
   if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {
     const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
     const cwdArg = typeof toolCall.arguments.cwd === 'string' ? toolCall.arguments.cwd : context.workspacePath || ''
@@ -198,6 +200,7 @@ function rejectedApprovalKey(toolCall: ToolCall, context: ToolExecutionContext):
 }
 
 function taskApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): string | null {
+  if (toolCall.name.startsWith('asset_')) return null
   const key = rejectedApprovalKey(toolCall, context)
   if (!key || toolCall.name === 'delete_file_or_folder' || REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) return null
   if (toolCall.name === 'run_command') {
@@ -316,7 +319,9 @@ async function enrichToolArgumentsWithRoutingMeta(
  * 基于 TOOL_CONFIGS 中的 approvalType 配置和用户的 autoApprove 设置
  */
 function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
-  const approvalType = getToolApprovalType(toolCall.name)
+  // Let execution reject unavailable asset operations without opening an approval in a hidden/planning thread.
+  if (toolCall.name.startsWith('asset_') && (context.isSubAgent || (context.chatMode === 'plan' && context.planPhase !== 'executing'))) return false
+  const approvalType = toolManager.getMetadata?.(toolCall.name)?.approvalType ?? getToolApprovalType(toolCall.name)
   const mainStore = useStore.getState()
   const trustedWorkspaceOperation = isDangerousOperationWorkspaceTrusted(
     context.workspacePath,
@@ -546,6 +551,8 @@ async function executeSingle(
       startedAt: startTime,
     },
   }
+  let progressMeta: Record<string, unknown> = {}
+  let progressRichContent: import('@shared/types').ToolRichContent[] | undefined
 
   if (currentAssistantId) {
     store.startToolExecution(currentAssistantId, {
@@ -580,6 +587,17 @@ async function executeSingle(
         toolCallId: toolCall.id,
         chatMode: context.chatMode,
         securityApproval: context.securityApproval,
+        isSubAgent: context.isSubAgent,
+        planPhase: context.planPhase,
+        abortSignal: context.abortSignal,
+        onProgress: update => {
+          progressMeta = { ...progressMeta, ...update.meta }
+          progressRichContent = sanitizeToolRichContent(update.richContent) || progressRichContent
+          if (currentAssistantId) store.updateToolCall(currentAssistantId, toolCall.id, {
+            arguments: { ...displayArguments, _meta: { ...displayArguments._meta, ...progressMeta } },
+            richContent: progressRichContent,
+          })
+        },
       }
     )
 
@@ -606,8 +624,8 @@ async function executeSingle(
       error: result.success ? undefined : result.error,
     })
 
-    const meta = result.meta || {}
-    const richContent = sanitizeToolRichContent(result.richContent)
+    const meta = { ...progressMeta, ...result.meta }
+    const richContent = sanitizeToolRichContent(result.richContent) || progressRichContent
     const previewPath = resolveStreamingEditFilePath(toolCall.arguments?.path, workspacePath)
 
     if (toolCall.name === 'edit_file' && previewPath) {
@@ -692,11 +710,13 @@ async function executeSingle(
           ...toolArguments,
           _meta: {
             ...(toolArguments._meta as Record<string, unknown> | undefined),
+            ...progressMeta,
             startedAt: startTime,
             durationMs: duration,
           },
         },
         streamingState: undefined,  // 清除流式状态
+        richContent: progressRichContent,
       }, {
         name: toolCall.name,
         content: `Error: ${errorMsg}`,
@@ -723,6 +743,7 @@ export async function executeTools(
   store: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal
 ): Promise<{ results: AgentToolExecutionResult[]; hadRejectedTool: boolean }> {
+  context = { ...context, abortSignal: abortSignal ?? context.abortSignal }
   const results: AgentToolExecutionResult[] = []
   let hadRejectedTool = false
 

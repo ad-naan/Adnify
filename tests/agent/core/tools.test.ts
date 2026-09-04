@@ -123,6 +123,32 @@ describe('Tools Core - Parallel Execution', () => {
   })
 
   describe('Parallel Tool Execution Performance', () => {
+    it('persists progress on the running tool without finishing it or creating another call', async () => {
+      let finish!: () => void
+      const gate = new Promise<void>(resolve => { finish = resolve })
+      const controller = new AbortController()
+      const richContent = [{ type: 'asset-job' as const, jobId: 'generation-1' }]
+      vi.mocked(toolManager.execute).mockImplementationOnce(async (_name, _args, ctx) => {
+        expect(ctx.abortSignal).toBe(controller.signal)
+        ctx.onProgress?.({ meta: { assetJobId: 'generation-1' }, richContent })
+        await gate
+        return { success: true, result: 'Completed', richContent }
+      })
+      const execution = executeTools([{ id: 'progress-call', name: 'read_file', arguments: { path: 'fixture' }, status: 'pending' }], context, getStore(), controller.signal)
+      await vi.waitFor(() => {
+        const message = getStore().getMessages().find(item => item.id === assistantId)
+        const call = message?.role === 'assistant' ? message.toolCalls?.find(item => item.id === 'progress-call') : undefined
+        expect(call?.status).toBe('running')
+        expect(call?.arguments._meta).toMatchObject({ assetJobId: 'generation-1' })
+        expect(call?.richContent).toEqual(richContent)
+      })
+      finish()
+      const result = await execution
+      expect(result.results).toHaveLength(1)
+      expect(result.results[0].result.meta).toMatchObject({ assetJobId: 'generation-1' })
+      expect(toolManager.execute).toHaveBeenCalledTimes(1)
+    })
+
     it('auto-runs deletes inside a trusted dangerous-operation workspace', async () => {
       mainStoreState.securitySettings.trustedDangerousOperationWorkspaceRoots = ['/test/workspace']
 

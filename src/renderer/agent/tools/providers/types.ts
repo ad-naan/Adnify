@@ -29,6 +29,9 @@ export interface ToolProvider {
   
   /** 获取工具审批类型 */
   getApprovalType(toolName: string): ToolApprovalType
+
+  /** Dynamic sources may supply the same metadata as built-in tools. */
+  getMetadata?(toolName: string): import('@shared/config/tools').ToolConfig | undefined
   
   /** 验证工具参数 */
   validateArgs(toolName: string, args: unknown): { valid: boolean; error?: string }

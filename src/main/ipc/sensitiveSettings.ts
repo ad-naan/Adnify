@@ -18,7 +18,7 @@
  */
 
 /** 只能由主进程内部读写、禁止走通用 settings 通道的键。 */
-export const SENSITIVE_SETTINGS_KEYS: readonly string[] = ['providerCredentials']
+export const SENSITIVE_SETTINGS_KEYS: readonly string[] = ['providerCredentials', 'assetCredentials']
 
 const SENSITIVE_KEY_SET = new Set(SENSITIVE_SETTINGS_KEYS)
 
