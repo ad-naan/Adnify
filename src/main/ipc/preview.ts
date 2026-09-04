@@ -7,10 +7,11 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { isLocalPreviewUrl, parseLocalPreviewOrigin } from '@shared/preview/discovery'
+import { isBrowserPreviewUrl, isLocalPreviewUrl, parseLocalPreviewOrigin } from '@shared/preview/discovery'
+import { shell } from 'electron'
 import type { PreviewProbeResult } from '@shared/types/preview'
-import { openExternalSafely } from '../security/externalUrl'
 import { safeIpcHandle } from './safeHandle'
+import { previewBrowserService } from '../services/previewBrowserService'
 
 /** 只需要够读到 <title>。dev server 首屏 HTML 通常几 KB。 */
 const MAX_PROBE_BYTES = 64 * 1024
@@ -130,6 +131,12 @@ export async function probeLocalPreview(url: string, timeout?: number): Promise<
 }
 
 export function registerPreviewHandlers(): void {
+  safeIpcHandle('preview:inspect', async (event, request: unknown) => ({
+    success: true as const, data: await previewBrowserService.inspect(event.sender.id, request),
+  }), 'ipc')
+  safeIpcHandle('preview:act', async (event, request: unknown) => ({
+    success: true as const, data: await previewBrowserService.act(event.sender.id, request),
+  }), 'ipc')
   safeIpcHandle('preview:probe', async (_event, url: string, timeout?: number) => {
     if (typeof url !== 'string' || !isLocalPreviewUrl(url)) {
       return { ok: false, error: 'Only local addresses can be probed' } satisfies PreviewProbeResult
@@ -137,14 +144,14 @@ export function registerPreviewHandlers(): void {
     return probeLocalPreview(url, timeout)
   }, 'ipc')
 
-  // 在系统浏览器里打开当前预览地址。只放行本机地址，避免这条通道被当成
-  // 任意 URL 的 openExternal。
+  // 用户主动选择系统浏览器打开时，仅放行普通网页协议。
   safeIpcHandle('preview:openExternal', async (_event, url: string) => {
-    if (typeof url !== 'string' || !isLocalPreviewUrl(url)) {
-      logger.security.warn('[Preview] Blocked non-local external open', { url })
+    if (typeof url !== 'string' || !isBrowserPreviewUrl(url)) {
+      logger.security.warn('[Preview] Blocked unsupported external open', { url })
       return false
     }
-    return openExternalSafely(url)
+    await shell.openExternal(url)
+    return true
   }, 'ipc')
 
   logger.ipc.info('[Preview] Preview handlers registered')

@@ -1,25 +1,24 @@
 /**
  * `<webview>` guest 的安全加固。
  *
- * 预览标签用 Electron 的 webview 承载本地 dev server。webview 让 guest 跑在
+ * 预览标签用 Electron 的 webview 承载网站和本地 dev server。webview 让 guest 跑在
  * 独立进程里、并暴露真实的导航与错误事件，代价是 host 页面能通过属性配置 guest
  * 的 webPreferences —— 所以这里在主进程把配置钉死，不信任 host 传上来的值。
  *
  * 三道闸：
- *  1. will-attach-webview —— 重写 webPreferences，删掉 preload，拒绝非本地 src。
- *  2. guest 的 will-navigate / setWindowOpenHandler —— 只允许在本地地址间跳转，
- *     外部链接交给系统浏览器。
+ *  1. will-attach-webview —— 重写 webPreferences，删掉 preload，校验 HTTP(S) src。
+ *  2. guest 的导航与重定向仅允许 HTTP(S)，新窗口链接在当前预览打开。
  *  3. guest 的权限请求全部拒绝（和主窗口一致）。
  */
 
 import type { BrowserWindow, WebContents, WebPreferences } from 'electron'
 import { logger } from '@shared/utils/Logger'
-import { isLocalPreviewUrl } from '@shared/preview/discovery'
-import { openExternalSafely } from './externalUrl'
+import { isBrowserPreviewUrl } from '@shared/preview/discovery'
+import { previewBrowserService } from '../services/previewBrowserService'
 
 /** about:blank 是 webview 未设置 src 时的初始地址，必须放行否则挂载即被拒。 */
 function isAllowedGuestUrl(url: string): boolean {
-  return !url || url === 'about:blank' || isLocalPreviewUrl(url)
+  return !url || url === 'about:blank' || isBrowserPreviewUrl(url)
 }
 
 function hardenGuestPreferences(preferences: WebPreferences): void {
@@ -36,12 +35,11 @@ function hardenGuestPreferences(preferences: WebPreferences): void {
   delete (preferences as { preload?: string }).preload
 }
 
-/** 把 guest 的导航面锁在本地地址内。 */
+/** 网站不能跳转到本地文件或启动系统协议处理器。 */
 function guardGuestNavigation(guest: WebContents): void {
-  // 预览面板里没有标签概念，guest 的 window.open 只会变成一个裸窗口。
-  // 无论目标是不是本地地址，一律不在应用内开新窗口，交给系统浏览器。
+  // 不创建未受管理的裸窗口。普通 target=_blank 链接留在可操作的预览内。
   guest.setWindowOpenHandler(({ url }) => {
-    void openExternalSafely(url)
+    if (isBrowserPreviewUrl(url)) void guest.loadURL(url).catch(() => {})
     return { action: 'deny' }
   })
 
@@ -51,18 +49,17 @@ function guardGuestNavigation(guest: WebContents): void {
     }
 
     event.preventDefault()
-    logger.security.info('[Preview] Redirected non-local guest navigation to the system browser', { url })
-    void openExternalSafely(url)
+    logger.security.warn('[Preview] Blocked unsupported guest navigation', { url })
   })
 
-  // 服务端 3xx 跳到外部域名同样要拦 —— will-navigate 不覆盖重定向。
+  // 服务端重定向同样校验协议 —— will-navigate 不覆盖重定向。
   guest.on('will-redirect', (event, url) => {
     if (isAllowedGuestUrl(url)) {
       return
     }
 
     event.preventDefault()
-    logger.security.warn('[Preview] Blocked non-local guest redirect', { url })
+    logger.security.warn('[Preview] Blocked unsupported guest redirect', { url })
   })
 
   guest.session.setPermissionRequestHandler((_contents, permission, callback) => {
@@ -83,7 +80,7 @@ export function registerWebviewGuards(win: BrowserWindow): void {
     const src = typeof params.src === 'string' ? params.src : ''
 
     if (!isAllowedGuestUrl(src)) {
-      logger.security.warn('[Preview] Blocked webview attach with non-local src', { src })
+      logger.security.warn('[Preview] Blocked webview attach with unsupported src', { src })
       event.preventDefault()
       return
     }
@@ -94,11 +91,13 @@ export function registerWebviewGuards(win: BrowserWindow): void {
     delete params.nodeintegration
     delete params.nodeintegrationinsubframes
     delete params.disablewebsecurity
-    delete params.allowpopups
+    // allowpopups lets requests reach setWindowOpenHandler, which always denies
+    // native windows and routes valid web links into the existing guest.
     delete params.preload
   })
 
   win.webContents.on('did-attach-webview', (_event, guest) => {
     guardGuestNavigation(guest)
+    previewBrowserService.register(win.webContents, guest)
   })
 }

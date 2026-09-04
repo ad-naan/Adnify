@@ -10,6 +10,16 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'
 
 const DEFAULT_PORTS: Record<string, number> = { 'http:': 80, 'https:': 443 }
 
+/** Browser navigation supports ordinary websites; discovery remains local-only. */
+export function isBrowserPreviewUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname && !url.username && !url.password
+  } catch {
+    return false
+  }
+}
+
 /**
  * 终端输出里的候选地址。`[^\s"'`<>)\]]` 结尾的收窄是为了不把日志里的
  * 引号、括号吃进 URL —— 否则 `(http://localhost:5173/)` 会带着 `)` 进来。
@@ -91,7 +101,7 @@ export function parseLocalPreviewOrigin(value: string): LocalPreviewOrigin | nul
   }
 }
 
-/** 主进程用：这个 URL 允许被探活 / 在预览里打开吗？ */
+/** 主进程用：这个 URL 允许作为本地开发服务探活吗？ */
 export function isLocalPreviewUrl(value: string): boolean {
   return parseLocalPreviewOrigin(value) !== null
 }

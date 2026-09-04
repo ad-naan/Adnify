@@ -1336,11 +1336,11 @@ export const en = {
   'preview.tab.open': 'Open',
   'preview.tab.loading': 'Loading preview…',
   'preview.tab.emptyTitle': 'No preview session yet',
-  'preview.tab.emptyHint': 'Start your local dev server, click discover, or type a localhost address.',
+  'preview.tab.emptyHint': 'Enter a website address, or start your local dev server and click discover.',
   'preview.tab.errorTitle': 'Preview failed to load',
   'preview.tab.errorHintConnection': 'The dev server is not responding on this port. Check that it is still running.',
   'preview.tab.retry': 'Retry',
-  'preview.tab.invalidUrl': 'Only local addresses (localhost / 127.0.0.1) can be previewed',
+  'preview.tab.invalidUrl': 'Enter a valid HTTP/HTTPS URL without an embedded username or password',
   'preview.tab.blockedNavigation': 'Blocked navigation to a non-local address — opened it in your browser instead',
   'imagePreview.zoomHint': 'Double-click or use mouse wheel to zoom',
 

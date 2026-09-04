@@ -38,7 +38,7 @@ describe('getToolsForContext - isSubAgent', () => {
     const main = getToolsForContext({ mode: 'agent' })
     const sub = getToolsForContext({ mode: 'agent', isSubAgent: true })
     const removed = main.filter(tool => !sub.includes(tool))
-    expect(removed.sort()).toEqual(['task'])
+    expect(removed.sort()).toEqual(['browser_action', 'browser_open', 'task'])
     // 干活需要的读写工具一个都不能少
     for (const tool of ['read_file', 'edit_file', 'run_command', 'codebase_search']) {
       expect(sub, tool).toContain(tool)

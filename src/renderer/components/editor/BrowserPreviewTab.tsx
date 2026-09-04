@@ -34,7 +34,7 @@ import { t, type Language } from '@shared/i18n'
 import { previewSessionService } from '@/renderer/preview/previewSessionService'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
 import { loadPreviewSettings, updatePreviewSettings } from '@/renderer/preview/previewSettings'
-import { isLocalPreviewUrl } from '@shared/preview/discovery'
+import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type {
   PreviewWebviewElement,
@@ -56,6 +56,10 @@ interface BrowserPreviewTabProps {
  */
 const PREVIEW_PARTITION = 'persist:adnify-preview'
 
+// React's webview typings only accept boolean, but its DOM serializer drops
+// unknown boolean attributes. Supply Electron's native attribute as a string.
+const PREVIEW_WEBVIEW_ATTRIBUTES: Record<string, string> = { allowpopups: '' }
+
 /** Chromium net error：连不上服务，区别于页面自身 4xx/5xx。 */
 const CONNECTION_ERROR_CODES = new Set([-2, -102, -105, -106, -109, -118, -324])
 
@@ -66,7 +70,7 @@ const MAX_ZOOM_LEVEL = 3
 function sanitizeUrl(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) return ''
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`
+  return /^[a-z][a-z\d+.-]*:(?!\d)/i.test(trimmed) ? trimmed : `http://${trimmed}`
 }
 
 export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
@@ -336,7 +340,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
     const nextUrl = sanitizeUrl(addressInput)
     if (!nextUrl) return
 
-    if (!isLocalPreviewUrl(nextUrl)) {
+    if (!isBrowserPreviewUrl(nextUrl)) {
       setAddressError(t('preview.tab.invalidUrl', language))
       return
     }
@@ -581,6 +585,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
               导航历史随之清空。
             */}
             <webview
+              {...PREVIEW_WEBVIEW_ATTRIBUTES}
               key={mountRef.current.sessionId || 'preview'}
               ref={webviewRef}
               src={mountRef.current.url}

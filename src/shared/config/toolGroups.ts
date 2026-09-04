@@ -98,6 +98,9 @@ const CORE_TOOLS: string[] = [
   // 网络
   'web_search',
   'read_url',
+  'browser_open',
+  'browser_inspect',
+  'browser_action',
   // 交互与记忆
   'remember',
   // Skill 按需加载
@@ -128,6 +131,7 @@ const PLAN_EXECUTION_CONTROL_TOOLS: string[] = [
 ]
 
 const PLAN_EXPLORATION_TOOLS: string[] = [
+  'browser_inspect',
   'read_file',
   'read_image',
   'list_directory',
@@ -150,6 +154,8 @@ const PLAN_EXPLORATION_TOOLS: string[] = [
  *   规划是全局单例状态，子代理改它会踩到主 agent 正在执行的计划。
  */
 const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
+  'browser_open',
+  'browser_action',
   'task',
   'ask_user',
   'create_task_plan',

@@ -267,6 +267,8 @@ function createGroupedAPI() {
 
     // 本地预览
     preview: {
+      inspect: (request: Parameters<typeof raw.previewInspect>[0]) => raw.previewInspect(request),
+      act: (request: Parameters<typeof raw.previewAct>[0]) => raw.previewAct(request),
       probe: (url: string, timeout?: number) => raw.previewProbe(url, timeout),
       openExternal: (url: string) => raw.previewOpenExternal(url),
     },

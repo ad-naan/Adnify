@@ -664,6 +664,8 @@ export interface ElectronAPI {
 
   // 本地预览
   previewProbe: (url: string, timeout?: number) => Promise<PreviewProbeResult>
+  previewInspect: (request: import('@shared/preview/browserAutomation').BrowserInspectRequest) => Promise<import('@shared/preview/browserAutomation').BrowserResponse>
+  previewAct: (request: import('@shared/preview/browserAutomation').BrowserActionRequest) => Promise<import('@shared/preview/browserAutomation').BrowserResponse>
   previewOpenExternal: (url: string) => Promise<boolean>
 
   // Health Check

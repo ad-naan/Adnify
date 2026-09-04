@@ -4,6 +4,7 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
+import { browserToolExecutors } from './executors/browser'
 import { toAppError } from '@shared/utils/errorHandler'
 import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
@@ -1362,6 +1363,7 @@ function isPositionInsideSymbol(symbol: AgentSymbol, line: number, column: numbe
 
 
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
+    ...browserToolExecutors,
     async report_plan_activity(args) {
         const stage = args.stage as string
         const title = String(args.title || '').trim()

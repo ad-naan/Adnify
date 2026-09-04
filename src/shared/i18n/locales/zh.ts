@@ -1337,11 +1337,11 @@ export const zh = {
   'preview.tab.open': '打开',
   'preview.tab.loading': '正在加载预览…',
   'preview.tab.emptyTitle': '还没有可用的预览会话',
-  'preview.tab.emptyHint': '启动本地 dev server 后点击发现按钮，或直接在地址栏输入 localhost 地址。',
+  'preview.tab.emptyHint': '输入网站地址，或启动本地 dev server 后点击发现按钮。',
   'preview.tab.errorTitle': '预览加载失败',
   'preview.tab.errorHintConnection': '这个端口上的 dev server 没有响应，确认它还在运行。',
   'preview.tab.retry': '重试',
-  'preview.tab.invalidUrl': '只能预览本地地址（localhost / 127.0.0.1）',
+  'preview.tab.invalidUrl': '请输入有效的 HTTP/HTTPS 地址，请勿在地址中包含用户名或密码',
   'preview.tab.blockedNavigation': '已拦截到非本地地址的跳转，改为在系统浏览器中打开',
   'imagePreview.zoomHint': '双击图片或使用鼠标滚轮进行缩放',
 

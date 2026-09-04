@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod'
+import { BROWSER_TOOL_CONFIGS } from './browserTools'
 import type { ToolApprovalType } from '@/shared/types/llm'
 import type { ToolOutputFormat, ToolOutputSignal } from '@/shared/utils/toolOutput'
 import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
@@ -122,6 +123,7 @@ const PLAN_STAGE_CONTENT_PROPERTY: ToolPropertyDef = {
 // ============================================
 
 export const TOOL_CONFIGS: Record<string, ToolConfig> = {
+    ...BROWSER_TOOL_CONFIGS,
     // ===== 读取类工具 =====
     read_file: {
         name: 'read_file',
