@@ -249,7 +249,7 @@ export function registerSettingsHandlers(
       await Promise.all([
         session.defaultSession.clearCache(),
         session.defaultSession.clearStorageData({
-          storages: ['localstorage', 'shadercache', 'serviceworkers', 'cachestorage', 'indexdb', 'websql'],
+          storages: ['localstorage', 'shadercache', 'serviceworkers', 'cachestorage', 'indexdb'],
         }),
       ])
       return { success: true }

@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
- * Postinstall: WASM assets + native module rebuild for Electron.
+ * Postinstall: Electron binary + WASM assets + native module rebuild.
  *
  * On Windows, Visual Studio build tools are required for several native
  * modules (cpu-features, ssh2 crypto). This script locates the VS
  * installation via vswhere.exe, activates the x64 environment so that
  * cl.exe and delayimp.lib are available, then rebuilds all native modules
  * for the installed Electron ABI.
+ * electron-builder's npmRebuild is disabled: this script owns native rebuilds
+ * and preserves the working Node-API prebuilds for node-pty and Parcel watcher.
  *
  * Cross-platform: Windows / macOS / Linux.
  */
@@ -424,6 +426,10 @@ async function rebuildNativeModules(env) {
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Electron 42+ downloads on first use. Install explicitly so tests and dev
+  // startup never trigger an unexpected download after dependency installation.
+  runNodeScript(require.resolve('electron/install.js', { paths: [projectRoot] }))
+
   // 1. Download tree-sitter WASM grammars
   runNodeScript(path.join(__dirname, 'download-wasm.js'))
 
