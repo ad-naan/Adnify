@@ -23,7 +23,7 @@ function ApprovalRow({ approval, language, onDecision }: {
       <GitBranch className="h-3 w-3 shrink-0 text-text-muted" />
       <span className="min-w-0 flex-1 truncate text-text-secondary" title={approval.title}>{approval.title || t('subAgentTaskCard.subAgentTask', language)}</span>
       {submitted
-        ? <span role="status" className="text-[11px] text-text-muted">{language === 'zh' ? '已提交' : 'Submitted'}</span>
+        ? <span role="status" className="text-[11px] text-text-muted">{t('subtaskApprovalList.submitted', language)}</span>
         : <ToolApprovalActions language={language} onApprove={() => decide(true)} onReject={() => decide(false)} />}
     </div>
     <div className="pl-5">
@@ -44,7 +44,7 @@ export function SubtaskApprovalList({ approvals, language, onDecision }: {
   onDecision: (approval: SubtaskApproval, approved: boolean) => boolean
 }) {
   if (!approvals.length) return null
-  return <section aria-label={language === 'zh' ? '子任务待审批' : 'Subtask approvals'} className="px-4 py-1">
+  return <section aria-label={t('subtaskApprovalList.approvals', language)} className="px-4 py-1">
       {approvals.map(approval => <ApprovalRow key={`${approval.threadId}:${approval.requestId}:${approval.toolCall.id}`} approval={approval} language={language} onDecision={onDecision} />)}
   </section>
 }

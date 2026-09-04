@@ -3227,6 +3227,10 @@ export const en = {
   'subAgentTaskCard.openSubTask': 'Open sub-task',
   'subAgentTaskCard.subAgentTask': 'Sub-agent task',
 
+  // subtaskApprovalList
+  'subtaskApprovalList.approvals': 'Subtask approvals',
+  'subtaskApprovalList.submitted': 'Submitted',
+
   // systemPrivilegeCoordinator
   'systemPrivilegeCoordinator.administratorPermissionRequired': 'Administrator permission required',
   'systemPrivilegeCoordinator.automaticElevationIsNot': 'Automatic elevation is not available on this system. Adjust the target permissions or restart the app using your system tools.',
@@ -3440,7 +3444,6 @@ export const en = {
   'unifiedStatusTray.approvals': 'Approvals',
   'unifiedStatusTray.approvals2': '{length} approvals',
   'unifiedStatusTray.queued': 'queued',
-  'unifiedStatusTray.rendering': 'Displaying reply…',
   'unifiedStatusTray.similarCommandsAreNow': 'Similar commands are now always allowed',
 
   // updateIndicator

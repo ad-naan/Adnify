@@ -3228,6 +3228,10 @@ export const zh = {
   'subAgentTaskCard.openSubTask': '打开子任务',
   'subAgentTaskCard.subAgentTask': '子代理任务',
 
+  // subtaskApprovalList
+  'subtaskApprovalList.approvals': '子任务待审批',
+  'subtaskApprovalList.submitted': '已提交',
+
   // systemPrivilegeCoordinator
   'systemPrivilegeCoordinator.administratorPermissionRequired': '需要管理员权限',
   'systemPrivilegeCoordinator.automaticElevationIsNot': '当前系统不支持自动提权重启，请调整目标目录权限或使用系统提供的方式重新启动应用。',
@@ -3441,7 +3445,6 @@ export const zh = {
   'unifiedStatusTray.approvals': '待审批',
   'unifiedStatusTray.approvals2': '{length} 项待审批',
   'unifiedStatusTray.queued': '条待发送',
-  'unifiedStatusTray.rendering': '正在显示回复…',
   'unifiedStatusTray.similarCommandsAreNow': '已始终允许相似命令',
 
   // updateIndicator
