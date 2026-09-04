@@ -53,6 +53,7 @@ describe('dynamic asset tools', () => {
     })
     expect(request).toHaveBeenLastCalledWith({ type: 'submit', capabilityId: 'poster', revision: 1, inputs: { prompt: 'x' }, toolCallId: 'call', threadId: 'thread' })
     expect(JSON.parse(result.result).state).toBe('ready')
+    expect(JSON.parse(result.result).assetUrls).toEqual(['asset://image-1'])
     expect(result.richContent).toEqual([{ type: 'asset-job', jobId: 'job-1' }])
   })
   it('keeps one generation call running through progress revisions until assets are ready', async () => {
@@ -104,6 +105,7 @@ describe('dynamic asset tools', () => {
     expect(result.error).toContain('Invalid model')
     expect(result.error).toContain('Do not automatically resubmit')
     expect(result.outcome?.retryable).toBe(false)
+    expect(JSON.parse(result.result).assetUrls).toEqual([])
     expect(result.richContent).toEqual([{ type: 'asset-job', jobId: 'job-1' }])
   })
   it('keeps old schema identities when configuration refreshes', async () => {

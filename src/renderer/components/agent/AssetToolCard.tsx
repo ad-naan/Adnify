@@ -12,6 +12,7 @@ import { getToolTiming, ToolElapsedTime } from './ToolActivityIndicator'
 
 interface Props {
   toolCall: ToolCall
+  isPresenting?: boolean
   isAwaitingApproval?: boolean
   onApprove?: () => void
   onReject?: () => void
@@ -23,7 +24,7 @@ const labels: Record<string, TranslationKey> = {
 }
 function text(value: unknown): string | undefined { return typeof value === 'string' && value ? value : undefined }
 
-export default function AssetToolCard({ toolCall, isAwaitingApproval, onApprove, onReject, onStop }: Props) {
+export default function AssetToolCard({ toolCall, isPresenting, isAwaitingApproval, onApprove, onReject, onStop }: Props) {
   const language = useStore(state => state.language)
   const { effectiveName: name, args, isRunning, isStreaming, isError, isRejected, isSuccess } = useToolDisplayState(toolCall)
   const [details, setDetails] = useState(false)
@@ -38,15 +39,15 @@ export default function AssetToolCard({ toolCall, isAwaitingApproval, onApprove,
 
   // Old transcripts may contain many wait calls. Their original generation card tracks the same job.
   if (name === 'asset_job_wait') return null
-  if (jobId && !isAwaitingApproval) return <AssetJobCard key={jobId} jobId={jobId} title={title} kind={kind} prompt={text(args.prompt)} />
-  if (assetId) return <AssetPreview id={assetId} />
+  if (jobId && !isAwaitingApproval) return <AssetJobCard key={jobId} jobId={jobId} title={title} kind={kind} prompt={text(args.prompt)} isPresenting={isPresenting} />
+  if (assetId) return <AssetPreview id={assetId} automaticOpen={isPresenting} />
 
   const active = !isAwaitingApproval && (isRunning || isStreaming)
   const status = t(isAwaitingApproval ? 'assets.canvasApproval' : isRejected ? 'assets.cancelled' : isError ? 'assets.failed' : isSuccess ? 'assets.ready' : 'assets.preparing', language)
   const failure = isError ? toolCall.error || toolCall.result : undefined
   const capabilities = name === 'asset_capabilities' && Array.isArray(result?.capabilities) ? result.capabilities as Array<{ name: string; kind: AssetKind }> : undefined
   return <>
-    <AssetCanvas title={title} collapsedLabel={text(args.prompt) || text(args.path)} kind={kind} trailing={<ToolElapsedTime state={active ? 'running' : 'idle'} {...timing} className="!text-text-muted" />} actions={<button onClick={() => setDetails(true)} title={t('assets.details', language)} aria-label={t('assets.details', language)} className="rounded p-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"><Info size={13} /></button>} footer={isAwaitingApproval ? <ToolApprovalActions language={language} onApprove={onApprove} onReject={onReject} onStop={onStop} /> : active && onStop ? <ToolApprovalActions language={language} onStop={onStop} /> : undefined}>
+    <AssetCanvas automaticOpen={isAwaitingApproval || active ? true : isPresenting} title={title} collapsedLabel={text(args.prompt) || text(args.path)} kind={kind} trailing={<ToolElapsedTime state={active ? 'running' : 'idle'} {...timing} className="!text-text-muted" />} actions={<button onClick={() => setDetails(true)} title={t('assets.details', language)} aria-label={t('assets.details', language)} className="rounded p-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"><Info size={13} /></button>} footer={isAwaitingApproval ? <ToolApprovalActions language={language} onApprove={onApprove} onReject={onReject} onStop={onStop} /> : active && onStop ? <ToolApprovalActions language={language} onStop={onStop} /> : undefined}>
       {capabilities ? <div className="min-h-24 space-y-1 p-3">{capabilities.length ? capabilities.map((cap, index) => <div key={index} className="flex justify-between gap-3 px-1 py-1.5 text-text-secondary"><span className="truncate">{cap.name}</span><span className="text-text-muted">{t(assetKindKeys[cap.kind] || 'assets.file', language)}</span></div>) : <p className="py-4 text-text-muted">{t('assets.noToolsYet', language)}</p>}</div> : <AssetPlaceholder kind={kind} label={status} busy={active} error={failure}>
         {text(args.prompt) && <p className="line-clamp-3 max-w-full text-[11px] leading-5 text-text-muted [overflow-wrap:anywhere]">{text(args.prompt)}</p>}
       </AssetPlaceholder>}

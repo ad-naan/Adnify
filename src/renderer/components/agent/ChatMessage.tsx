@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2, Server } from 'lucide-react'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { themeManager } from '../../config/themeConfig'
@@ -40,6 +40,8 @@ import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import { selectLiveState, type LiveSelectorState } from './chatMessageLiveSelector'
 import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import { ImageLightbox } from './ImageLightbox'
+import { ChatMarkdownImage } from './ChatMarkdownImage'
+import { chatMarkdownUrlTransform } from '@renderer/services/chatImageSource'
 import type { AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
@@ -187,7 +189,7 @@ const StableStreamingMarkdownBlock = React.memo(({
     remarkPlugins={MARKDOWN_REMARK_PLUGINS}
     rehypePlugins={rehypePlugins ?? MARKDOWN_REHYPE_PLUGINS}
     components={components as any}
-    urlTransform={(url) => parseThreadDeepLink(url) ? url : defaultUrlTransform(url)}
+    urlTransform={chatMarkdownUrlTransform}
     skipHtml
   >
     {fixMarkdownTables(content)}
@@ -638,6 +640,7 @@ const MarkdownContent = React.memo(({
   }, [workspacePath])
 
   const markdownComponents = React.useMemo(() => ({
+    img: ChatMarkdownImage,
     code({ className, children, node, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '')
       const codeContent = String(children)

@@ -35,6 +35,7 @@ const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('submit'), capabilityId: id, revision: z.number().int().positive(), inputs: z.record(z.unknown()), toolCallId: id, threadId: id.optional() }),
   ...(['job', 'retryCollection', 'cancel', 'preview', 'mediaPreview', 'openAsset'] as const).map(type => z.object({ type: z.literal(type), id })),
   z.object({ type: z.literal('import'), path: z.string().max(4000).optional() }),
+  z.object({ type: z.literal('previewPath'), path: z.string().min(1).max(4000) }),
   z.object({ type: z.literal('export'), id, destination: z.string().max(4000).optional() }),
 ])
 
@@ -128,6 +129,7 @@ export function registerAssetHandlers(context: IPCContext): void {
           result = await service.importImage(source, workspace); break
         }
         case 'preview': result = await service.preview(action.id, workspace); break
+        case 'previewPath': result = await service.previewPath(action.path, workspace); break
         case 'mediaPreview': {
           const asset = await service.asset(action.id, workspace)
           let url: string | undefined

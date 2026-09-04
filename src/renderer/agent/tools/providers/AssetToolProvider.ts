@@ -16,6 +16,9 @@ const definitions: ToolDefinition[] = [
 ]
 const id = z.string().min(1).max(200)
 const activeStates = new Set(['queued', 'submitting', 'running', 'collecting'])
+function jobResult(job: AssetJobSummary): string {
+  return JSON.stringify({ ...job, assetUrls: job.state === 'ready' ? job.assetIds.map(id => `asset://${id}`) : [] })
+}
 function pause(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const stop = () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(new Error('Waiting stopped. The persisted job may still finish; do not resubmit it.')) }
@@ -51,7 +54,7 @@ export class AssetToolProvider implements ToolProvider {
     const readOnly = this.context.isSubAgent || (this.context.mode === 'plan' && this.context.planPhase !== 'executing')
     const common = readOnly ? definitions.filter(d => ['asset_capabilities', 'asset_job_get'].includes(d.name)) : definitions
     return [...common, ...(readOnly ? [] : this.active.map(cap => ({
-      name: this.toolName(cap), description: `${cap.description}\nGenerates ${cap.kind} using the user's configured service and waits for the final assets in this single call. May incur charges. Progress and previews appear automatically in its asset card. Do not call other tools to poll, resubmit, or display the same result.`,
+      name: this.toolName(cap), description: `${cap.description}\nGenerates ${cap.kind} using the user's configured service and waits for the final assets in this single call. May incur charges. Progress and previews appear automatically in its asset card. Do not call other tools to poll, resubmit, or display the same result. If embedding an image in your reply, use a returned assetUrls entry verbatim as the Markdown image URL. Never infer a filename from storageRoot.`,
       parameters: cap.inputSchema as ToolDefinition['parameters'],
     })))]
   }
@@ -95,7 +98,7 @@ export class AssetToolProvider implements ToolProvider {
       result = job
     }
     const job = result as AssetJobSummary
-    return { success: true, result: JSON.stringify(result), richContent: job?.capabilityName ? [{ type: 'asset-job', jobId: job.id }] : undefined }
+    return { success: true, result: job?.capabilityName ? jobResult(job) : JSON.stringify(result), richContent: job?.capabilityName ? [{ type: 'asset-job', jobId: job.id }] : undefined }
   }
   private async waitForResult(initial: AssetJobSummary, ctx: ToolExecutionContext, kind?: AssetCapability['kind']): Promise<ToolExecutionResult> {
     let job = initial
@@ -107,7 +110,7 @@ export class AssetToolProvider implements ToolProvider {
         job = await assetService.request<AssetJobSummary>({ type: 'job', id: job.id })
       }
       const success = job.state === 'ready'
-      return { ...presentation, success, result: JSON.stringify(job), error: success ? undefined : `Asset job ${job.id}: ${job.error || job.state}. Do not automatically resubmit generation.`, outcome: { kind: success ? 'success' : 'error', retryable: false } }
+      return { ...presentation, success, result: jobResult(job), error: success ? undefined : `Asset job ${job.id}: ${job.error || job.state}. Do not automatically resubmit generation.`, outcome: { kind: success ? 'success' : 'error', retryable: false } }
     } catch (error) {
       return { ...presentation, success: false, result: JSON.stringify(job), error: `Asset job ${job.id}: ${(error as Error).message}. The job is retained; do not create another generation to recover it.`, outcome: { kind: 'error', retryable: false } }
     }

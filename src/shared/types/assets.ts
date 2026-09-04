@@ -124,6 +124,7 @@ export type AssetAction =
   | { type: 'cancel'; id: string }
   | { type: 'import'; path?: string }
   | { type: 'preview'; id: string }
+  | { type: 'previewPath'; path: string }
   | { type: 'mediaPreview'; id: string }
   | { type: 'openAsset'; id: string }
   | { type: 'export'; id: string; destination?: string }

@@ -47,6 +47,79 @@ async function submit(key = 'call-1') {
   return service.submit('/workspace', 'test_image', 1, { prompt: 'a product' }, key, 'thread-1')
 }
 
+describe('workspace Markdown image previews', () => {
+  it('resolves the exact legacy ID-shaped URL from the reported conversation', async () => {
+    const workspace = await fs.realpath(directory)
+    const source = path.join(workspace, 'source.png')
+    await fs.writeFile(source, png)
+    const asset = await service.importImage(source, workspace)
+    const id = '88c015e6-1bbc-4604-a265-8ccdedae791a-0'
+    await repo.put('asset', id, { ...asset, id })
+    const legacy = `.adnify/assets/${id}.png`
+    await expect(fs.stat(path.join(workspace, legacy))).rejects.toThrow()
+    expect(await service.previewPath(legacy, workspace)).toBe(await service.preview(id, workspace))
+    expect(await service.previewPath(path.join(workspace, legacy), workspace)).toMatch(/^data:image\/webp;base64,/)
+  })
+
+  it('does not resolve legacy IDs from other workspaces, unknown IDs or unrelated path shapes', async () => {
+    const workspace = await fs.realpath(directory)
+    const source = path.join(workspace, 'source.png')
+    await fs.writeFile(source, png)
+    const asset = await service.importImage(source, workspace)
+    const other = path.join(workspace, 'other')
+    await fs.mkdir(other)
+    await expect(service.previewPath(`.adnify/assets/${asset.id}.png`, other)).rejects.toThrow('not found in this workspace')
+    await expect(service.previewPath('.adnify/assets/unknown.png', workspace)).rejects.toThrow('not found in this workspace')
+    await expect(service.previewPath(`images/${asset.id}.png`, workspace)).rejects.toThrow()
+    await expect(service.previewPath(`.adnify/assets/../${asset.id}.png`, workspace)).rejects.toThrow()
+  })
+
+  it('prefers an existing image over a legacy registry alias with the same ID', async () => {
+    const workspace = await fs.realpath(directory)
+    const source = path.join(workspace, 'source.png')
+    await fs.writeFile(source, png)
+    const asset = await service.importImage(source, workspace)
+    const legacy = `.adnify/assets/${asset.id}.png`
+    await fs.mkdir(path.dirname(path.join(workspace, legacy)), { recursive: true })
+    const different = await sharp({ create: { width: 3, height: 2, channels: 4, background: '#ffffff' } }).png().toBuffer()
+    await fs.writeFile(path.join(workspace, legacy), different)
+    const preview = await service.previewPath(legacy, workspace)
+    expect((await sharp(Buffer.from(preview.split(',')[1], 'base64')).metadata()).width).toBe(3)
+  })
+
+  it('decodes actual workspace image files into safe preview data', async () => {
+    const file = path.join(directory, '图 片.png')
+    await fs.writeFile(file, png)
+    const preview = await service.previewPath('图 片.png', directory)
+    expect(preview).toMatch(/^data:image\/webp;base64,/)
+    const metadata = await sharp(Buffer.from(preview.split(',')[1], 'base64')).metadata()
+    expect(metadata.width).toBe(8)
+    expect(await service.previewPath(file, directory)).toBe(preview)
+  })
+
+  it('rejects paths outside the workspace, missing files, non-images and absent workspaces', async () => {
+    const workspace = path.join(directory, 'project')
+    await fs.mkdir(workspace)
+    await fs.writeFile(path.join(directory, 'outside.png'), png)
+    await expect(service.previewPath('../outside.png', workspace)).rejects.toThrow('outside')
+    await expect(service.previewPath(path.join(directory, 'outside.png'), workspace)).rejects.toThrow('outside')
+    await expect(service.previewPath('missing.png', workspace)).rejects.toThrow()
+    await expect(service.previewPath('settings.json', workspace)).rejects.toThrow('image')
+    await expect(service.previewPath('image.png', '')).rejects.toThrow('workspace')
+    await fs.writeFile(path.join(workspace, 'not-image.png'), 'not an image')
+    await expect(service.previewPath('not-image.png', workspace)).rejects.toThrow()
+  })
+
+  it('rejects a symlink/junction that escapes the workspace', async () => {
+    const workspace = path.join(directory, 'project')
+    const outside = path.join(directory, 'outside')
+    await fs.mkdir(workspace); await fs.mkdir(outside)
+    await fs.writeFile(path.join(outside, 'image.png'), png)
+    await fs.symlink(outside, path.join(workspace, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+    await expect(service.previewPath('linked/image.png', workspace)).rejects.toThrow('outside')
+  })
+})
+
 describe('user-defined capability contract', () => {
   it('runs the supplied Cookie/base64 example with its 180 second timeout and no resubmission', async () => {
     const cap = JSON.parse(await fs.readFile(path.resolve('docs/examples/image-service-config.json'), 'utf8'))

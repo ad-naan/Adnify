@@ -119,6 +119,7 @@ export const zh = {
   'assets.details': "任务详情",
   'assets.mediaError': "无法预览此格式，可导出或定位文件后查看。",
   'assets.loadingPreview': "加载预览…",
+  'assets.imageLoadFailed': "图片加载失败，请检查文件是否存在或展开素材卡片查看。",
   'assets.image': "图片",
   'assets.video': "视频",
   'assets.model3d': "3D 模型",

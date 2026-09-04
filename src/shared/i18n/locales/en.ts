@@ -119,6 +119,7 @@ export const en = {
   'assets.details': "Job details",
   'assets.mediaError': "Cannot preview this format. Export or show the file to view it.",
   'assets.loadingPreview': "Loading preview…",
+  'assets.imageLoadFailed': "Image could not be loaded. Check the file or expand the asset card.",
   'assets.image': "Image",
   'assets.video': "Video",
   'assets.model3d': "3D model",

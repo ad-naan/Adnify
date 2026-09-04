@@ -379,9 +379,39 @@ export class AssetService {
   async preview(id: string, workspace: string): Promise<string | null> {
     const asset = await this.asset(id, workspace)
     if (asset.kind !== 'image') return null
+    return this.imagePreview(await this.filePath(asset))
+  }
+  async previewPath(source: string, workspace: string): Promise<string> {
+    if (!workspace || !source || !/\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(source)) throw new Error('A workspace image is required')
+    const root = await fs.realpath(workspace)
+    const candidate = path.resolve(root, source)
+    // Compare canonical paths: Windows short (8.3) names can refer to the same
+    // workspace without sharing its textual prefix. Never resolve a network URL.
+    if (/^[/\\]{2}/.test(candidate)) throw new Error('Network image paths are not supported')
+    let target: string
+    try {
+      target = await fs.realpath(candidate)
+    } catch (error) {
+      // Older replies guessed `.adnify/assets/<assetId>.png` from the returned
+      // ID. Resolve only that exact legacy shape through the authorized registry;
+      // never guess a filename, scan another workspace, or replace a real file.
+      const relative = path.relative(root, candidate).replace(/\\/g, '/')
+      const legacy = /^\.adnify\/assets\/([a-z0-9_-]{1,200})\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i.exec(relative)
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && legacy) {
+        const preview = await this.preview(legacy[1], root)
+        if (preview) return preview
+      }
+      throw error
+    }
+    if (!isInside(root, target)) throw new Error('Image is outside the workspace')
+    const stat = await fs.stat(target)
+    if (!stat.isFile() || stat.size > 50 * 1024 * 1024) throw new Error('Image is not a file under 50 MB')
+    return this.imagePreview(target)
+  }
+  private async imagePreview(filePath: string): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires -- Preserve sharp's native CommonJS entry for Electron dev loaders.
     const sharp = require('sharp') as typeof import('sharp').default
-    const buffer = await sharp(await this.filePath(asset)).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
+    const buffer = await sharp(filePath).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
     return `data:image/webp;base64,${buffer.toString('base64')}`
   }
 }

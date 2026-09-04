@@ -1108,7 +1108,7 @@ const ToolCallCard = memo(function ToolCallCard({
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
-    if (effectiveName.startsWith('asset_')) return <AssetToolCard toolCall={toolCall} isAwaitingApproval={isAwaitingApproval} onApprove={onApprove} onReject={onReject} onStop={onStop} />
+    if (effectiveName.startsWith('asset_')) return <AssetToolCard toolCall={toolCall} isPresenting={isPresenting} isAwaitingApproval={isAwaitingApproval} onApprove={onApprove} onReject={onReject} onStop={onStop} />
 
     const contentBody = (
         <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">

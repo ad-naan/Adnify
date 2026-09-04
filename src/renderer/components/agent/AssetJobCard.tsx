@@ -7,6 +7,8 @@ import { t, type TranslationKey, type Language } from '@shared/i18n'
 import { ImageLightbox } from './ImageLightbox'
 import { ToolElapsedTime } from './ToolActivityIndicator'
 import { Modal } from '@components/ui'
+import { useDisclosureState } from '@renderer/hooks/useDisclosureState'
+import SmoothCollapse from './SmoothCollapse'
 
 const actionClass = 'inline-flex items-center gap-1 p-1 text-text-muted hover:text-text-primary hover:bg-surface-elevated rounded transition-colors disabled:opacity-40'
 export const assetKindKeys = { image: 'assets.image', video: 'assets.video', model3d: 'assets.model3d', audio: 'assets.audio', file: 'assets.file' } as const
@@ -34,24 +36,28 @@ export function assetFailureText(job: AssetJobSummary, language: Language): stri
 export const assetIcons = { image: ImageIcon, video: Video, audio: Music2, model3d: Box, file: Box }
 
 /** The asset keeps its own flat canvas when folded; it never becomes a generic tool row. */
-export function AssetCanvas({ title, trailing, children, footer, actions, collapsedLabel, kind = 'image' }: { title?: string; trailing?: ReactNode; children: ReactNode; footer?: ReactNode; actions?: ReactNode; collapsedLabel?: string; kind?: AssetKind }) {
+export function AssetCanvas({ title, trailing, children, footer, actions, collapsedLabel, kind = 'image', automaticOpen }: { title?: string; trailing?: ReactNode; children: ReactNode; footer?: ReactNode; actions?: ReactNode; collapsedLabel?: string; kind?: AssetKind; automaticOpen?: boolean }) {
   const language = useStore(state => state.language)
-  const [collapsed, setCollapsed] = useState(false)
+  // Standalone previews stay open by default; timeline cards follow their stage.
+  const { isOpen, toggle } = useDisclosureState({ automaticOpen: automaticOpen ?? true })
+  const collapsed = !isOpen
   const contentId = useId()
   const Icon = assetIcons[kind]
   const summary = collapsedLabel || t(assetKindKeys[kind], language)
   return <section data-asset-canvas aria-label={title || t('assets.preview', language)} className={`group/asset relative w-full overflow-hidden text-xs ${collapsed ? 'my-0.5 rounded-lg hover:bg-text-primary/[0.02]' : 'my-2 max-w-[440px] rounded bg-surface-hover/50'}`}>
     {!collapsed && <div data-asset-controls className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded bg-surface/95 p-1 text-text-muted transition-opacity motion-reduce:transition-none opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100">
       {trailing && <span className="px-1 text-[10px]">{trailing}</span>}{actions}
-      <button type="button" aria-label={t(collapsed ? 'assets.expandCanvas' : 'assets.collapseCanvas', language)} aria-expanded={!collapsed} aria-controls={contentId} title={t(collapsed ? 'assets.expandCanvas' : 'assets.collapseCanvas', language)} onClick={() => setCollapsed(value => !value)} className={`${actionClass} focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}><ChevronDown size={14} aria-hidden="true" className={`transition-transform motion-reduce:transition-none ${collapsed ? '-rotate-90' : ''}`} /></button>
+      <button type="button" aria-label={t(collapsed ? 'assets.expandCanvas' : 'assets.collapseCanvas', language)} aria-expanded={!collapsed} aria-controls={contentId} title={t(collapsed ? 'assets.expandCanvas' : 'assets.collapseCanvas', language)} onClick={toggle} className={`${actionClass} focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}><ChevronDown size={14} aria-hidden="true" className={`transition-transform motion-reduce:transition-none ${collapsed ? '-rotate-90' : ''}`} /></button>
     </div>}
     {collapsed && <div className="flex min-h-9 items-center gap-2">
-      <button type="button" aria-label={t('assets.expandCanvas', language)} aria-expanded={false} aria-controls={contentId} onClick={() => setCollapsed(false)} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"><ChevronRight size={14} className="shrink-0 text-text-muted/40" /><Icon size={14} className="shrink-0 text-text-muted/55" /><span className="min-w-0 flex-1 truncate text-[12px] font-normal text-text-secondary" title={summary}>{summary}</span><span className="shrink-0 text-text-muted">{trailing}</span></button>
+      <button type="button" aria-label={t('assets.expandCanvas', language)} aria-expanded={false} aria-controls={contentId} onClick={toggle} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"><ChevronRight size={14} className="shrink-0 text-text-muted/40" /><Icon size={14} className="shrink-0 text-text-muted/55" /><span className="min-w-0 flex-1 truncate text-[12px] font-normal text-text-secondary" title={summary}>{summary}</span><span className="shrink-0 text-text-muted">{trailing}</span></button>
       <span className="mr-1 flex shrink-0 items-center text-text-muted opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100">{actions}</span>
     </div>}
-    <div id={contentId} hidden={collapsed}>
-      {!collapsed && children}
-      {!collapsed && footer && <footer className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-[10px] text-text-muted">{footer}</footer>}
+    <div id={contentId}>
+      <SmoothCollapse open={isOpen} animateInitial={false}>
+        {children}
+        {footer && <footer className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-[10px] text-text-muted">{footer}</footer>}
+      </SmoothCollapse>
     </div>
   </section>
 }
@@ -66,7 +72,7 @@ export function AssetPlaceholder({ kind = 'image', label, busy, error, children 
   </div>
 }
 
-export function AssetPreview({ id, embedded = false, navigation }: { id: string; embedded?: boolean; navigation?: ReactNode }) {
+export function AssetPreview({ id, embedded = false, navigation, automaticOpen }: { id: string; embedded?: boolean; navigation?: ReactNode; automaticOpen?: boolean }) {
   const language = useStore(s => s.language)
   const [preview, setPreview] = useState<string | null>(null)
   const [media, setMedia] = useState<{ asset: GeneratedAsset; url?: string }>()
@@ -113,10 +119,10 @@ export function AssetPreview({ id, embedded = false, navigation }: { id: string;
     </div>
     <ImageLightbox isOpen={expanded} src={preview} alt={t('assets.preview', language)} onClose={() => setExpanded(false)} />
   </div>
-  return embedded ? <div>{content}</div> : <AssetCanvas title={asset?.name || t('assets.preview', language)} collapsedLabel={asset?.name} kind={asset?.kind}>{content}</AssetCanvas>
+  return embedded ? <div>{content}</div> : <AssetCanvas automaticOpen={automaticOpen} title={asset?.name || t('assets.preview', language)} collapsedLabel={asset?.name} kind={asset?.kind}>{content}</AssetCanvas>
 }
 
-export function AssetJobCard({ jobId, hideHeader = false, kind = 'image', title, prompt }: { jobId: string; hideHeader?: boolean; kind?: AssetKind; title?: string; prompt?: string }) {
+export function AssetJobCard({ jobId, hideHeader = false, kind = 'image', title, prompt, isPresenting }: { jobId: string; hideHeader?: boolean; kind?: AssetKind; title?: string; prompt?: string; isPresenting?: boolean }) {
   const language = useStore(s => s.language)
   const [job, setJob] = useState<AssetJobSummary>()
   const [error, setError] = useState('')
@@ -146,11 +152,16 @@ export function AssetJobCard({ jobId, hideHeader = false, kind = 'image', title,
     finally { setBusy(false) }
   }
   const active = !!job && ['queued', 'submitting', 'running', 'collecting'].includes(job.state)
+  // Submission can finish before generation does. Keep polling outside the folded
+  // body, and keep live jobs open until their actual result has arrived.
+  // Unknown is not running: remounting a completed process must not briefly
+  // expand its canvas while the persisted job status is being loaded.
+  const automaticOpen = isPresenting === undefined ? undefined : isPresenting || active
   const failure = error || (job && assetFailureText(job, language))
   const label = job ? t(assetStateKeys[job.state], language) : t('assets.preparing', language)
   const index = Math.min(selected, Math.max(0, (job?.assetIds.length || 0) - 1))
   return <>
-    <AssetCanvas title={hideHeader ? undefined : job?.capabilityName || title || t('assets.job', language)} collapsedLabel={job?.prompt || prompt} kind={kind} trailing={<ToolElapsedTime state={active ? 'running' : 'idle'} startedAt={job?.createdAt} durationMs={job ? job.updatedAt - job.createdAt : undefined} className="!text-text-muted" />} actions={<button className={actionClass} onClick={() => setDetails(true)} title={t('assets.details', language)} aria-label={t('assets.details', language)}><Info size={13} /></button>} footer={job?.state === 'queued' || job?.canRetryCollection || error ? <>
+    <AssetCanvas automaticOpen={automaticOpen} title={hideHeader ? undefined : job?.capabilityName || title || t('assets.job', language)} collapsedLabel={job?.prompt || prompt} kind={kind} trailing={<ToolElapsedTime state={active ? 'running' : 'idle'} startedAt={job?.createdAt} durationMs={job ? job.updatedAt - job.createdAt : undefined} className="!text-text-muted" />} actions={<button className={actionClass} onClick={() => setDetails(true)} title={t('assets.details', language)} aria-label={t('assets.details', language)}><Info size={13} /></button>} footer={job?.state === 'queued' || job?.canRetryCollection || error ? <>
       <div className="flex items-center gap-2">
         {job?.state === 'queued' && <button disabled={busy} className={actionClass} onClick={() => void act('cancel')}>{t('assets.cancelQueued', language)}</button>}
         {job?.canRetryCollection && <button disabled={busy} className={actionClass} onClick={() => void act('retryCollection')}>{t('assets.retryDownload', language)}</button>}
