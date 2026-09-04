@@ -11,7 +11,7 @@
  * - 紧凑模式：无内容时只显示状态行
  */
 
-import React, { useState, useCallback, useMemo, memo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, memo } from 'react'
 import { X, Check, ExternalLink, Square, ChevronDown, FileCode, FilePlus, FileX, CheckCheck, XCircle, FolderOpen, ListTodo, Layers, ShieldCheck, Play, Pencil, Trash2, ChevronUp } from 'lucide-react'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
@@ -25,8 +25,8 @@ import { supportsTaskApproval } from './ToolCallGroup'
 import { t, type Language } from '@shared/i18n'
 import SmoothCollapse from './SmoothCollapse'
 import { useDisclosureState } from '@renderer/hooks'
-import { useDockFrame } from './ConversationPresentationProvider'
-import { projectTrayActions } from '@renderer/agent/presentation/trayProjection'
+import { useSubtaskApprovals } from '@renderer/hooks/useSubtaskApprovals'
+import { SubtaskApprovalList } from './SubtaskApprovalList'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -50,12 +50,12 @@ interface UnifiedStatusTrayProps {
 }
 
 function UnifiedStatusTray({
-  pendingChanges: sourcePendingChanges,
+  pendingChanges,
   todos,
   isStreaming,
-  isAwaitingApproval: sourceAwaitingApproval,
-  pendingToolCall: sourcePendingToolCall,
-  pendingToolCalls: sourcePendingToolCalls = [],
+  isAwaitingApproval,
+  pendingToolCall,
+  pendingToolCalls = [],
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -68,12 +68,7 @@ function UnifiedStatusTray({
   onQueueSendNow,
 }: UnifiedStatusTrayProps) {
   const language = useStore(s => s.language)
-  const frame = useDockFrame()
-  const { tools: pendingToolCalls, changes: pendingChanges } = projectTrayActions(frame, sourcePendingToolCalls, sourcePendingChanges)
-  const pendingToolCall = sourcePendingToolCall
-    ? projectTrayActions(frame, [sourcePendingToolCall], []).tools[0] : undefined
-  const isAwaitingApproval = sourceAwaitingApproval && !!pendingToolCall
-  const isPresenting = frame?.isPresenting ?? false
+  const subtasks = useSubtaskApprovals()
 
   const queue = useMessageQueueStore(s => s.queue)
   const removeFromQueue = useMessageQueueStore(s => s.remove)
@@ -84,8 +79,10 @@ function UnifiedStatusTray({
   const hasChanges = pendingChanges.length > 0
   const hasTodos = todos.length > 0
   const hasQueue = queue.length > 0
-  const hasApprovals = pendingToolCalls.length > 0
-  const hasStatus = isStreaming || sourceAwaitingApproval || isPresenting
+  const approvalCount = pendingToolCalls.length + subtasks.approvals.length
+  const hasApprovals = approvalCount > 0
+  const hasWaitingApproval = isAwaitingApproval || subtasks.approvals.length > 0
+  const hasStatus = isStreaming || hasWaitingApproval
   const pendingCommand = isAwaitingApproval && pendingToolCall?.name === 'run_command'
     && typeof pendingToolCall.arguments.command === 'string'
     ? pendingToolCall.arguments.command
@@ -102,8 +99,12 @@ function UnifiedStatusTray({
   }, [hasApprovals, hasChanges, hasStatus, hasTodos, hasQueue])
 
   const [activeTab, setActiveTab] = useState<TabView>('approvals')
+  const subtaskApprovalKey = subtasks.approvals.map(item => `${item.threadId}:${item.requestId}:${item.toolCall.id}`).join('|')
+  useEffect(() => {
+    if (subtaskApprovalKey) setActiveTab('approvals')
+  }, [subtaskApprovalKey])
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
-    automaticOpen: isAwaitingApproval,
+    automaticOpen: hasWaitingApproval,
   })
 
   // 确保 activeTab 在可用范围内
@@ -124,11 +125,11 @@ function UnifiedStatusTray({
             {/* 状态指示器 */}
             {hasStatus && (
               <div className="flex items-center gap-2 mr-2">
-                {!isAwaitingApproval ? (
+                {!hasWaitingApproval ? (
                   <>
                     <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                     <span className="text-[11px] font-medium tool-text-shimmer">
-                      {isPresenting && !isStreaming ? t('unifiedStatusTray.rendering', language) : 'Processing...'}
+                      Processing...
                     </span>
                   </>
                 ) : (
@@ -150,7 +151,7 @@ function UnifiedStatusTray({
                     active={currentTab === 'approvals'}
                     onClick={() => setActiveTab('approvals')}
                     title={t('unifiedStatusTray.approvals', language)}
-                    badge={pendingToolCalls.length}
+                    badge={approvalCount}
                   >
                     <ShieldCheck className="w-3 h-3" />
                   </TabButton>
@@ -191,7 +192,7 @@ function UnifiedStatusTray({
             {/* 单 tab 时显示标签文字 */}
             {availableTabs.length === 1 && (
               <span className="text-[11px] font-medium text-text-muted/70">
-                {currentTab === 'approvals' && (t('unifiedStatusTray.approvals2', language, { length: pendingToolCalls.length }))}
+                {currentTab === 'approvals' && (t('unifiedStatusTray.approvals2', language, { length: approvalCount }))}
                 {currentTab === 'files' && `${pendingChanges.length} file${pendingChanges.length > 1 ? 's' : ''} changed`}
                 {currentTab === 'tasks' && `${todos.filter(todo => todo.status === 'completed').length}/${todos.length} Tasks`}
                 {currentTab === 'queue' && `${queue.length} ${t('unifiedStatusTray.queued', language)}`}
@@ -202,7 +203,7 @@ function UnifiedStatusTray({
           {/* 右侧操作 */}
           <div className="flex items-center gap-1.5">
             {/* Stop 按钮 */}
-            {(isStreaming || (sourceAwaitingApproval && !isAwaitingApproval)) && (
+            {isStreaming && (
               <button
                 onClick={onStop}
                 className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all border border-transparent hover:border-red-500/20"
@@ -225,7 +226,7 @@ function UnifiedStatusTray({
             )}
 
             {/* Files tab 批量操作 */}
-            {currentTab === 'files' && hasChanges && pendingChanges.length === sourcePendingChanges.length && (
+            {currentTab === 'files' && hasChanges && (
               <div className="flex items-center gap-1">
                 <button
                   onClick={onUndoAll}
@@ -288,6 +289,7 @@ function UnifiedStatusTray({
               )}
 
               {currentTab === 'approvals' && hasApprovals && (
+                <div className="max-h-[min(220px,30vh)] overflow-y-auto custom-scrollbar">
                 <ApprovalQueueContent
                   toolCalls={pendingToolCalls}
                   currentToolCallId={pendingToolCall?.id}
@@ -296,6 +298,8 @@ function UnifiedStatusTray({
                   onApproveForTask={onApproveToolForTask}
                   onReject={onRejectTool}
                 />
+                <SubtaskApprovalList approvals={subtasks.approvals} language={language} onDecision={subtasks.onDecision} />
+                </div>
               )}
 
               {currentTab === 'tasks' && hasTodos && (
@@ -380,7 +384,7 @@ function ApprovalQueueContent({
   }, [decideOnce, language, onApprove])
 
   return (
-    <div className="max-h-[220px] space-y-1 overflow-y-auto px-2 py-2 custom-scrollbar">
+    <div className={visibleToolCalls.length ? 'space-y-1 px-2 py-2' : ''}>
       {visibleToolCalls.map((toolCall, index) => {
         const isCurrent = toolCall.id === currentToolCallId
         const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
@@ -390,10 +394,7 @@ function ApprovalQueueContent({
         return (
           <div
             key={toolCall.id}
-            className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${isCurrent
-              ? 'border-amber-400/30 bg-amber-400/[0.06]'
-              : 'border-border/40 bg-background/25'
-            }`}
+            className="flex items-center gap-2 px-2.5 py-2"
           >
             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[9px] font-semibold ${isCurrent
               ? 'bg-amber-400/15 text-amber-400'

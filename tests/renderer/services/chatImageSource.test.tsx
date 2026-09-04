@@ -30,6 +30,14 @@ describe('chat image references', () => {
     expect(chatMarkdownUrlTransform(source, 'src', { tagName: 'img' })).toBe('')
   })
 
+  it.each([0x00, 0x09, 0x0a, 0x1f, 0x7f])('rejects literal and encoded control character %i in image paths', code => {
+    const character = String.fromCharCode(code)
+    for (const source of [`images/a${character}b.png`, `images/a${encodeURIComponent(character)}b.png`]) {
+      expect(parseChatImageSource(source)).toBeNull()
+      expect(chatMarkdownUrlTransform(source, 'src', { tagName: 'img' })).toBe('')
+    }
+  })
+
   it('preserves stable asset IDs and safe inline raster images', () => {
     expect(parseChatImageSource('asset://image-1')).toEqual({ type: 'asset', id: 'image-1' })
     const url = 'data:image/png;base64,WA=='

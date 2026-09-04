@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AGENT_DISCLOSURE_CLOSE_DELAY_MS, AGENT_DISCLOSURE_MANUAL_EVENT } from '@renderer/agent/presentation/disclosureMotion'
 
 interface UseDisclosureStateOptions {
-  /** Timeline-owned state. No local automatic timer when supplied. */
+  /** State-driven disclosure. No local automatic timer when supplied. */
   automaticOpen?: boolean
   /** 有活内容时自动展开：正在跑、正在流、等审批、出错。 */
   openWhile?: boolean

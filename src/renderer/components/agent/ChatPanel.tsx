@@ -1,7 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { memo, useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
-import { Virtuoso, type FlatIndexLocationWithAlign } from 'react-virtuoso'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
+import { ChatVirtualList } from './ChatVirtualList'
 import {
   AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, X, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -28,7 +28,7 @@ import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
 import UnifiedStatusTray from './UnifiedStatusTray'
-import { ConversationPresentationProvider } from './ConversationPresentationProvider'
+import { selectSubtaskApprovalThreads } from '@renderer/agent/presentation/subtaskApprovals'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
@@ -65,21 +65,12 @@ interface RenderableMessageItem {
   renderKey: string
 }
 
-const MemoizedVirtuoso = memo(Virtuoso) as typeof Virtuoso
 const CHAT_TIMELINE_STYLE = {
   minHeight: '100px',
   overflowX: 'hidden',
   overflowY: 'auto',
   overflowAnchor: 'none',
 } as const
-// 列表挂载时就把首帧定位在最后一条上，而不是先画到顶部再补一次
-// scrollToIndex。变高行（Markdown / 工具卡）从顶部跳到末尾是「猜偏移 → 挂载 →
-// 量高 → 修正」的迭代过程，既卡又会被后到的行高变化打断停在半路。
-// 必须是模块级常量：每次渲染都传新对象的话，Virtuoso 会把它当成新的初始位置。
-const CHAT_TIMELINE_INITIAL_LOCATION: FlatIndexLocationWithAlign = {
-  align: 'end',
-  index: 'LAST',
-}
 
 function computeTimelineItemKey(
   _index: number,
@@ -107,10 +98,11 @@ function buildRenderableMessageItems(
 }
 
 export default function ChatPanel() {
-  return <ConversationPresentationProvider><ChatPanelContent /></ConversationPresentationProvider>
+  return <ChatPanelContent />
 }
 
 function ChatPanelContent() {
+  const hasSubtaskApprovals = useAgentStore(state => selectSubtaskApprovalThreads(state.threads, state.currentThreadId).length > 0)
   const decorativeAnimations = useDecorativeAnimations()
   const {
     llmConfig,
@@ -1472,13 +1464,18 @@ function ChatPanelContent() {
               ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} />
               : isHydratingActiveThread
                 ? null
-                : <MemoizedVirtuoso
+                // Mount Virtuoso with real rows: its initial location and size
+                // probe must not be consumed by the full-height welcome screen.
+                : timelineItems.length === 0
+                ? <div className="flex-1 min-h-0 overflow-hidden">
+                  <virtuosoComponents.EmptyPlaceholder />
+                </div>
+                : <ChatVirtualList
                   key={currentThreadId ?? 'no-thread'}
                   ref={virtuosoRef}
                   data={timelineItems}
                   computeItemKey={computeTimelineItemKey}
                   rangeChanged={handleTimelineRangeChanged}
-                  initialTopMostItemIndex={CHAT_TIMELINE_INITIAL_LOCATION}
                   followOutput={false}
                   itemContent={renderTimelineItemContent}
                   className="flex-1 custom-scrollbar w-full h-full"
@@ -1521,7 +1518,7 @@ function ChatPanelContent() {
             <div className="mx-4 mb-4 flex flex-col">
               {/* Dock 区域：无内容时不占空间，有内容时用动画平滑展开，
                   避免固定 min-h 造成的底部空白，同时通过过渡动画防止抖动。 */}
-              {chatMode !== 'plan' && (
+              {(chatMode !== 'plan' || hasSubtaskApprovals) && (
                 <div className="relative shrink-0 z-30">
                   {laneNotice && (
                     <div className="flex items-center gap-2 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2 mb-2">

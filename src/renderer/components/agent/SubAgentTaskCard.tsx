@@ -2,7 +2,6 @@ import { memo, useMemo } from 'react'
 import { Check, ChevronDown, Circle, ExternalLink, GitBranch, LoaderCircle, ShieldAlert, Wrench, X } from 'lucide-react'
 import type { ToolCall } from '@/renderer/agent/types'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
-import { Agent } from '@/renderer/agent/core/Agent'
 import { buildSubAgentExecutionSteps, type SubAgentStepState } from '@/renderer/agent/presentation/subAgentExecution'
 import { LaneStatusChip, WorktreeLanePanel } from '@/renderer/components/git'
 import { useStore } from '@/renderer/store'
@@ -128,11 +127,6 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
           </span>
         </li>)}
       </ol>
-
-      {waitingApproval && <div className="mt-2 flex items-center gap-2 pl-6">
-        <button type="button" onClick={() => Agent.reject(childThread?.streamState?.requestId)} className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400">{t('toolReject', language)}</button>
-        <button type="button" onClick={() => Agent.approve(childThread?.streamState?.requestId)} className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover">{t('toolApprove', language)}</button>
-      </div>}
 
       {(toolCall.result || toolCall.error) && !isRunning && <div className={`ml-6 mt-2 whitespace-pre-wrap break-words py-2 text-[11px] leading-5 ${isError ? 'text-status-error' : 'text-text-secondary'}`}>{toolCall.error || toolCall.result}</div>}
       </ToolDetailsView>

@@ -185,7 +185,7 @@ export class PreviewBrowserService {
         if (args.action === 'click' || args.action === 'press') await this.waitForFrame(entry)
         if (args.action === 'wait_for') {
           const deadline = Date.now() + args.timeout_ms
-          while (true) {
+          for (;;) {
             try {
               if ((await this.evaluate(entry, elementActionScript('wait_for', args.selector))).visible) break
             } catch (error) {

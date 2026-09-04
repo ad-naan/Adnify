@@ -58,6 +58,17 @@ describe('AgentStore', () => {
   })
 
   describe('Message Management', () => {
+    it('publishes the first user message before context preparation starts', () => {
+      const prepared = useAgentStore.getState().prepareExecution('Look at this project', [])
+      const state = useAgentStore.getState()
+      const messages = selectMessageListState(state).messages
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant'])
+      expect(messages[0]).toMatchObject({ id: prepared.userMessageId, content: 'Look at this project' })
+      expect(messages[1]).toMatchObject({ id: prepared.assistantId, parts: [] })
+      state.setStreamState({ phase: 'streaming', assistantId: prepared.assistantId, requestId: 'first-request' }, prepared.threadId)
+      expect(selectMessageListState(useAgentStore.getState()).messages[0]).toBe(messages[0])
+    })
+
     it('should add user message', () => {
       const store = useAgentStore.getState()
       store.createThread()

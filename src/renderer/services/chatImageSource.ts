@@ -4,10 +4,18 @@ import { assetService } from './assetService'
 
 type ChatImageSource = { type: 'url'; url: string } | { type: 'asset'; id: string } | { type: 'path'; path: string }
 
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 /** Preserve local references only for our image component, never native links. */
 export function parseChatImageSource(value: string): ChatImageSource | null {
   const source = value.trim()
-  if (!source || /[\u0000-\u001f\u007f]/.test(source)) return null
+  if (!source || hasControlCharacters(source)) return null
   if (/^https?:\/\//i.test(source)) return { type: 'url', url: source }
   if (/^data:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon);base64,[a-z0-9+/=]+$/i.test(source)) return { type: 'url', url: source }
   const asset = /^asset:\/\/([a-z0-9_-]{1,200})$/i.exec(source)
@@ -24,7 +32,7 @@ export function parseChatImageSource(value: string): ChatImageSource | null {
       return null
     }
     filePath = decodeURIComponent(filePath.split(/[?#]/)[0]).replace(/\\/g, '/')
-    if (filePath.startsWith('//') || /[\u0000-\u001f\u007f]/.test(filePath)) return null
+    if (filePath.startsWith('//') || hasControlCharacters(filePath)) return null
     if (filePath.replace(/^[a-z]:\//i, '').includes(':')) return null
     if (!/\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(filePath)) return null
     return { type: 'path', path: filePath }

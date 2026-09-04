@@ -50,8 +50,7 @@ import { logger } from '@shared/utils/Logger'
 import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 import { parseThreadDeepLink } from '@/renderer/agent/threads/threadReference'
 import SmoothCollapse from './SmoothCollapse'
-import { useAssistantPlayback } from './useAssistantPlayback'
-import { useIsTurnPresenting } from './ConversationPresentationProvider'
+import { useAssistantTurnView } from './useAssistantTurnView'
 import { StreamingPlainText } from './StreamingTail'
 import { useDisclosureState } from '@renderer/hooks'
 
@@ -1101,16 +1100,15 @@ const AssistantTurnContent = React.memo(({
   language,
   messageId,
 }: AssistantTurnContentProps) => {
-  const playback = useAssistantPlayback({
-    messageId,
+  const view = useAssistantTurnView({
     parts,
     isTransportActive,
     isAwaitingApproval,
     hasContextMeta,
   })
-  const { processExpanded, toggleProcess } = playback
-  const hiddenParts = processExpanded ? undefined : playback.processParts
-  const visibleSearch = playback.visibleParts.find(isSearchPart)
+  const { processExpanded, toggleProcess } = view
+  const hiddenParts = processExpanded ? undefined : view.processParts
+  const visibleSearch = view.visibleParts.find(isSearchPart)
 
   const sharedProps = {
     pendingToolId,
@@ -1125,10 +1123,10 @@ const AssistantTurnContent = React.memo(({
 
   return (
     <div className="prose-custom w-full max-w-none">
-      {playback.hasProcessContent && (
+      {view.hasProcessContent && (
         <ProcessFold
           language={language}
-          summary={playback.summary}
+          summary={view.summary}
           isExpanded={processExpanded}
           toggleExpanded={toggleProcess}
         />
@@ -1140,17 +1138,17 @@ const AssistantTurnContent = React.memo(({
               manualSkills={manualSkills}
               searchContent={visibleSearch?.content}
               isSearchStreaming={visibleSearch?.isStreaming}
-              isPresenting={playback.openPart?.type === 'search'}
+              isPresenting={view.openPart?.type === 'search'}
             />
         </SmoothCollapse>
       )}
       <AssistantMessageContent
         {...sharedProps}
-        parts={playback.visibleParts}
-        activePart={playback.activePart}
-        openPart={playback.openPart}
+        parts={view.visibleParts}
+        activePart={view.activePart}
+        openPart={view.openPart}
         hiddenParts={hiddenParts}
-        presentingToolIds={playback.presentingToolIds}
+        presentingToolIds={view.presentingToolIds}
       />
     </div>
   )
@@ -1270,8 +1268,7 @@ const ChatMessage = React.memo(({
   )
 
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
-  const isPresenting = useIsTurnPresenting(message.id)
-  const isMessageActive = isStreaming || isPresenting
+  const isMessageActive = isStreaming
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
 
   const hasMetaGroup = React.useMemo(() => {

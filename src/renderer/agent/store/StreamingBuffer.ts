@@ -2,9 +2,8 @@
  * Streaming ingress batcher.
  *
  * This class only limits how often transport chunks publish immutable store
- * snapshots. It does not decide presentation speed; the assistant playback
- * clock owns that responsibility. Keeping these roles separate prevents store
- * churn without giving two different components control of visible ordering.
+ * snapshots. The UI renders each published snapshot directly; there is no
+ * separate presentation clock or replay queue.
  *
  * 三条不变量：
  *   1. **前沿触发**：首个 token 立刻落地，不等一个间隔。等待首帧是「点了发送之后空白

@@ -1,13 +1,11 @@
 import { StrictMode, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Virtuoso } from 'react-virtuoso'
-import { ConversationPresentationProvider, useDockFrame } from '../../src/renderer/components/agent/ConversationPresentationProvider'
-import { useAssistantPlayback } from '../../src/renderer/components/agent/useAssistantPlayback'
+import { useAssistantTurnView } from '../../src/renderer/components/agent/useAssistantTurnView'
 import SmoothCollapse from '../../src/renderer/components/agent/SmoothCollapse'
 import ToolActivityIndicator from '../../src/renderer/components/agent/ToolActivityIndicator'
 import { useChatScrollController } from '../../src/renderer/hooks/useChatScrollController'
 import { useDisclosureState } from '../../src/renderer/hooks/useDisclosureState'
-import { useTurnFrame } from '../../src/renderer/components/agent/ConversationPresentationProvider'
 import { publish, useAgentStore } from './motion-store'
 import type { AssistantPart } from '../../src/renderer/agent/types'
 import '../../src/renderer/styles/globals.css'
@@ -32,24 +30,26 @@ function Tool({ part, open }: { part: Extract<AssistantPart, { type: 'tool_call'
 function Reply() {
   const source = useAgentStore(state => state.threads.fixture)
   const parts = source.liveAssistantMessage?.parts ?? source.messages[0]?.parts ?? EMPTY
-  const playback = useAssistantPlayback({ messageId: 'reply', parts, isTransportActive: !!source.liveAssistantMessage, isAwaitingApproval: false, hasContextMeta: false })
-  if (!TEST_PROCESS_FOLD) return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>{playback.visibleParts.map((part, index) => part.type === 'tool_call'
-    ? <div key={index} className={part === playback.openPart ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part === playback.openPart} /></div></div>
+  const view = useAssistantTurnView({ parts, isTransportActive: !!source.liveAssistantMessage, isAwaitingApproval: false, hasContextMeta: false })
+  if (!TEST_PROCESS_FOLD) return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>{view.visibleParts.map((part, index) => part.type === 'tool_call'
+    ? <div key={index} className={part.type === 'tool_call' && view.presentingToolIds.includes(part.toolCall.id) ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part.type === 'tool_call' && view.presentingToolIds.includes(part.toolCall.id)} /></div></div>
     : part.type === 'text' || part.type === 'reasoning' ? <div key={index} data-text={part.type} style={{ fontSize: 19, lineHeight: '32px', whiteSpace: 'pre-wrap' }}>{part.content}</div> : null)}</div>
   return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>
-    {playback.hasProcessContent && <button data-process aria-expanded={playback.processExpanded} onClick={playback.toggleProcess}>Process</button>}
-    {playback.visibleParts.map((part, index) => {
+    {view.hasProcessContent && <button data-process aria-expanded={view.processExpanded} onClick={view.toggleProcess}>Process</button>}
+    {view.visibleParts.map((part, index) => {
       const body = part.type === 'tool_call'
-        ? <div className={part === playback.openPart ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part === playback.openPart} /></div></div>
+        ? <div className={part.type === 'tool_call' && view.presentingToolIds.includes(part.toolCall.id) ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part.type === 'tool_call' && view.presentingToolIds.includes(part.toolCall.id)} /></div></div>
         : part.type === 'text' || part.type === 'reasoning' ? <div data-text={part.type} style={{ fontSize: 19, lineHeight: '32px', whiteSpace: 'pre-wrap' }}>{part.content}</div> : null
-      return <SmoothCollapse key={index} open={playback.processExpanded || !playback.processParts.has(part)} animateInitial={false}>{body}</SmoothCollapse>
+      return <SmoothCollapse key={index} open={view.processExpanded || !view.processParts.has(part)} animateInitial={false}>{body}</SmoothCollapse>
     })}
   </div>
 }
 function Fixture() {
   const { attachScrollerNode, handleTotalListHeightChanged, virtuosoRef } = useChatScrollController({ threadId: 'fixture', isHydratingActiveThread: false, isSwitchingThread: false, messageCount: 2 })
-  const dock = useDockFrame()
-  const frame = useTurnFrame('reply')
+  const source = useAgentStore(state => state.threads.fixture)
+  const active = !!source.liveAssistantMessage
+  const frame = { phase: active ? 'active' : 'complete', openIndex: -1 }
+  const awaiting = source.liveAssistantMessage?.parts.some(part => part.type === 'tool_call' && part.toolCall.status === 'awaiting')
   const frameRef = useRef(frame)
   frameRef.current = frame
   useEffect(() => {
@@ -76,12 +76,15 @@ function Fixture() {
       scrollerRef={attachScrollerNode as (node: HTMLElement | Window | null) => void}
       style={{ flex: 1, overflowAnchor: 'none' }} totalListHeightChanged={handleTotalListHeightChanged}
       itemContent={index => index === 0 ? <div style={{ height: 900, padding: 24 }}>Earlier conversation</div> : <Reply />} />
-    <SmoothCollapse open={!!dock?.isPresenting}>
+    <SmoothCollapse open={active}>
       <div style={{ padding: 14, borderTop: '1px solid #ddd' }}>
-        {dock?.toolStates.first === 'awaiting' ? <button data-approval>Approve command</button> : 'Displaying reply…'}
+        {awaiting ? <button data-approval>Approve command</button> : 'Displaying reply…'}
       </div>
     </SmoothCollapse>
     <div style={{ padding: 26, height: 92, borderTop: '1px solid #ddd' }}>Message composer</div>
   </main>
 }
-createRoot(document.getElementById('root')!).render(<StrictMode><ConversationPresentationProvider><Fixture /></ConversationPresentationProvider></StrictMode>)
+const root = createRoot(document.getElementById('root')!)
+root.render(<StrictMode><Fixture /></StrictMode>)
+
+if (import.meta.hot) import.meta.hot.dispose(() => root.unmount())
