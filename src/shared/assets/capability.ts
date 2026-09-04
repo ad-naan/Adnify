@@ -3,8 +3,12 @@ import type { AssetCapability, AssetInputSchema } from '../types/assets'
 
 const pointer = z.string().max(500).refine(p => p === '' || p.startsWith('/'), 'Use a JSON pointer, e.g. /data/images')
 const url = z.string().url().refine(value => {
-  const u = new URL(value)
-  return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password
+  try {
+    const u = new URL(value)
+    return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password
+  } catch {
+    return false
+  }
 }, 'Only HTTP(S) URLs without embedded credentials are supported')
 const field: z.ZodType<AssetInputSchema> = z.lazy(() => z.object({
   type: z.enum(['string', 'number', 'integer', 'boolean', 'object', 'array']),

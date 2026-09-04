@@ -50,6 +50,8 @@ async function submit(key = 'call-1') {
 describe('user-defined capability contract', () => {
   it('runs the supplied Cookie/base64 example with its 180 second timeout and no resubmission', async () => {
     const cap = JSON.parse(await fs.readFile(path.resolve('docs/examples/image-service-config.json'), 'utf8'))
+    cap.request.url = 'https://example.test/generate'
+    cap.request.body.model = 'test-image-model'
     service.stop()
     service = new AssetService(repo, { configDir: directory, fetch: request as typeof fetch, secret: async () => 'session=test-only' })
     await service.init(); await service.saveCapability(cap)
@@ -63,7 +65,7 @@ describe('user-defined capability contract', () => {
       const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit]
       expect(url).toBe(cap.request.url)
       expect((init.headers as Record<string, string>).Cookie).toBe('session=test-only')
-      expect(JSON.parse(init.body as string)).toEqual({ model: 'gpt-image-2', prompt: 'a cat', n: 1, quality: 'auto', response_format: 'b64_json' })
+      expect(JSON.parse(init.body as string)).toEqual({ model: 'test-image-model', prompt: 'a cat', n: 1, quality: 'auto', response_format: 'b64_json' })
       expect(request).toHaveBeenCalledTimes(1)
       expect(() => parseCapability({ ...cap, request: { ...cap.request, timeoutSeconds: 0 } })).toThrow()
       expect(() => parseCapability({ ...cap, request: { ...cap.request, timeoutSeconds: 601 } })).toThrow()

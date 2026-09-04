@@ -5,7 +5,9 @@ import { normalizeAssetConfiguration } from '@/shared/assets/configuration'
 import { isSensitiveSettingsKey } from '@/main/ipc/sensitiveSettings'
 import { cleanConfigValue } from '@/shared/config/configCleaner'
 import { USER_PREFERENCES } from '@/renderer/settings/userPreferences'
-import fixture from '../../docs/examples/image-service-config.json'
+import example from '../../docs/examples/image-service-config.json'
+
+const fixture = { ...example, request: { ...example.request, url: 'https://example.test/generate' } }
 
 class Runtime implements AssetRepository {
   data = new Map<string, unknown>()
