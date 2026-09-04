@@ -125,7 +125,8 @@ const TerminalPanel = memo(function TerminalPanel() {
             // 终端是否在当前 UI 状态下应该可见：
             // 1. 如果是 Split 视图，所有存在的容器都可见
             // 2. 如果是 Tabs 视图，只有当前 activeId 可见
-            const shouldBeVisible = isSplitView || terminal.id === managerState.activeId
+            const shouldBeVisible = terminalVisible && !isCollapsed
+                && (isSplitView || terminal.id === managerState.activeId)
 
             if (container && shouldBeVisible && !mountedTerminals.current.has(terminal.id)) {
                 terminalManager.mountTerminal(terminal.id, container)
@@ -144,8 +145,8 @@ const TerminalPanel = memo(function TerminalPanel() {
             }
         }
 
-        refitVisibleTerminals()
-    }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView, refitVisibleTerminals])
+        if (terminalVisible && !isCollapsed) refitVisibleTerminals()
+    }, [managerState.terminals, managerState.activeId, terminalVisible, isCollapsed, isSplitView, refitVisibleTerminals])
 
     useEffect(() => {
         return () => {
@@ -519,7 +520,10 @@ const TerminalPanel = memo(function TerminalPanel() {
                         {terminals.map(term => (
                             <div
                                 key={term.id}
-                                ref={el => { if (el) containerRefs.current.set(term.id, el) }}
+                                ref={el => {
+                                    if (el) containerRefs.current.set(term.id, el)
+                                    else containerRefs.current.delete(term.id)
+                                }}
                                 className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`}
                                 onClick={() => terminalManager.setActiveTerminal(term.id)}
                                 onContextMenu={(e) => {

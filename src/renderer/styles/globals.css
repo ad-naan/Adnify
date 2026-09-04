@@ -677,7 +677,7 @@ textarea,
   color: rgb(var(--text-muted) / 0.55);
   font-size: 11px;
   line-height: 1.25rem;
-  animation: process-fluid-border 7s ease-in-out infinite;
+  /* Historical process summaries stay static as the conversation grows. */
 }
 
 .process-fluid-pill::before {
@@ -735,8 +735,11 @@ textarea,
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  animation: process-fluid-border 9s ease-in-out infinite;
   transition: opacity 0.35s ease;
+}
+
+.process-fluid-input--animated::before {
+  animation: process-fluid-border 9s ease-in-out infinite;
 }
 
 .process-fluid-input::after {

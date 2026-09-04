@@ -15,6 +15,7 @@ import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
 import ReasoningParticleSlider from './ReasoningParticleSlider'
 import { KaomojiPet } from './KaomojiPet'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
 
@@ -82,6 +83,7 @@ const ChatInput = memo(function ChatInput({
   })))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
+  const decorativeAnimations = useDecorativeAnimations()
   const [isInputExpanded, setIsInputExpanded] = useState(false)
   const [canCollapseInput, setCanCollapseInput] = useState(false)
 
@@ -190,6 +192,7 @@ const ChatInput = memo(function ChatInput({
       <div
         className={`
             process-fluid-input relative group flex flex-col rounded-xl transition-all duration-500 ease-out backdrop-blur-md
+            ${decorativeAnimations && (isFocused || isStreaming) ? 'process-fluid-input--animated' : ''}
             ${isStreaming
             ? 'process-fluid-input--streaming'
             : isFocused

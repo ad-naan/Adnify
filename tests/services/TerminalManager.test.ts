@@ -183,6 +183,50 @@ describe('TerminalManager shell integration', () => {
     }
   })
 
+  it('releases backing strings when terminal output is trimmed or cleared', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    try {
+      const termId = await terminalManager.createTerminal({ cwd: 'C:\\workspace' })
+      const emit = (data: string) => dataHandler?.({ id: termId, data, seq: 1, occurredAt: Date.now() })
+      emit('a'.repeat(150_000))
+      emit('b'.repeat(150_000))
+      // Public output alone cannot detect references retained by unused slots.
+      const buffer = (terminalManager as unknown as {
+        outputBuffers: Map<string, { buf: string[]; clear: () => void }>
+      }).outputBuffers.get(termId)!
+      expect(terminalManager.getOutputBuffer(termId)).toEqual(['b'.repeat(150_000)])
+      expect(buffer.buf.reduce((sum, chunk) => sum + chunk.length, 0)).toBe(150_000)
+      buffer.clear()
+      expect(buffer.buf.reduce((sum, chunk) => sum + chunk.length, 0)).toBe(0)
+      emit('new output')
+      expect(terminalManager.getOutputBuffer(termId)).toEqual(['new output'])
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('mounts background output once and releases idle terminal rendering resources', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    try {
+      const termId = await terminalManager.createTerminal({ cwd: 'C:\\workspace' })
+      dataHandler?.({ id: termId, data: 'background output\r\n', seq: 1, occurredAt: Date.now() })
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      const container = { isConnected: true, clientWidth: 800, clientHeight: 300 } as HTMLDivElement
+      terminalManager.mountTerminal(termId, container)
+      expect(xterm.write).toHaveBeenCalledTimes(1)
+      terminalManager.unmountTerminal(termId)
+      expect(xterm.dispose).toHaveBeenCalledOnce()
+      expect(killMock).not.toHaveBeenCalled()
+
+      terminalManager.mountTerminal(termId, container)
+      const remounted = terminalManager.getXterm(termId) as unknown as MockTerminal
+      expect(remounted).not.toBe(xterm)
+      expect(remounted.write).toHaveBeenCalledExactlyOnceWith('background output\r\n')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
   it('opens terminal URLs only with the platform open-link modifier', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 

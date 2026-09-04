@@ -20,7 +20,7 @@ export class WorkerService {
   private workers: Worker[] = []
   private pendingTasks = new Map<string, PendingTask>()
   private taskQueue: WorkerRequest[] = []
-  private busyWorkers = new Set<Worker>()
+  private workerTasks = new Map<Worker, string>()
   private initialized = false
   private taskIdCounter = 0
 
@@ -36,28 +36,36 @@ export class WorkerService {
 
     try {
       for (let i = 0; i < this.poolSize; i++) {
-        const worker = new Worker(
-          new URL('../workers/computeWorker.ts', import.meta.url),
-          { type: 'module' }
-        )
-
-        worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-          this.handleWorkerResponse(worker, e.data)
-        }
-
-        worker.onerror = (e) => {
-          logger.system.error('[WorkerService] Worker error:', e)
-          this.handleWorkerError(worker, new Error(e.message))
-        }
-
-        this.workers.push(worker)
+        this.createWorker()
       }
 
       this.initialized = true
       logger.system.info(`[WorkerService] Initialized with ${this.poolSize} workers`)
     } catch (e) {
+      for (const worker of [...this.workers]) this.removeWorker(worker)
       logger.system.error('[WorkerService] Failed to initialize:', e)
     }
+  }
+
+  private createWorker(): Worker {
+    const worker = new Worker(
+      new URL('../workers/computeWorker.ts', import.meta.url),
+      { type: 'module' }
+    )
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => this.handleWorkerResponse(worker, e.data)
+    worker.onerror = (e) => this.handleWorkerError(worker, new Error(e.message))
+    worker.onmessageerror = () => this.handleWorkerError(worker, new Error('Unable to deserialize worker response'))
+    this.workers.push(worker)
+    return worker
+  }
+
+  private removeWorker(worker: Worker): void {
+    worker.onmessage = null
+    worker.onerror = null
+    worker.onmessageerror = null
+    worker.terminate()
+    this.workerTasks.delete(worker)
+    this.workers = this.workers.filter(item => item !== worker)
   }
 
   /**
@@ -69,7 +77,7 @@ export class WorkerService {
     }
 
     // 如果没有可用的 Worker，在主线程执行（降级）
-    if (this.workers.length === 0) {
+    if (this.workers.length === 0 && (!this.initialized || this.poolSize <= 0)) {
       return this.executeFallback<T>(type, payload)
     }
 
@@ -80,7 +88,13 @@ export class WorkerService {
       const taskTimeout = getEditorConfig().performance.workerTimeoutMs
       const timeout = setTimeout(() => {
         this.pendingTasks.delete(id)
+        // Release queued payloads, and stop synchronous work that cannot observe
+        // cancellation (for example a pathological regular expression).
+        this.taskQueue = this.taskQueue.filter(task => task.id !== id)
+        const worker = this.workers.find(item => this.workerTasks.get(item) === id)
+        if (worker) this.removeWorker(worker)
         reject(new Error(`Task ${type} timed out after ${taskTimeout}ms`))
+        this.processQueue()
       }, taskTimeout)
 
       this.pendingTasks.set(id, {
@@ -120,7 +134,8 @@ export class WorkerService {
    * 处理 Worker 响应
    */
   private handleWorkerResponse(worker: Worker, response: WorkerResponse): void {
-    this.busyWorkers.delete(worker)
+    if (this.workerTasks.get(worker) !== response.id) return
+    this.workerTasks.delete(worker)
 
     const task = this.pendingTasks.get(response.id)
     if (task) {
@@ -142,10 +157,15 @@ export class WorkerService {
    * 处理 Worker 错误
    */
   private handleWorkerError(worker: Worker, error: Error): void {
-    this.busyWorkers.delete(worker)
-
-    // 找到该 Worker 正在处理的任务并拒绝
-    // 由于我们不跟踪 Worker 到任务的映射，这里简单处理
+    if (!this.workers.includes(worker)) return
+    const id = this.workerTasks.get(worker)
+    this.removeWorker(worker)
+    const task = id ? this.pendingTasks.get(id) : undefined
+    if (task && id) {
+      clearTimeout(task.timeout)
+      this.pendingTasks.delete(id)
+      task.reject(error)
+    }
     logger.system.error('[WorkerService] Worker error:', error)
 
     // 处理队列中的下一个任务
@@ -157,13 +177,32 @@ export class WorkerService {
    */
   private processQueue(): void {
     while (this.taskQueue.length > 0) {
-      const availableWorker = this.workers.find(w => !this.busyWorkers.has(w))
+      let availableWorker = this.workers.find(w => !this.workerTasks.has(w))
+      if (!availableWorker && this.workers.length < this.poolSize) {
+        try {
+          availableWorker = this.createWorker()
+        } catch (error) {
+          // Reject queued work rather than retaining its payloads until timeout.
+          for (const request of this.taskQueue.splice(0)) {
+            const pending = this.pendingTasks.get(request.id)
+            if (!pending) continue
+            clearTimeout(pending.timeout)
+            this.pendingTasks.delete(request.id)
+            pending.reject(error instanceof Error ? error : new Error(String(error)))
+          }
+          break
+        }
+      }
       if (!availableWorker) break
 
       const task = this.taskQueue.shift()
-      if (task) {
-        this.busyWorkers.add(availableWorker)
-        availableWorker.postMessage(task)
+      if (task && this.pendingTasks.has(task.id)) {
+        this.workerTasks.set(availableWorker, task.id)
+        try {
+          availableWorker.postMessage(task)
+        } catch (error) {
+          this.handleWorkerError(availableWorker, error instanceof Error ? error : new Error(String(error)))
+        }
       }
     }
   }
@@ -206,11 +245,7 @@ export class WorkerService {
    * 销毁所有 Worker
    */
   destroy(): void {
-    for (const worker of this.workers) {
-      worker.terminate()
-    }
-    this.workers = []
-    this.busyWorkers.clear()
+    for (const worker of [...this.workers]) this.removeWorker(worker)
     
     // 拒绝所有待处理的任务
     for (const [, task] of this.pendingTasks) {

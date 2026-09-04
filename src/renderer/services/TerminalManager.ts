@@ -239,6 +239,7 @@ class RingBuffer {
   get length(): number { return this.count }
 
   clear(): void {
+    this.buf.fill('')
     this.head = 0
     this.count = 0
     this.totalChars = 0
@@ -247,6 +248,7 @@ class RingBuffer {
   trimToMaxChars(maxChars: number): void {
     while (this.count > 0 && this.totalChars > maxChars) {
       this.totalChars -= this.buf[this.head].length
+      this.buf[this.head] = ''
       this.head = (this.head + 1) % this.capacity
       this.count--
     }
@@ -993,7 +995,8 @@ class TerminalManagerClass {
       // terminal can be remounted while a command is still running.
       if (!existing.terminal.element) {
         existing.terminal.open(container);
-        this.replayOutputBuffer(id, existing.terminal);
+        // This parser already consumed live output (or replayed it in
+        // ensureXtermInstance). Opening its UI must not duplicate that history.
       } else if (existing.terminal.element.parentElement !== container) {
         container.appendChild(existing.terminal.element);
       }
