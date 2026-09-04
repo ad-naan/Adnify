@@ -13,6 +13,8 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import { logger } from '@shared/utils/Logger'
 import { toast } from '../common/ToastProvider'
 import { t, type TranslationKey } from '@shared/i18n'
+import { isPreviewDocumentPath } from '@shared/types/preview'
+import { isPlanBoardPath } from '@shared/types/planBoard'
 
 interface LspServerStatus {
   installed: boolean
@@ -82,7 +84,13 @@ const LANGUAGES_WITH_RUNTIME = new Set([
 ])
 
 export default function LspStatusIndicator() {
-  const { activeFilePath, language, workspacePath } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, workspacePath: s.workspacePath })))
+  const { activeFilePath, language, workspacePath } = useStore(useShallow(s => ({
+    activeFilePath: s.activeFilePath && !isPreviewDocumentPath(s.activeFilePath) && !isPlanBoardPath(s.activeFilePath)
+      ? s.activeFilePath
+      : null,
+    language: s.language,
+    workspacePath: s.workspacePath,
+  })))
   const [serverStatus, setServerStatus] = useState<Record<string, LspServerStatus>>({})
   const [installing, setInstalling] = useState<Set<string>>(new Set())
   const [currentLanguageId, setCurrentLanguageId] = useState<string | null>(null)

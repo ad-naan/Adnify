@@ -1,6 +1,4 @@
 import { api } from '@/renderer/services/electronAPI'
-import { previewSessionService } from '@/renderer/preview/previewSessionService'
-import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
 import { useStore } from '@/renderer/store'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { browserOpenSchema, browserInspectSchema, browserActionSchema, type BrowserResponse, type BrowserTarget } from '@shared/preview/browserAutomation'
@@ -35,6 +33,9 @@ export const browserToolExecutors: Record<string, ToolExecutor> = {
     const { url } = browserOpenSchema.parse(input)
     if (!isBrowserPreviewUrl(url)) return { success: false, result: '', error: 'Only HTTP(S) preview URLs without embedded credentials are supported' }
     ctx.abortSignal?.throwIfAborted()
+    // Preview services initialize terminal IPC; load them only when needed.
+    const { previewSessionService } = await import('@/renderer/preview/previewSessionService')
+    ctx.abortSignal?.throwIfAborted()
     const normalized = new URL(url).href
     const existing = useStore.getState().openFiles.find(file => file.preview && isBrowserPreviewUrl(file.preview.url) && new URL(file.preview.url).href === normalized)
     if (existing?.preview) previewSessionService.restoreSession(existing.preview)
@@ -58,6 +59,8 @@ export const browserToolExecutors: Record<string, ToolExecutor> = {
     const args = browserInspectSchema.parse(input)
     const response = await api.preview.inspect(args)
     if (args.action === 'list' && response.success) {
+      const { devServerDiscoveryService } = await import('@/renderer/preview/devServerDiscoveryService')
+      ctx.abortSignal?.throwIfAborted()
       if (ctx.workspacePath && !(response.data as { targets: BrowserTarget[] }).targets.length) {
         await devServerDiscoveryService.refresh([ctx.workspacePath])
       }

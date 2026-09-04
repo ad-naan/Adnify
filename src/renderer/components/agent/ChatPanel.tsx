@@ -52,6 +52,7 @@ import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
 import PlanWorkbench from '@/renderer/components/plan/workbench/PlanWorkbench'
 import { isPlanBoardPath } from '@/shared/types/planBoard'
+import { isPreviewDocumentPath } from '@/shared/types/preview'
 import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer/agent/threads/threadModeProjection'
 import type { WorkMode } from '@/shared/types/workMode'
 import { findThreadIdForMessage } from '@/renderer/agent/utils/interactiveResponse'
@@ -154,7 +155,9 @@ function ChatPanelContent() {
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
-  const contextFilePath = activeFilePath && !isPlanBoardPath(activeFilePath) ? activeFilePath : null
+  const contextFilePath = activeFilePath && !isPlanBoardPath(activeFilePath) && !isPreviewDocumentPath(activeFilePath)
+    ? activeFilePath
+    : null
 
   const toast = useToast()
 
@@ -175,7 +178,7 @@ function ChatPanelContent() {
     laneNotice,
   } = useAgentViewState()
   const visibleContextItems = useMemo(() => contextItems.filter(item => !(
-    item.type === 'File' && isPlanBoardPath((item as FileContext).uri)
+    item.type === 'File' && (isPlanBoardPath((item as FileContext).uri) || isPreviewDocumentPath((item as FileContext).uri))
   )), [contextItems])
   const { sendMessage, abort, approveCurrentTool, approveCurrentToolForTask, rejectCurrentTool } = useAgentCommands()
   const canApprovePendingToolForTask = pendingToolCall ? supportsTaskApproval(pendingToolCall) : false
