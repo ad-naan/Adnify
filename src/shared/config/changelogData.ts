@@ -69,6 +69,234 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.66",
+    "rawVersion": "1.7.66",
+    "date": "2026-09-04",
+    "title": "自定义素材能力、内嵌浏览器自动化与会话稳定性改进",
+    "titleEn": "Custom Asset Capabilities, Embedded Browser Automation & Conversation Stability",
+    "highlight": "新增可接入自定义 API 的素材能力，让 Agent 生成并管理图片、视频、音频和文件；内嵌浏览器支持页面检查与交互，方便直接验证前端效果。工具详情统一为紧凑的无边框样式，子任务审批整合进现有 Dock，同时修复会话切换重放、首次用户消息空白和工具收纳时的滚动跳动。上下文压缩、代码诊断、终端与桌面运行时也得到改进。",
+    "highlightEn": "Custom API-backed asset capabilities let the Agent generate and manage images, video, audio, and files. Embedded browser inspection and interaction enable direct verification of frontend changes. Tool details now share a compact borderless layout, and subtask approvals are integrated into the existing Dock. Fixes address replay when switching conversations, blank initial user messages, and scroll jumps when collapsing tools, alongside improvements to context compression, code diagnostics, terminals, and the desktop runtime.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "自定义素材能力 / Custom Asset Capabilities",
+        "labelEn": "Custom Asset Capabilities",
+        "items": [
+          {
+            "title": "接入自己的素材服务",
+            "titleEn": "Connect Your Own Asset Services",
+            "details": [
+              "在设置的「扩展 → 素材能力」中配置 HTTP JSON API，可根据接口文档或调用示例生成配置草稿，也支持手动编辑与 JSON 导入导出；启用后 Agent 可调用对应工具生成素材。",
+              "支持图片、视频、音频和文件输出，以及服务支持的参考图输入；认证信息使用系统安全存储，导出配置不包含密钥。"
+            ],
+            "detailsEn": [
+              "Configure HTTP JSON APIs under Settings → Extensions → Asset Capabilities. Generate a configuration draft from API documentation or examples, edit it manually, or import and export JSON; enabled capabilities become tools the Agent can call.",
+              "Supports image, video, audio, and file outputs, plus reference-image inputs when supported by the service. Credentials use OS-backed secure storage and are excluded from configuration exports."
+            ]
+          },
+          {
+            "title": "素材任务与素材库",
+            "titleEn": "Asset Tasks and Library",
+            "details": [
+              "支持同步返回与异步轮询，重启应用后可恢复未完成任务的状态查询；下载失败可单独重试，无需重新生成素材。",
+              "生成结果自动保存到素材库，可配置全局或项目保存位置、分页查看任务与参考图历史，并在保留文件的情况下移除记录。"
+            ],
+            "detailsEn": [
+              "Supports synchronous responses and asynchronous polling, with pending task status checks restored after an app restart. Failed downloads can be retried without regenerating the asset.",
+              "Generated results are saved to the asset library. Configure global or project-specific destinations, browse paginated task and reference-image history, and remove records while retaining files."
+            ]
+          },
+          {
+            "title": "会话内预览和导出素材",
+            "titleEn": "Preview and Export Assets in Chat",
+            "details": [
+              "素材结果使用独立的内联展示，支持图片放大、多结果切换、视频和音频播放，以及定位文件与导出；视频支持拖动进度。",
+              "完善本地图片、工作区相对路径与素材链接的解析，修复部分图片无法在回复中显示的问题。"
+            ],
+            "detailsEn": [
+              "Dedicated inline asset views support image enlargement, switching between results, video and audio playback, locating files, and exporting. Video playback supports seeking.",
+              "Improved resolution of local images, workspace-relative paths, and asset links fixes images that previously failed to appear in replies."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "内嵌浏览器与页面验证 / Embedded Browser and Page Verification",
+        "labelEn": "Embedded Browser and Page Verification",
+        "items": [
+          {
+            "title": "Agent 可直接检查和操作页面",
+            "titleEn": "Agent-Driven Page Inspection and Interaction",
+            "details": [
+              "新增 browser_open、browser_inspect 和 browser_action 工具，可打开 HTTP(S) 页面或本地开发预览，读取 DOM、元素样式与布局、控制台和网络诊断，并获取视口截图。",
+              "支持导航、刷新、点击、填写、按键、滚动和等待元素显示，方便 Agent 修改前端后在真实页面中验证效果；截图可结合已配置的视觉模型分析。"
+            ],
+            "detailsEn": [
+              "New browser_open, browser_inspect, and browser_action tools open HTTP(S) pages or local development previews, inspect the DOM, element styles and layout, console and network diagnostics, and capture viewport screenshots.",
+              "Navigation, reload, clicks, input, key presses, scrolling, and waiting for visible elements let the Agent verify frontend changes in a real page. Screenshots can be analyzed with a configured vision model."
+            ]
+          },
+          {
+            "title": "预览隔离与上下文引用修复",
+            "titleEn": "Preview Isolation and Context Reference Fixes",
+            "details": [
+              "浏览器操作校验目标归属与执行权限，限制危险 URL 协议，并为 Plan 和只读子任务保留只读访问边界。",
+              "修复打开预览标签时将内部页面标识误加为文件引用、在状态栏显示长串内部地址的问题；预览页面不再触发文件语言服务检查。"
+            ],
+            "detailsEn": [
+              "Browser operations validate target ownership and execution permissions, restrict unsafe URL schemes, and enforce read-only access for Plan and read-only subtasks.",
+              "Opening a preview tab no longer mistakenly adds its internal identifier as a file reference or displays a long internal address in the status bar. Preview pages are excluded from file language-service checks."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "聊天与工具交互 / Chat and Tool Interaction",
+        "labelEn": "Chat and Tool Interaction",
+        "items": [
+          {
+            "title": "统一紧凑的无边框工具详情",
+            "titleEn": "Compact Borderless Tool Details",
+            "details": [
+              "除素材结果外，工具详情统一使用扁平化无边框布局，通过「参数 / 响应」切换内容，保留原始数据、复制和放大操作，并统一状态与操作图标。",
+              "默认内容高度缩小，短结果按内容显示，长结果在受限区域滚动；支持手动调整尺寸与最大展开，减少工具输出占满会话的情况。"
+            ],
+            "detailsEn": [
+              "Tool details, except asset results, now share a flat borderless layout with Parameters / Response tabs, raw-data, copy, and expand actions, and consistent status and action icons.",
+              "Smaller default content areas fit short results and scroll long results within bounded regions. Manual resizing and expanded views remain available, reducing the space tool output occupies in a conversation."
+            ]
+          },
+          {
+            "title": "会话切换与首次消息显示修复",
+            "titleEn": "Conversation Switching and Initial Message Fixes",
+            "details": [
+              "输出直接跟随实际接收内容和执行状态显示，移除额外的回放调度，修复切换会话后整段输出重新播放、已完成回复仍显示进行中的问题。",
+              "首次发送时同步挂载用户消息与回复，修复用户消息空白、先看到上下文，以及虚拟列表初始定位异常的问题。"
+            ],
+            "detailsEn": [
+              "Output now follows received content and actual execution state directly, removing the additional playback scheduler. Switching conversations no longer replays the entire output or leaves completed replies appearing active.",
+              "Initial sends mount the user message and reply together, fixing blank user messages, context appearing first, and incorrect initial positioning in the virtualized list."
+            ]
+          },
+          {
+            "title": "工具收纳与滚动稳定性",
+            "titleEn": "Stable Scrolling When Collapsing Tools",
+            "details": [
+              "移除用于补偿收纳高度的底部空白占位及延迟回收，按实际内容范围处理底部跟随，修复整页空白和会话先上推再回落的跳动。",
+              "手动展开或收起时保持阅读位置，用户查看历史消息时避免被自动拉回底部。"
+            ],
+            "detailsEn": [
+              "Removed the bottom spacer and delayed reclamation used to compensate for collapsed content. Bottom following now uses actual content bounds, fixing full-page gaps and upward-then-downward jumps.",
+              "Manual expansion and collapse preserve the reading position, while browsing earlier messages avoids unwanted automatic jumps to the bottom."
+            ]
+          },
+          {
+            "title": "在现有 Dock 中审批子任务",
+            "titleEn": "Approve Subtasks from the Existing Dock",
+            "details": [
+              "当前会话及其子任务的待审批操作集中到 Dock 的审批入口，可直接查看并批准或拒绝，无需切换到子任务会话。",
+              "审批列表显示任务与操作信息，使用紧凑行和受限高度，审批状态与辅助标签统一适配中英文；按具体请求路由审批并检查过期状态，避免处理错误或已失效的请求。"
+            ],
+            "detailsEn": [
+              "Pending operations for the current conversation and its subtasks are collected in the Dock approval entry, where they can be reviewed, approved, or rejected without switching to a subtask conversation.",
+              "Compact rows in a height-limited list show task and operation information, with consistently localized status text and accessibility labels in Chinese and English. Approvals are routed to the exact request and checked for staleness to avoid acting on incorrect or expired requests."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "上下文与代码诊断 / Context and Code Diagnostics",
+        "labelEn": "Context and Code Diagnostics",
+        "items": [
+          {
+            "title": "上下文压缩与会话接续更可靠",
+            "titleEn": "More Reliable Context Compression and Handoff",
+            "details": [
+              "为摘要生成增加超时保护，修正压缩级别判断并及时刷新工作记忆状态，减少摘要长时间挂起和压缩状态不一致。",
+              "压缩阶段与提示绑定到各自会话；接续新会话前结束旧执行，减少后台会话影响当前界面及新旧执行重叠的问题。"
+            ],
+            "detailsEn": [
+              "Added timeout protection for summary generation, corrected compression-level handling, and refreshed working-memory status promptly to reduce stalled summaries and inconsistent compression state.",
+              "Compression phases and notices are scoped to their conversation. Handoff ends the previous execution before continuing in a new conversation, reducing interference from background conversations and overlapping executions."
+            ]
+          },
+          {
+            "title": "诊断使用最新文档与项目配置",
+            "titleEn": "Diagnostics Use Current Documents and Project Configuration",
+            "details": [
+              "强制刷新诊断时传递最新文档内容，并提前注册诊断等待，修复编辑后仍返回旧结果或错过快速诊断响应的问题。",
+              "TypeScript 检查优先使用项目的 tsconfig 和本地编译器，JavaScript 检查改进本地 ESLint 调用与错误反馈；诊断卡片优化状态、位置展示和中英文文案。"
+            ],
+            "detailsEn": [
+              "Forced diagnostic refreshes now pass the latest document content and register the diagnostic waiter before requesting results, fixing stale results after edits and missed fast responses.",
+              "TypeScript checks prefer the project's tsconfig and local compiler. JavaScript checks improve local ESLint invocation and failure reporting, while diagnostic cards improve status, location display, and bilingual text."
+            ]
+          },
+          {
+            "title": "路径校验与正文提取修复",
+            "titleEn": "Path Validation and Text Extraction Fixes",
+            "details": [
+              "改进相对路径、父目录片段、Windows 盘符和 UNC 路径的规范化与工作区边界检查，减少合法项目路径误判并阻止越界访问。",
+              "网页与文档正文提取改用 HTML/XML 解析器，改善嵌套标签、注释、CDATA 及脚本样式内容的处理。"
+            ],
+            "detailsEn": [
+              "Improved normalization and workspace-boundary checks for relative paths, parent segments, Windows drive paths, and UNC paths, reducing false rejections of valid project paths while blocking out-of-scope access.",
+              "Web and document text extraction now uses an HTML/XML parser, improving handling of nested tags, comments, CDATA, and script and style content."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "桌面运行时与稳定性 / Desktop Runtime and Stability",
+        "labelEn": "Desktop Runtime and Stability",
+        "items": [
+          {
+            "title": "桌面依赖升级与打包修复",
+            "titleEn": "Desktop Dependency Updates and Packaging Fixes",
+            "details": [
+              "Electron 升级至 43.6.0，替换 ZIP 解压依赖并更新相关依赖；调整安装与原生模块重建流程，减少重复重建。",
+              "补齐打包所需的数据依赖，修复安装包中向量数据库缺少模块的问题；隔离渲染器开发缓存，减少打开设置时依赖缓存失效导致的加载错误。"
+            ],
+            "detailsEn": [
+              "Upgraded Electron to 43.6.0, replaced the ZIP extraction dependency, and updated related dependencies. Installation and native-module rebuild flows now avoid redundant rebuilds.",
+              "Added required packaged data dependencies to fix missing modules in the vector database. Isolated renderer development caches reduce settings-load failures caused by stale optimized dependencies."
+            ]
+          },
+          {
+            "title": "后台资源占用与终端输出修复",
+            "titleEn": "Background Resource Usage and Terminal Output Fixes",
+            "details": [
+              "窗口不可见或失焦时暂停装饰动画，并尊重系统减少动态效果设置，降低空闲资源消耗。",
+              "修复重新打开终端时重复回放已消费输出的问题，清空或裁剪终端缓冲区时及时释放已移除的内容。"
+            ],
+            "detailsEn": [
+              "Decorative animations pause when the window is hidden or unfocused and respect the system's reduced-motion preference, lowering idle resource usage.",
+              "Reopening a terminal no longer replays already-consumed output. Clearing or trimming terminal buffers promptly releases removed content."
+            ]
+          },
+          {
+            "title": "素材请求与命令执行边界加固",
+            "titleEn": "Hardened Asset Requests and Command Execution",
+            "details": [
+              "素材下载与异步状态查询增加 URL 和来源校验，避免将认证信息转发给素材下载地址，并对错误详情中的敏感字段脱敏。",
+              "改进终端及系统命令参数处理、远程路径转义和相关依赖，降低命令拼接与路径处理带来的风险。"
+            ],
+            "detailsEn": [
+              "Asset downloads and asynchronous status checks validate URLs and origins, avoid forwarding credentials to download locations, and redact sensitive fields from error details.",
+              "Improved terminal and system command argument handling, remote-path escaping, and related dependencies to reduce risks from command construction and path handling."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.65",
     "rawVersion": "1.7.65",
     "date": "2026-09-02",
@@ -76,8 +304,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Isolated Git Lanes for Parallel Execution, Emotion Sensing Corrections, Streaming Write-Head Reveal, Complete English UI & Workspace Index Cache",
     "highlight": "并发写入的子 Agent 与 Plan 任务现在各自在独立的 Git worktree 车道中工作，完成后自动合并回工作区；冲突或失败的车道会保留下来，可在面板里重试合并或丢弃。情绪感知系统做了系统性修正：专注状态此前在默认灵敏度下数学上不可达、上报状态每 12 秒抖动一次、打字速度虚高约 1.5 倍、专注时长少报约一半、置信度算完即被覆盖成固定值，同时删除了三处类型与开关齐全但从未接线的空功能。约 2,400 项界面文案从代码里的中英内联搬进语言表，英文界面不再退回中文原文。流式输出新增写入头渐显：吐字的尾巴上拖出一段连续的浓淡渐变，相位按距写入头的远近算而不是按批次分档，只改颜色通道所以字形不会看着变粗变大。此外重整了工作区索引的缓存布局，并修复 Git 批量丢弃更改的确认与错误反馈。",
     "highlightEn": "Concurrent writable sub-agents and Plan tasks now each work inside an isolated Git worktree lane and merge back into the workspace on completion; lanes that conflict or fail are retained so the merge can be retried or the lane discarded from a panel. Emotion sensing received systematic corrections: the focused state was mathematically unreachable at default sensitivity, the reported state flipped every 12 seconds, typing speed read about 1.5x too high, focus time under-reported by roughly half, and confidence was overwritten with a constant right after being computed; three surfaces with complete types and toggles but no wiring were removed. Around 2,400 UI strings moved out of inline bilingual code into the locale tables, so the English UI no longer falls back to Chinese. Streaming output gained a write-head reveal: a continuous soft-to-solid gradient trails the text as it arrives, phased by distance from the write head rather than stepped per batch, and animating only the colour channel so glyphs never appear to swell. The workspace index cache layout was reorganized, and Git batch discard now confirms and reports failures correctly.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "minor",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
