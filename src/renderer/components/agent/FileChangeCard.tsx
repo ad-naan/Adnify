@@ -53,6 +53,7 @@ function FileChangeCard({
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
+        automaticOpen: isPresenting,
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
         holdOpen: isPresenting,
         closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
@@ -251,7 +252,6 @@ function FileChangeCard({
                 {/* Status Icon */}
                 <ToolActivityIndicator
                     state={activityState}
-                    startedAt={timing.startedAt}
                 />
                 <FilePenLine className="h-3.5 w-3.5 shrink-0 text-text-muted/55" aria-hidden="true" />
 

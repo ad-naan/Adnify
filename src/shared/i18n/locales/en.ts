@@ -3314,6 +3314,7 @@ export const en = {
   'unifiedStatusTray.approvals': 'Approvals',
   'unifiedStatusTray.approvals2': '{length} approvals',
   'unifiedStatusTray.queued': 'queued',
+  'unifiedStatusTray.rendering': 'Displaying reply…',
   'unifiedStatusTray.similarCommandsAreNow': 'Similar commands are now always allowed',
 
   // updateIndicator

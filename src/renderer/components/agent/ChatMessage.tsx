@@ -49,6 +49,7 @@ import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 import { parseThreadDeepLink } from '@/renderer/agent/threads/threadReference'
 import SmoothCollapse from './SmoothCollapse'
 import { useAssistantPlayback } from './useAssistantPlayback'
+import { useIsTurnPresenting } from './ConversationPresentationProvider'
 import { StreamingPlainText } from './StreamingTail'
 import { useDisclosureState } from '@renderer/hooks'
 
@@ -69,6 +70,7 @@ interface ChatMessageProps {
 }
 
 interface RenderPartProps {
+  isPresenting?: boolean
   part: AssistantPart
   pendingToolId?: string
   onApproveTool?: () => void
@@ -196,6 +198,7 @@ StableStreamingMarkdownBlock.displayName = 'StableStreamingMarkdownBlock'
 
 // ThinkingBlock 组件 - 扁平化折叠样式
 interface ThinkingBlockProps {
+  isPresenting?: boolean
   content: string
   startTime?: number
   isStreaming: boolean
@@ -204,13 +207,14 @@ interface ThinkingBlockProps {
 
 // 统一上下文面板 — 单个折叠块，无边框扁平设计
 interface MessageMetaGroupProps {
+  isPresenting?: boolean
   autoSkills?: any[]
   manualSkills?: any[]
   searchContent?: string
   isSearchStreaming?: boolean
 }
 
-const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
+const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming, isPresenting }: MessageMetaGroupProps) => {
   // Hooks 必须在所有条件返回之前调用（React 规则）
   const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
     openFile: s.openFile,
@@ -225,6 +229,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
   const hasSkills = hasAutoSkills || hasManualSkills
   const isStreaming = Boolean(isSearchStreaming)
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    automaticOpen: isPresenting,
     openWhile: isStreaming,
   })
 
@@ -434,10 +439,10 @@ function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh
 }
 
 interface ProcessFoldProps {
-  children: React.ReactNode
   language: 'zh' | 'en'
   summary: AssistantProcessSummary
-  isActive: boolean
+  isExpanded: boolean
+  toggleExpanded: () => void
 }
 
 const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => (
@@ -453,10 +458,7 @@ const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => 
 ))
 ProcessFoldDivider.displayName = 'ProcessFoldDivider'
 
-const ProcessFold = React.memo(({ children, language, summary, isActive }: ProcessFoldProps) => {
-  const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
-    openWhile: isActive,
-  })
+const ProcessFold = React.memo(({ language, summary, isExpanded, toggleExpanded }: ProcessFoldProps) => {
   const summaryText = buildProcessSummaryText(summary, language)
   const titleText = summaryText || (t('chatMessage.process', language))
   const detailLabel = isExpanded
@@ -480,18 +482,14 @@ const ProcessFold = React.memo(({ children, language, summary, isActive }: Proce
         <ProcessFoldDivider side="right" />
       </button>
 
-      <SmoothCollapse open={isExpanded} className="w-full">
-        <div className="mt-2 w-full space-y-1 text-[11px] text-text-secondary [&>*]:my-0.5">
-          {children}
-        </div>
-      </SmoothCollapse>
     </div>
   )
 })
 ProcessFold.displayName = 'ProcessFold'
 
-const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
+const ThinkingBlock = React.memo(({ content, startTime, isStreaming, isPresenting, fontSize }: ThinkingBlockProps) => {
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+    automaticOpen: isPresenting,
     openWhile: isStreaming,
   })
   const [elapsed, setElapsed] = useState<number>(0)
@@ -865,6 +863,7 @@ SystemAlertWithLane.displayName = 'SystemAlertWithLane'
 
 // 渲染单个 Part
 const RenderPart = React.memo(({
+  isPresenting,
   part,
   pendingToolId,
   onApproveTool,
@@ -892,6 +891,7 @@ const RenderPart = React.memo(({
     if (!part.content?.trim() && !part.isStreaming) return null
     return (
       <ThinkingBlock
+        isPresenting={isPresenting}
         content={part.content}
         startTime={part.startTime}
         isStreaming={!!part.isStreaming}
@@ -952,6 +952,8 @@ RenderPart.displayName = 'RenderPart'
 
 // 助手消息内容组件 - 将分组逻辑提取出来并 memoize
 const AssistantMessageContent = React.memo(({
+  openPart,
+  hiddenParts,
   parts,
   pendingToolId,
   onApproveTool,
@@ -964,6 +966,8 @@ const AssistantMessageContent = React.memo(({
   messageId,
   presentingToolIds,
 }: {
+  openPart?: AssistantPart
+  hiddenParts?: ReadonlySet<AssistantPart>
   parts: AssistantPart[]
   pendingToolId?: string
   onApproveTool?: () => void
@@ -1020,8 +1024,9 @@ const AssistantMessageContent = React.memo(({
       {groups.map((group) => {
         if (group.type === 'part') {
           return (
-            <div key={group.key} className="w-full">
+            <SmoothCollapse key={group.key} open={!hiddenParts?.has(group.part)} animateInitial={false} className="w-full">
               <RenderPart
+                isPresenting={group.part === openPart}
                 part={group.part}
                 pendingToolId={pendingToolId}
                 onApproveTool={onApproveTool}
@@ -1033,12 +1038,12 @@ const AssistantMessageContent = React.memo(({
                 isStreaming={group.part === activePart}
                 messageId={messageId}
               />
-            </div>
+            </SmoothCollapse>
           )
         }
 
         return (
-          <div key={group.key} className="w-full">
+          <SmoothCollapse key={group.key} open={!parts.some(part => isToolCallPart(part) && part.toolCall.id === group.toolCalls[0].id && hiddenParts?.has(part))} animateInitial={false} className="w-full">
             <ToolCallGroup
               toolCalls={group.toolCalls}
               pendingToolId={pendingToolId}
@@ -1050,7 +1055,7 @@ const AssistantMessageContent = React.memo(({
               messageId={messageId}
               presentingToolIds={presentingToolIds}
             />
-          </div>
+          </SmoothCollapse>
         )
       })}
     </>
@@ -1065,8 +1070,6 @@ interface AssistantTurnContentProps {
   hasContextMeta: boolean
   autoSkills?: any[]
   manualSkills?: any[]
-  searchContent?: string
-  isSearchStreaming?: boolean
   pendingToolId?: string
   onApproveTool?: () => void
   onApproveToolForTask?: () => void
@@ -1085,8 +1088,6 @@ const AssistantTurnContent = React.memo(({
   hasContextMeta,
   autoSkills,
   manualSkills,
-  searchContent,
-  isSearchStreaming,
   pendingToolId,
   onApproveTool,
   onApproveToolForTask,
@@ -1098,11 +1099,19 @@ const AssistantTurnContent = React.memo(({
   messageId,
 }: AssistantTurnContentProps) => {
   const playback = useAssistantPlayback({
+    messageId,
     parts,
     isTransportActive,
     isAwaitingApproval,
     hasContextMeta,
   })
+  // The outer group is a manual summary control, not a second automatic collapse.
+  const { isOpen: processExpanded, toggle: toggleProcess } = useDisclosureState({
+    openWhile: playback.isPresenting,
+    autoClose: false,
+  })
+  const hiddenParts = processExpanded ? undefined : playback.processParts
+  const visibleSearch = playback.visibleParts.find(isSearchPart)
 
   const sharedProps = {
     pendingToolId,
@@ -1121,41 +1130,29 @@ const AssistantTurnContent = React.memo(({
         <ProcessFold
           language={language}
           summary={playback.summary}
-          isActive={playback.isProcessActive}
-        >
-          {hasContextMeta && (
+          isExpanded={processExpanded}
+          toggleExpanded={toggleProcess}
+        />
+      )}
+      {hasContextMeta && (
+        <SmoothCollapse open={processExpanded} animateInitial={false}>
             <MessageMetaGroup
               autoSkills={autoSkills}
               manualSkills={manualSkills}
-              searchContent={searchContent}
-              isSearchStreaming={isSearchStreaming}
+              searchContent={visibleSearch?.content}
+              isSearchStreaming={visibleSearch?.isStreaming}
+              isPresenting={playback.openPart?.type === 'search'}
             />
-          )}
-          {playback.processParts.length > 0 && (
-            <AssistantMessageContent
-              {...sharedProps}
-              parts={playback.processParts}
-              activePart={playback.activeProcessPart}
-              presentingToolIds={playback.presentingToolIds}
-            />
-          )}
-        </ProcessFold>
+        </SmoothCollapse>
       )}
-
-      {playback.alertParts.length > 0 && (
-        <AssistantMessageContent
-          {...sharedProps}
-          parts={playback.alertParts}
-        />
-      )}
-
-      {playback.finalReplyParts.length > 0 && (
-        <AssistantMessageContent
-          {...sharedProps}
-          parts={playback.finalReplyParts}
-          activePart={playback.activeFinalReplyPart}
-        />
-      )}
+      <AssistantMessageContent
+        {...sharedProps}
+        parts={playback.visibleParts}
+        activePart={playback.activePart}
+        openPart={playback.openPart}
+        hiddenParts={hiddenParts}
+        presentingToolIds={playback.presentingToolIds}
+      />
     </div>
   )
 })
@@ -1274,6 +1271,8 @@ const ChatMessage = React.memo(({
   )
 
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
+  const isPresenting = useIsTurnPresenting(message.id)
+  const isMessageActive = isStreaming || isPresenting
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
 
   const hasMetaGroup = React.useMemo(() => {
@@ -1503,15 +1502,15 @@ const ChatMessage = React.memo(({
             <div className="flex items-center gap-3 px-1">
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
-                <OtterAsset asset={isStreaming ? 'typing' : 'assistantFace'} alt="AI" className="h-full w-full object-cover" />
+                <OtterAsset asset={isMessageActive ? 'typing' : 'assistantFace'} alt="AI" className="h-full w-full object-cover" />
               </div>
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
 
-                {isStreaming && <AssistantStreamingBadge language={language} />}
+                {isMessageActive && <AssistantStreamingBadge language={language} />}
               </div>
 
-              {!isStreaming && (
+              {!isMessageActive && (
                 <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
                   <Tooltip content={tt.copy}>
                     <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all">
@@ -1536,8 +1535,6 @@ const ChatMessage = React.memo(({
                   hasContextMeta={hasMetaGroup}
                   autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
                   manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
-                  searchContent={assistantParts.find(isSearchPart)?.content || undefined}
-                  isSearchStreaming={(assistantParts.find(isSearchPart) as any)?.isStreaming}
                   pendingToolId={pendingToolId}
                   onApproveTool={onApproveTool}
                   onApproveToolForTask={onApproveToolForTask}
@@ -1550,7 +1547,7 @@ const ChatMessage = React.memo(({
                 />
               )}
 
-              {assistantInteractive && !isStreaming && (
+              {assistantInteractive && !isMessageActive && (
                 <div className="mt-2 w-full">
                   <InteractiveCard
                     content={assistantInteractive}

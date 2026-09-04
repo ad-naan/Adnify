@@ -11,7 +11,6 @@ export const TOOL_ROW_ACTION_SLOT_CLASS = 'h-[22px] w-[22px] shrink-0'
 
 interface ToolActivityIndicatorProps {
   state: ActivityState
-  startedAt?: number
 }
 
 interface ToolElapsedTimeProps {
@@ -46,9 +45,6 @@ function formatDuration(durationMs: number): string {
 
 export function ToolElapsedTime({ state, startedAt, durationMs, className = '' }: ToolElapsedTimeProps) {
   const [now, setNow] = useState(() => Date.now())
-  const [terminalReady, setTerminalReady] = useState(() => (
-    !startedAt || (state !== 'success' && state !== 'error') || Date.now() - startedAt >= MIN_RUNNING_PRESENTATION_MS
-  ))
 
   useEffect(() => {
     if (state !== 'running' || !startedAt) return
@@ -56,61 +52,20 @@ export function ToolElapsedTime({ state, startedAt, durationMs, className = '' }
     return () => window.clearInterval(timer)
   }, [startedAt, state])
 
-  useEffect(() => {
-    if (!startedAt || (state !== 'success' && state !== 'error')) {
-      setTerminalReady(true)
-      return
-    }
-
-    const remaining = MIN_RUNNING_PRESENTATION_MS - (Date.now() - startedAt)
-    if (remaining <= 0) {
-      setTerminalReady(true)
-      return
-    }
-
-    setTerminalReady(false)
-    const timer = window.setTimeout(() => setTerminalReady(true), remaining)
-    return () => window.clearTimeout(timer)
-  }, [startedAt, state])
 
   const elapsed = state === 'running' && startedAt
     ? Math.max(0, now - startedAt)
     : durationMs
 
-  if (!terminalReady || elapsed === undefined || elapsed <= 0) return null
+  if (elapsed === undefined || elapsed <= 0) return null
 
   return <span className={`tool-activity-time ${className}`}>{formatDuration(elapsed)}</span>
 }
 
-const MIN_RUNNING_PRESENTATION_MS = 520
-
-function ToolActivityIndicator({ state, startedAt }: ToolActivityIndicatorProps) {
-  const [displayedState, setDisplayedState] = useState<ActivityState>(() => {
-    if ((state === 'success' || state === 'error') && startedAt) {
-      return Date.now() - startedAt < MIN_RUNNING_PRESENTATION_MS ? 'running' : state
-    }
-    return state
-  })
-
-  useEffect(() => {
-    if ((state !== 'success' && state !== 'error') || !startedAt) {
-      setDisplayedState(state)
-      return
-    }
-
-    const remaining = MIN_RUNNING_PRESENTATION_MS - (Date.now() - startedAt)
-    if (remaining <= 0) {
-      setDisplayedState(state)
-      return
-    }
-
-    setDisplayedState('running')
-    const timer = window.setTimeout(() => setDisplayedState(state), remaining)
-    return () => window.clearTimeout(timer)
-  }, [startedAt, state])
-
+// Icon state is a pure view of the conversation timeline, not another clock.
+function ToolActivityIndicator({ state }: ToolActivityIndicatorProps) {
   return (
-    <span className="tool-activity" data-state={displayedState} aria-label={state}>
+    <span className="tool-activity" data-state={state} aria-label={state}>
       <svg className="tool-activity-mark" viewBox="0 0 18 18" aria-hidden="true">
         <circle className="tool-activity-arc" cx="9" cy="9" r="7" />
         <path className="tool-activity-check" d="M5.2 9.2 7.8 12l5.2-6" />

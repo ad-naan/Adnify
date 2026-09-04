@@ -59,6 +59,7 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
   const waitingApproval = childThread?.streamState?.phase === 'tool_pending'
   const currentTool = childThread?.streamState?.currentToolCall
   const { isOpen: expanded, toggle: toggleExpanded } = useDisclosureState({
+    automaticOpen: isPresenting,
     openWhile: isRunning || isError || waitingApproval,
     holdOpen: isPresenting,
     closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
@@ -102,7 +103,6 @@ function SubAgentTaskCard({ toolCall, messageId, isPresenting }: { toolCall: Too
           ? <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />
           : <ToolActivityIndicator
               state={isRunning ? 'running' : isSuccess ? 'success' : isError ? 'error' : 'idle'}
-              startedAt={startedAt}
             />}
       </span>
       <GitBranch className="h-3.5 w-3.5 shrink-0 text-text-muted/60" />

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AGENT_DISCLOSURE_CLOSE_DELAY_MS } from '@renderer/agent/presentation/disclosureMotion'
+import { AGENT_DISCLOSURE_CLOSE_DELAY_MS, AGENT_DISCLOSURE_MANUAL_EVENT } from '@renderer/agent/presentation/disclosureMotion'
 
 interface UseDisclosureStateOptions {
+  /** Timeline-owned state. No local automatic timer when supplied. */
+  automaticOpen?: boolean
   /** 有活内容时自动展开：正在跑、正在流、等审批、出错。 */
   openWhile?: boolean
   /**
@@ -48,12 +50,13 @@ export function decideDisclosureAction({
 
 /** One state machine for automatic disclosures. Explicit user choice wins. */
 export function useDisclosureState({
+  automaticOpen,
   openWhile = false,
   holdOpen = false,
   autoClose = true,
   closeDelayMs = AGENT_DISCLOSURE_CLOSE_DELAY_MS,
 }: UseDisclosureStateOptions) {
-  const [isOpen, setIsOpen] = useState(openWhile)
+  const [isOpen, setIsOpen] = useState(automaticOpen ?? openWhile)
   /**
    * "自动展开过，且还没收" —— 粘住的状态，不是"上一次的 openWhile"。
    *
@@ -62,7 +65,7 @@ export function useDisclosureState({
    * 于是永远停在展开态 —— 那正是"有的一直不展开/一直不收"的另一半。
    */
   const autoOpenedRef = useRef(openWhile)
-  const userControlledRef = useRef(false)
+  const [manualOpen, setManualOpen] = useState<boolean | undefined>(undefined)
   const closeTimerRef = useRef<number | null>(null)
 
   const clearPendingClose = useCallback(() => {
@@ -84,12 +87,16 @@ export function useDisclosureState({
   }, [clearPendingClose, closeDelayMs])
 
   useEffect(() => {
+    if (automaticOpen !== undefined) {
+      clearPendingClose()
+      return
+    }
     switch (decideDisclosureAction({
       openWhile,
       holdOpen,
       autoClose,
       wasAutoOpen: autoOpenedRef.current,
-      userControlled: userControlledRef.current,
+      userControlled: manualOpen !== undefined,
     })) {
       case 'open':
         clearPendingClose()
@@ -106,21 +113,20 @@ export function useDisclosureState({
       case 'idle':
         break
     }
-  }, [autoClose, clearPendingClose, holdOpen, openWhile, scheduleClose])
+  }, [automaticOpen, autoClose, clearPendingClose, holdOpen, openWhile, scheduleClose, manualOpen])
 
   useEffect(() => clearPendingClose, [clearPendingClose])
 
-  const toggle = useCallback(() => {
+  const toggle = useCallback((event?: { currentTarget: EventTarget | null }) => {
     clearPendingClose()
-    userControlledRef.current = true
-    setIsOpen(current => !current)
-  }, [clearPendingClose])
+    event?.currentTarget?.dispatchEvent(new CustomEvent(AGENT_DISCLOSURE_MANUAL_EVENT, { bubbles: true }))
+    setManualOpen(!(manualOpen ?? automaticOpen ?? isOpen))
+  }, [automaticOpen, clearPendingClose, isOpen, manualOpen])
 
   const close = useCallback(() => {
     clearPendingClose()
-    userControlledRef.current = true
-    setIsOpen(false)
+    setManualOpen(false)
   }, [clearPendingClose])
 
-  return { isOpen, toggle, close }
+  return { isOpen: manualOpen ?? automaticOpen ?? isOpen, toggle, close }
 }

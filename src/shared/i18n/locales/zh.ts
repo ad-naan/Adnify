@@ -3315,6 +3315,7 @@ export const zh = {
   'unifiedStatusTray.approvals': '待审批',
   'unifiedStatusTray.approvals2': '{length} 项待审批',
   'unifiedStatusTray.queued': '条待发送',
+  'unifiedStatusTray.rendering': '正在显示回复…',
   'unifiedStatusTray.similarCommandsAreNow': '已始终允许相似命令',
 
   // updateIndicator

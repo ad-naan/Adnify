@@ -3,7 +3,7 @@ import type { AssistantPart } from '@/renderer/agent/types'
 import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 
 describe('buildChatMessagePartKeys', () => {
-  it('uses intrinsic ids and deterministic from-end fallbacks', () => {
+  it('uses intrinsic ids and append-stable positional fallbacks', () => {
     const parts: AssistantPart[] = [
       { type: 'text', content: 'first' },
       { id: 'reasoning-1', type: 'reasoning', content: 'thinking' },
@@ -13,12 +13,18 @@ describe('buildChatMessagePartKeys', () => {
     ]
 
     expect(buildChatMessagePartKeys(parts)).toEqual([
-      'text:from-end-2',
+      'text:index-0',
       'reasoning:reasoning-1',
-      'text:from-end-1',
-      'sources:from-end-0',
-      'text:from-end-0',
+      'text:index-2',
+      'sources:index-3',
+      'text:index-4',
     ])
+  })
+
+  it('does not change earlier keys when another text segment arrives', () => {
+    const parts: AssistantPart[] = [{ type: 'text', content: 'intro' }]
+    const before = buildChatMessagePartKeys(parts)
+    expect(buildChatMessagePartKeys([...parts, { type: 'text', content: 'answer' }]).slice(0, 1)).toEqual(before)
   })
 
   it('uses tool call ids even when the provider omits part ids', () => {

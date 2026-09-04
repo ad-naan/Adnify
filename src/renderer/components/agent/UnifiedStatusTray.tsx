@@ -13,7 +13,6 @@
 
 import React, { useState, useCallback, useMemo, memo } from 'react'
 import { X, Check, ExternalLink, Square, ChevronDown, FileCode, FilePlus, FileX, CheckCheck, XCircle, FolderOpen, ListTodo, Layers, ShieldCheck, Play, Pencil, Trash2, ChevronUp } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
@@ -26,6 +25,8 @@ import { supportsTaskApproval } from './ToolCallGroup'
 import { t, type Language } from '@shared/i18n'
 import SmoothCollapse from './SmoothCollapse'
 import { useDisclosureState } from '@renderer/hooks'
+import { useDockFrame } from './ConversationPresentationProvider'
+import { projectTrayActions } from '@renderer/agent/presentation/trayProjection'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -49,12 +50,12 @@ interface UnifiedStatusTrayProps {
 }
 
 function UnifiedStatusTray({
-  pendingChanges,
+  pendingChanges: sourcePendingChanges,
   todos,
   isStreaming,
-  isAwaitingApproval,
-  pendingToolCall,
-  pendingToolCalls = [],
+  isAwaitingApproval: sourceAwaitingApproval,
+  pendingToolCall: sourcePendingToolCall,
+  pendingToolCalls: sourcePendingToolCalls = [],
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -67,6 +68,12 @@ function UnifiedStatusTray({
   onQueueSendNow,
 }: UnifiedStatusTrayProps) {
   const language = useStore(s => s.language)
+  const frame = useDockFrame()
+  const { tools: pendingToolCalls, changes: pendingChanges } = projectTrayActions(frame, sourcePendingToolCalls, sourcePendingChanges)
+  const pendingToolCall = sourcePendingToolCall
+    ? projectTrayActions(frame, [sourcePendingToolCall], []).tools[0] : undefined
+  const isAwaitingApproval = sourceAwaitingApproval && !!pendingToolCall
+  const isPresenting = frame?.isPresenting ?? false
 
   const queue = useMessageQueueStore(s => s.queue)
   const removeFromQueue = useMessageQueueStore(s => s.remove)
@@ -78,7 +85,7 @@ function UnifiedStatusTray({
   const hasTodos = todos.length > 0
   const hasQueue = queue.length > 0
   const hasApprovals = pendingToolCalls.length > 0
-  const hasStatus = isStreaming || isAwaitingApproval
+  const hasStatus = isStreaming || sourceAwaitingApproval || isPresenting
   const pendingCommand = isAwaitingApproval && pendingToolCall?.name === 'run_command'
     && typeof pendingToolCall.arguments.command === 'string'
     ? pendingToolCall.arguments.command
@@ -96,7 +103,7 @@ function UnifiedStatusTray({
 
   const [activeTab, setActiveTab] = useState<TabView>('approvals')
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
-    openWhile: isAwaitingApproval,
+    automaticOpen: isAwaitingApproval,
   })
 
   // 确保 activeTab 在可用范围内
@@ -108,16 +115,8 @@ function UnifiedStatusTray({
   const showTray = availableTabs.length > 0 || hasStatus
 
   return (
-    <AnimatePresence>
-      {showTray && (
-    <motion.div
-      key="unified-status-tray"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 10 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="mb-3"
-    >
+    <SmoothCollapse open={showTray}>
+    <div className="pb-3">
       <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
         {/* Header: 状态 + Tab 切换 */}
         <div className="flex items-center justify-between px-3 py-2">
@@ -125,11 +124,11 @@ function UnifiedStatusTray({
             {/* 状态指示器 */}
             {hasStatus && (
               <div className="flex items-center gap-2 mr-2">
-                {isStreaming ? (
+                {!isAwaitingApproval ? (
                   <>
                     <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                     <span className="text-[11px] font-medium tool-text-shimmer">
-                      Processing...
+                      {isPresenting && !isStreaming ? t('unifiedStatusTray.rendering', language) : 'Processing...'}
                     </span>
                   </>
                 ) : (
@@ -203,7 +202,7 @@ function UnifiedStatusTray({
           {/* 右侧操作 */}
           <div className="flex items-center gap-1.5">
             {/* Stop 按钮 */}
-            {isStreaming && (
+            {(isStreaming || (sourceAwaitingApproval && !isAwaitingApproval)) && (
               <button
                 onClick={onStop}
                 className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all border border-transparent hover:border-red-500/20"
@@ -226,7 +225,7 @@ function UnifiedStatusTray({
             )}
 
             {/* Files tab 批量操作 */}
-            {currentTab === 'files' && hasChanges && (
+            {currentTab === 'files' && hasChanges && pendingChanges.length === sourcePendingChanges.length && (
               <div className="flex items-center gap-1">
                 <button
                   onClick={onUndoAll}
@@ -267,14 +266,14 @@ function UnifiedStatusTray({
         </div>
 
 
-        {pendingCommand && (
+        <SmoothCollapse open={!!pendingCommand}>
           <div className="border-t border-yellow-500/10 bg-yellow-500/[0.04] px-3 py-2">
             <code className="block select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-text-primary">
               <span className="mr-1.5 select-none text-accent/60">$</span>
               {pendingCommand}
             </code>
           </div>
-        )}
+        </SmoothCollapse>
 
         {/* Content Area */}
         <SmoothCollapse open={isExpanded}>
@@ -316,9 +315,8 @@ function UnifiedStatusTray({
             </div>
         </SmoothCollapse>
       </div>
-    </motion.div>
-      )}
-    </AnimatePresence>
+    </div>
+    </SmoothCollapse>
   )
 }
 

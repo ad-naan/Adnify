@@ -1116,6 +1116,7 @@ const ToolCallCard = memo(function ToolCallCard({
         onApprove?.()
     }
     const { isOpen: isExpanded, toggle: handleToggleExpanded } = useDisclosureState({
+        automaticOpen: isPresenting,
         openWhile: isActive || Boolean(isAwaitingApproval) || isError,
         holdOpen: isPresenting,
         closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
@@ -1187,7 +1188,6 @@ const ToolCallCard = memo(function ToolCallCard({
 
                 <ToolActivityIndicator
                     state={activityState}
-                    startedAt={timing.startedAt}
                 />
 
                 <span className="shrink-0 text-text-muted/55" aria-hidden="true">

@@ -28,6 +28,7 @@ import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
 import UnifiedStatusTray from './UnifiedStatusTray'
+import { ConversationPresentationProvider } from './ConversationPresentationProvider'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
@@ -68,6 +69,7 @@ const CHAT_TIMELINE_STYLE = {
   minHeight: '100px',
   overflowX: 'hidden',
   overflowY: 'auto',
+  overflowAnchor: 'none',
 } as const
 // 列表挂载时就把首帧定位在最后一条上，而不是先画到顶部再补一次
 // scrollToIndex。变高行（Markdown / 工具卡）从顶部跳到末尾是「猜偏移 → 挂载 →
@@ -98,14 +100,16 @@ function buildRenderableMessageItems(
     return {
       message,
       hasCheckpoint,
-      // Virtuoso caches rows by key. Include checkpoint state so a hydrated checkpoint
-      // remounts the affected user row instead of reusing the pre-hydration render.
-      renderKey: `${message.id}:${hasCheckpoint ? 'checkpoint' : 'plain'}`,
+      renderKey: message.id,
     }
   })
 }
 
 export default function ChatPanel() {
+  return <ConversationPresentationProvider><ChatPanelContent /></ConversationPresentationProvider>
+}
+
+function ChatPanelContent() {
   const decorativeAnimations = useDecorativeAnimations()
   const {
     llmConfig,
@@ -374,16 +378,12 @@ export default function ChatPanel() {
   const {
     atBottomThreshold,
     attachScrollerNode,
-    followOutput,
-    handleBottomStateChange,
     handleTotalListHeightChanged,
-    handleVisibleRangeChanged,
     scrollToBottom,
     showScrollButton,
     virtuosoRef,
   } = useChatScrollController({
     isHydratingActiveThread,
-    isStreaming,
     isSwitchingThread,
     messageCount: timelineItems.length,
     threadId: currentThreadId,
@@ -1249,8 +1249,7 @@ export default function ChatPanel() {
 
   const handleTimelineRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
     visibleRangeRef.current = range
-    handleVisibleRangeChanged(range)
-  }, [handleVisibleRangeChanged])
+  }, [])
 
   const virtuosoComponents = useMemo(() => ({
     // ref 回调必须 useCallback 住。内联箭头函数每次 Scroller 渲染都是新引用，
@@ -1475,17 +1474,15 @@ export default function ChatPanel() {
                   ref={virtuosoRef}
                   data={timelineItems}
                   computeItemKey={computeTimelineItemKey}
-                  atBottomStateChange={handleBottomStateChange}
                   rangeChanged={handleTimelineRangeChanged}
                   initialTopMostItemIndex={CHAT_TIMELINE_INITIAL_LOCATION}
-                  followOutput={followOutput}
+                  followOutput={false}
                   itemContent={renderTimelineItemContent}
                   className="flex-1 custom-scrollbar w-full h-full"
                   style={CHAT_TIMELINE_STYLE}
                   overscan={12}
                   atBottomThreshold={atBottomThreshold}
                   totalListHeightChanged={handleTotalListHeightChanged}
-                  skipAnimationFrameInResizeObserver
                   components={virtuosoComponents}
                 />}
           </div>

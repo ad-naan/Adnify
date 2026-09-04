@@ -57,7 +57,7 @@ export function renderToolCallCard(
     isPresenting?: boolean
   },
 ): ReactNode {
-  const isPending = tc.id === opts.pendingToolId
+  const isPending = tc.status === 'awaiting' && tc.id === opts.pendingToolId
 
   // 需要 Diff 预览的工具使用 FileChangeCard
   if (needsDiffPreview(tc.name)) {

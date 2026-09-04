@@ -30,6 +30,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     const activityState = isRunning ? 'running' : isSuccess ? 'success' : isError ? 'error' : 'idle'
     const timing = getToolTiming(toolCall)
     const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
+        automaticOpen: isPresenting,
         openWhile: isAwaitingApproval || isRunning || isError,
         holdOpen: isPresenting,
         closeDelayMs: AGENT_DISCLOSURE_HANDOFF_CLOSE_MS,
@@ -55,7 +56,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                             <Brain className="w-2.5 h-2.5 text-purple-400" />
                         </div>
                     ) : (
-                        <ToolActivityIndicator state={activityState} startedAt={timing.startedAt} />
+                        <ToolActivityIndicator state={activityState} />
                     )}
                 </div>
 
