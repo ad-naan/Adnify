@@ -14,15 +14,18 @@ import '../../src/renderer/styles/globals.css'
 
 const INITIAL_LOCATION = { index: 'LAST', align: 'end' } as const
 const EMPTY: AssistantPart[] = []
+const TEST_PROCESS_FOLD = new URLSearchParams(location.search).has('processFold')
 function Tool({ part, open }: { part: Extract<AssistantPart, { type: 'tool_call' }>; open: boolean }) {
   const disclosure = useDisclosureState({ automaticOpen: open })
   return <div data-tool={part.toolCall.id}>
     <button onClick={disclosure.toggle} style={{ display: 'flex', alignItems: 'center', gap: 12, height: 42 }}>
       <ToolActivityIndicator state={part.toolCall.status === 'success' ? 'success' : 'running'} />
-      Read README.md <span style={{ color: '#16a34a' }}>45ms</span>
+      {TEST_PROCESS_FOLD ? part.toolCall.name : 'Read README.md'} <span style={{ color: '#16a34a' }}>45ms</span>
     </button>
     <SmoothCollapse open={disclosure.isOpen}>
-      <div style={{ height: 540, background: '#edf0f4', padding: 20 }}>Tool result<br />A long result to exercise viewport anchoring.</div>
+      <div style={{ height: 540, background: '#edf0f4', padding: 20 }}>Tool result<br />A long result to exercise viewport anchoring.
+        {part.toolCall.richContent?.map((item, index) => <div key={index} data-rich={item.type}>{item.text || item.type}</div>)}
+      </div>
     </SmoothCollapse>
   </div>
 }
@@ -30,9 +33,18 @@ function Reply() {
   const source = useAgentStore(state => state.threads.fixture)
   const parts = source.liveAssistantMessage?.parts ?? source.messages[0]?.parts ?? EMPTY
   const playback = useAssistantPlayback({ messageId: 'reply', parts, isTransportActive: !!source.liveAssistantMessage, isAwaitingApproval: false, hasContextMeta: false })
-  return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>{playback.visibleParts.map((part, index) => part.type === 'tool_call'
+  if (!TEST_PROCESS_FOLD) return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>{playback.visibleParts.map((part, index) => part.type === 'tool_call'
     ? <div key={index} className={part === playback.openPart ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part === playback.openPart} /></div></div>
     : part.type === 'text' || part.type === 'reasoning' ? <div key={index} data-text={part.type} style={{ fontSize: 19, lineHeight: '32px', whiteSpace: 'pre-wrap' }}>{part.content}</div> : null)}</div>
+  return <div style={{ padding: '0 24px', minHeight: 60 }}><div style={{ height: 40 }}>Adnify</div>
+    {playback.hasProcessContent && <button data-process aria-expanded={playback.processExpanded} onClick={playback.toggleProcess}>Process</button>}
+    {playback.visibleParts.map((part, index) => {
+      const body = part.type === 'tool_call'
+        ? <div className={part === playback.openPart ? 'tool-row-enter' : ''}><div className="tool-row-enter-clip"><Tool part={part} open={part === playback.openPart} /></div></div>
+        : part.type === 'text' || part.type === 'reasoning' ? <div data-text={part.type} style={{ fontSize: 19, lineHeight: '32px', whiteSpace: 'pre-wrap' }}>{part.content}</div> : null
+      return <SmoothCollapse key={index} open={playback.processExpanded || !playback.processParts.has(part)} animateInitial={false}>{body}</SmoothCollapse>
+    })}
+  </div>
 }
 function Fixture() {
   const { attachScrollerNode, handleTotalListHeightChanged, virtuosoRef } = useChatScrollController({ threadId: 'fixture', isHydratingActiveThread: false, isSwitchingThread: false, messageCount: 2 })

@@ -1108,11 +1108,7 @@ const AssistantTurnContent = React.memo(({
     isAwaitingApproval,
     hasContextMeta,
   })
-  // The outer group is a manual summary control, not a second automatic collapse.
-  const { isOpen: processExpanded, toggle: toggleProcess } = useDisclosureState({
-    openWhile: playback.isPresenting,
-    autoClose: false,
-  })
+  const { processExpanded, toggleProcess } = playback
   const hiddenParts = processExpanded ? undefined : playback.processParts
   const visibleSearch = playback.visibleParts.find(isSearchPart)
 

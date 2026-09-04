@@ -53,6 +53,18 @@ function sources(): AssistantPart {
 }
 
 describe('assistantTurnProjection', () => {
+  it('collects browser results, screenshots and errors with other tools while retaining the final reply', () => {
+    const screenshot = toolCall('screenshot', 'browser_inspect') as Extract<AssistantPart, { type: 'tool_call' }>
+    screenshot.toolCall.richContent = [{ type: 'image', data: 'image-data', mimeType: 'image/jpeg' }, { type: 'markdown', text: 'Visual analysis' }]
+    const failed = toolCall('failed', 'browser_action') as Extract<AssistantPart, { type: 'tool_call' }>
+    failed.toolCall.status = 'error'
+    const parts = [toolCall('read'), toolCall('open', 'browser_open'), failed, reasoning('Inspect the result'), screenshot, text('Final verified answer')]
+    const projection = projectAssistantTurn(parts)
+    expect(projection.processParts).toEqual(parts.slice(0, -1))
+    expect(projection.finalReplyParts).toEqual([parts.at(-1)])
+    expect(projection.summary.toolCallCount).toBe(4)
+  })
+
   it('does not collapse pure final-text replies', () => {
     const projection = projectAssistantTurn([text('Final answer only.')])
 

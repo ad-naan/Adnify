@@ -76,6 +76,45 @@ try {
   assert(await page.locator('[data-tool="first"] .agent-disclosure.is-open').count(), 'manual expansion was overridden')
   const afterManual = await page.locator('[data-tool="first"] button').evaluate(node => node.getBoundingClientRect().top)
   assert(Math.abs(afterManual - manualAnchor) <= 2, `manual expansion moved the clicked header from ${manualAnchor} to ${afterManual}`)
+  // Exercise the production process disclosure hook with both ordinary and
+  // browser tools. Transport completion must not cut off presentation draining.
+  for (const name of ['read_file', 'browser_inspect']) {
+    await page.goto(`${url}?processFold=1`)
+    await page.waitForFunction(() => !!window.motionTest)
+    await page.evaluate(name => window.motionTest.publish([
+      { type: 'tool_call', toolCall: { id: 'first', name, arguments: {}, status: 'running' } },
+    ], true), name)
+    await page.waitForSelector('[data-process][aria-expanded="true"]')
+    await page.evaluate(name => window.motionTest.publish([
+      { type: 'tool_call', toolCall: { id: 'first', name, arguments: {}, status: 'success',
+        richContent: [{ type: 'image', data: 'fixture' }, { type: 'markdown', text: 'Screenshot analysis' }] } },
+      { type: 'text', content: 'Verified final answer.' },
+    ], false), name)
+    assert.equal(await page.locator('[data-process]').getAttribute('aria-expanded'), 'true', 'keep process open while presentation drains')
+    await page.waitForSelector('[data-process][aria-expanded="false"]', { timeout: 15000 })
+    await page.waitForFunction(() => !document.querySelector('[data-tool]'))
+    assert.equal(await page.locator('[data-text="text"]').textContent(), 'Verified final answer.')
+    assert.equal(await page.locator('[data-rich]').count(), 0, 'rich results must not escape the process fold')
+    await page.locator('[data-process]').click()
+    await page.waitForSelector('[data-tool="first"] button')
+    assert.equal(await page.locator('[data-process]').getAttribute('aria-expanded'), 'true')
+    await page.locator('[data-tool="first"] button').click()
+    await page.waitForSelector('[data-rich="image"]')
+  }
+  await page.goto(`${url}?processFold=1`)
+  await page.waitForFunction(() => !!window.motionTest)
+  await page.evaluate(() => window.motionTest.publish([
+    { type: 'tool_call', toolCall: { id: 'first', name: 'browser_action', arguments: {}, status: 'running' } },
+  ], true))
+  await page.waitForSelector('[data-process][aria-expanded="true"]')
+  await page.locator('[data-process]').click()
+  await page.locator('[data-process]').click() // Explicitly pin the process open.
+  await page.evaluate(() => window.motionTest.publish([
+    { type: 'tool_call', toolCall: { id: 'first', name: 'browser_action', arguments: {}, status: 'error' } },
+    { type: 'text', content: 'Reported failure.' },
+  ], false))
+  await page.waitForFunction(() => window.motionTest.samples.some(sample => sample.phase === 'complete'), null, { timeout: 15000 })
+  assert.equal(await page.locator('[data-process]').getAttribute('aria-expanded'), 'true', 'preserve an explicit manual expansion')
   assert.equal(errors.length, 0, errors.join('\n'))
   console.log(JSON.stringify({ collapseFrames: collapse.length, collapseHeaderDriftPx: drift, downwardEntryJumpPx: downwardEntryJump, streamedBodySamples: new Set(bodyLengths).size, approvalSynchronized: true, toolsEnteredSequentially: true, pageErrors: errors, artifactDir }, null, 2))
 } finally {
