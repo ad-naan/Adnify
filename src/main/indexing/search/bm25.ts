@@ -299,7 +299,7 @@ class TopKHeap {
 
   private sinkDown(startIndex: number): void {
     let index = startIndex
-    while (true) {
+    for (;;) {
       const left = index * 2 + 1
       const right = left + 1
       let worst = index

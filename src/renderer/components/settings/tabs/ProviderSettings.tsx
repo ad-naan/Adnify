@@ -1496,7 +1496,7 @@ export function ProviderSettings({
     const modelsSet = new Set<string>()
 
     if (isCustomSelected && selectedCustomConfig) {
-      ; (selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
+       (selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
     } else if (selectedProvider) {
       selectedProvider.models.forEach((model: string) => modelsSet.add(model))
     }

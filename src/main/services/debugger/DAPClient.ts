@@ -386,7 +386,7 @@ export class DAPClient extends EventEmitter {
   private handleData(data: string): void {
     this.buffer += data
 
-    while (true) {
+    for (;;) {
       // 查找头部结束位置
       const headerEnd = this.buffer.indexOf(HEADER_DELIMITER)
       if (headerEnd === -1) break

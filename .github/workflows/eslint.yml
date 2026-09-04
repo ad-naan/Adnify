@@ -40,36 +40,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/eslint-tools"
           cd "$RUNNER_TEMP/eslint-tools"
           npm init -y
-          npm install --no-package-lock --no-save eslint@8.57.0 @typescript-eslint/parser@6.21.0 @typescript-eslint/eslint-plugin@6.21.0 typescript@5.3.3 @microsoft/eslint-formatter-sarif@3.1.0
+          npm install --no-package-lock --no-save eslint@8.57.0 @typescript-eslint/parser@6.21.0 @typescript-eslint/eslint-plugin@6.21.0 typescript@5.3.3 eslint-plugin-react-hooks@4.6.2 @microsoft/eslint-formatter-sarif@3.1.0
 
-      - name: Create temporary ESLint config
+      - name: Copy repository ESLint config
         run: |
-          echo "module.exports = {
-            root: true,
-            parser: '@typescript-eslint/parser',
-            plugins: ['@typescript-eslint'],
-            extends: [
-              'eslint:recommended',
-              'plugin:@typescript-eslint/recommended'
-            ],
-            parserOptions: {
-              ecmaVersion: 2022,
-              sourceType: 'module'
-            },
-            rules: {
-              '@typescript-eslint/no-explicit-any': 'off',
-              '@typescript-eslint/no-unused-vars': 'off',
-              'no-undef': 'off',
-              'no-case-declarations': 'off'
-            }
-          };" > "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs"
+          cp "$GITHUB_WORKSPACE/.eslintrc.cjs" "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs"
 
       - name: Run ESLint
         env:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
         run: |
-          cd "$RUNNER_TEMP/eslint-tools"
-          npx eslint "$GITHUB_WORKSPACE" \
+          cd "$GITHUB_WORKSPACE"
+          node "$RUNNER_TEMP/eslint-tools/node_modules/eslint/bin/eslint.js" . \
+            --no-eslintrc \
+            --ignore-path .gitignore \
             --config "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs" \
             --resolve-plugins-relative-to "$RUNNER_TEMP/eslint-tools" \
             --ext .js,.jsx,.ts,.tsx \

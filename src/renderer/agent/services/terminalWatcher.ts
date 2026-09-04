@@ -58,6 +58,7 @@ class TerminalWatcher {
     private analyzeBuffer(id: string) {
         const buffer = this.buffers.get(id) || ''
         // 移除 ANSI 转义符号以便正则匹配
+        // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
         const cleanContent = buffer.replace(/\u001b\[[0-9;]*m/g, '')
 
         // 检测典型的错误关键字

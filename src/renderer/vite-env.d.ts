@@ -11,6 +11,7 @@ declare global {
     __errorUnsubscribe?: () => void
   }
 
+  // eslint-disable-next-line no-var -- Ambient globals require var to describe globalThis properties.
   var __PROD__: boolean
 
   interface NavigatorUAData {

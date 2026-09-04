@@ -6,6 +6,7 @@
 import { vi } from 'vitest'
 
 declare global {
+  // eslint-disable-next-line no-var -- Ambient globals require var to describe globalThis properties.
   var mainWindow: any
 }
 

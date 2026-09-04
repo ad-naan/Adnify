@@ -50,8 +50,8 @@ export function createStreamProcessor(
   let reasoningSignature: string | undefined
   let isInReasoning = false
   let reasoningPartId: string | null = null
-  let toolCalls: ToolCall[] = []
-  let sources: LLMStreamSource[] = []
+  const toolCalls: ToolCall[] = []
+  const sources: LLMStreamSource[] = []
   let usage: TokenUsage | undefined
   let metadata: LLMResponseMetadata | undefined
   let error: string | undefined

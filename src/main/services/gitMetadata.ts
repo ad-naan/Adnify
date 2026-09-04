@@ -3,7 +3,7 @@ import * as path from 'path'
 
 export async function resolveGitMetadataDirectory(workspaceRoot: string): Promise<string | null> {
   let current = path.resolve(workspaceRoot)
-  while (true) {
+  for (;;) {
     const markerPath = path.join(current, '.git')
     try {
       const stat = await fsPromises.stat(markerPath)

@@ -60,15 +60,15 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
 
 // ============ McpAuthStore ============
 
-export namespace McpAuthStore {
+export const McpAuthStore = (() => {
   const getFilePath = () => path.join(app.getPath('userData'), 'mcp-auth.json')
 
-  export async function get(mcpName: string): Promise<McpAuthEntry | undefined> {
+  async function get(mcpName: string): Promise<McpAuthEntry | undefined> {
     const data = await all()
     return data[mcpName]
   }
 
-  export async function getForUrl(mcpName: string, serverUrl: string): Promise<McpAuthEntry | undefined> {
+  async function getForUrl(mcpName: string, serverUrl: string): Promise<McpAuthEntry | undefined> {
     const entry = await get(mcpName)
     if (!entry) return undefined
     if (!entry.serverUrl) return undefined
@@ -76,7 +76,7 @@ export namespace McpAuthStore {
     return entry
   }
 
-  export async function all(): Promise<Record<string, McpAuthEntry>> {
+  async function all(): Promise<Record<string, McpAuthEntry>> {
     try {
       const filepath = getFilePath()
       try {
@@ -91,7 +91,7 @@ export namespace McpAuthStore {
     }
   }
 
-  export async function set(mcpName: string, entry: McpAuthEntry, serverUrl?: string): Promise<void> {
+  async function set(mcpName: string, entry: McpAuthEntry, serverUrl?: string): Promise<void> {
     await withLock(async () => {
       try {
         const filepath = getFilePath()
@@ -107,7 +107,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function remove(mcpName: string): Promise<void> {
+  async function remove(mcpName: string): Promise<void> {
     await withLock(async () => {
       try {
         const filepath = getFilePath()
@@ -120,7 +120,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function updateTokens(
+  async function updateTokens(
     mcpName: string,
     tokens: McpAuthTokens,
     serverUrl?: string
@@ -136,7 +136,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function updateClientInfo(
+  async function updateClientInfo(
     mcpName: string,
     clientInfo: McpAuthClientInfo,
     serverUrl?: string
@@ -152,7 +152,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
+  async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
     await withLock(async () => {
       const entry = (await get(mcpName)) ?? {}
       entry.codeVerifier = codeVerifier
@@ -163,7 +163,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function clearCodeVerifier(mcpName: string): Promise<void> {
+  async function clearCodeVerifier(mcpName: string): Promise<void> {
     await withLock(async () => {
       const entry = await get(mcpName)
       if (entry) {
@@ -176,7 +176,7 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
+  async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
     await withLock(async () => {
       const entry = (await get(mcpName)) ?? {}
       entry.oauthState = oauthState
@@ -187,12 +187,12 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function getOAuthState(mcpName: string): Promise<string | undefined> {
+  async function getOAuthState(mcpName: string): Promise<string | undefined> {
     const entry = await get(mcpName)
     return entry?.oauthState
   }
 
-  export async function clearOAuthState(mcpName: string): Promise<void> {
+  async function clearOAuthState(mcpName: string): Promise<void> {
     await withLock(async () => {
       const entry = await get(mcpName)
       if (entry) {
@@ -205,10 +205,11 @@ export namespace McpAuthStore {
     })
   }
 
-  export async function isTokenExpired(mcpName: string): Promise<boolean | null> {
+  async function isTokenExpired(mcpName: string): Promise<boolean | null> {
     const entry = await get(mcpName)
     if (!entry?.tokens) return null
     if (!entry.tokens.expiresAt) return false
     return entry.tokens.expiresAt < Date.now()
   }
-}
+  return { get, getForUrl, all, set, remove, updateTokens, updateClientInfo, updateCodeVerifier, clearCodeVerifier, updateOAuthState, getOAuthState, clearOAuthState, isTokenExpired }
+})()

@@ -65,9 +65,10 @@ function getSsh2Client(): typeof Ssh2Client {
       children: [],
       paths: [],
     } as unknown as NodeJS.Module
-  } catch {
+  } catch { /* cpu-features is optional; ssh2 can use its JavaScript fallback. */
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-var-requires -- Load ssh2 only after configuring its optional native dependency.
   const ssh2 = require('ssh2') as { Client: typeof Ssh2Client }
   CachedClient = ssh2.Client
   return CachedClient
@@ -117,7 +118,7 @@ function createConnectionConfig(server: RemoteServerConfig): ConnectConfig {
   }
 
   if (server.privateKeyPath?.trim()) {
-    config.privateKey = require('fs').readFileSync(server.privateKeyPath.trim(), 'utf8')
+    config.privateKey = fs.readFileSync(server.privateKeyPath.trim(), 'utf8')
   }
 
   if (server.password?.trim()) {

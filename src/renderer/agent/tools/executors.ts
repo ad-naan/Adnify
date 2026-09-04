@@ -2467,6 +2467,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 返回清理掉 ANSI 色彩字符的内容以便 AI 解析
             const rawOutput = lines.slice(-linesCount).join('')
             const cleanOutput = rawOutput
+                // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
                 .replace(/\x1b\[[0-9;]*[mGK]/g, '')
                 .replace(/\r\n/g, '\n')
                 .trim()

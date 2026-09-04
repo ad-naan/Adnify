@@ -250,7 +250,7 @@ export class AssetService {
     if (!reader) throw new AssetRequestError({ kind: 'response', code: 'empty' }, 'Empty HTTP response')
     const chunks: Buffer[] = []; let total = 0
     try {
-      while (true) {
+      for (;;) {
         const chunk = await reader.read()
         if (chunk.done) break
         total += chunk.value.length
@@ -343,6 +343,7 @@ export class AssetService {
     if (kind === 'image') {
       // Use sharp's native CommonJS entry in the CJS Electron main process.
       // Its ESM entry depends on import.meta.url, which can be lost by dev loaders.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Preserve sharp's native CommonJS entry for Electron dev loaders.
       const sharp = require('sharp') as typeof import('sharp').default
       const meta = await sharp(bytes).metadata()
       if (!['png', 'jpeg', 'webp', 'gif'].includes(meta.format || '')) throw new Error('Supported image outputs: PNG, JPEG, WebP, GIF')
@@ -378,6 +379,7 @@ export class AssetService {
   async preview(id: string, workspace: string): Promise<string | null> {
     const asset = await this.asset(id, workspace)
     if (asset.kind !== 'image') return null
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- Preserve sharp's native CommonJS entry for Electron dev loaders.
     const sharp = require('sharp') as typeof import('sharp').default
     const buffer = await sharp(await this.filePath(asset)).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
     return `data:image/webp;base64,${buffer.toString('base64')}`

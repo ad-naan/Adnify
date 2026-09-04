@@ -64,7 +64,7 @@ interface PendingAuth {
   timeout: NodeJS.Timeout
 }
 
-export namespace McpOAuthCallback {
+export const McpOAuthCallback = (() => {
   let server: http.Server | undefined
   let currentPort: number | undefined
   const pendingAuths = new Map<string, PendingAuth>()
@@ -92,7 +92,7 @@ export namespace McpOAuthCallback {
     throw new Error(`No available port in range ${OAUTH_CALLBACK_PORT_START}-${OAUTH_CALLBACK_PORT_END}`)
   }
 
-  export async function ensureRunning(retryCount = 0): Promise<number> {
+  async function ensureRunning(retryCount = 0): Promise<number> {
     if (server && currentPort) {
       return currentPort
     }
@@ -183,11 +183,11 @@ export namespace McpOAuthCallback {
   }
 
   /** 获取当前运行的端口 */
-  export function getPort(): number | undefined {
+  function getPort(): number | undefined {
     return currentPort
   }
 
-  export function waitForCallback(oauthState: string): Promise<string> {
+  function waitForCallback(oauthState: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (pendingAuths.has(oauthState)) {
@@ -200,7 +200,7 @@ export namespace McpOAuthCallback {
     })
   }
 
-  export function cancelPending(state: string): void {
+  function cancelPending(state: string): void {
     const pending = pendingAuths.get(state)
     if (pending) {
       clearTimeout(pending.timeout)
@@ -209,7 +209,7 @@ export namespace McpOAuthCallback {
     }
   }
 
-  export async function stop(): Promise<void> {
+  async function stop(): Promise<void> {
     if (server) {
       server.close()
       server = undefined
@@ -225,7 +225,8 @@ export namespace McpOAuthCallback {
     pendingAuths.clear()
   }
 
-  export function isRunning(): boolean {
+  function isRunning(): boolean {
     return server !== undefined
   }
-}
+  return { ensureRunning, getPort, waitForCallback, cancelPending, stop, isRunning }
+})()

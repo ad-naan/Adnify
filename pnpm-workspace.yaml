@@ -34,7 +34,9 @@ overrides:
   brace-expansion@<1.1.18: ^1.1.18
   brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
   brace-expansion@>=4.0.0 <5.0.9: ^5.0.9
-  fast-uri@>=3.0.0 <3.1.5: ^3.1.5
+  fast-uri@>=3.0.0 <3.1.6: ^3.1.6
+  '@xmldom/xmldom@>=0.8.0 <0.8.15': ^0.8.15
+  browserslist@<4.28.7: ^4.28.7
   hono@<4.12.34: ^4.12.34
   '@hono/node-server@<2.0.5': ^2.0.5
   ip-address@<=10.3.0: ^10.3.1

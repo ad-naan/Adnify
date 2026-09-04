@@ -102,7 +102,7 @@ describe('readTextFileChunk', () => {
     let offset = 0
     let reconstructed = ''
     let pageCount = 0
-    while (true) {
+    for (;;) {
       const chunk = await readTextFileChunk(filePath, offset, 257)
       reconstructed += chunk.content
       pageCount += 1
@@ -122,7 +122,7 @@ describe('readTextFileChunk', () => {
 
     let offset = 0
     let reconstructed = ''
-    while (true) {
+    for (;;) {
       const chunk = await readTextFileChunk(filePath, offset, 101)
       reconstructed += chunk.content
       expect(chunk.content).not.toContain('\uFFFD')

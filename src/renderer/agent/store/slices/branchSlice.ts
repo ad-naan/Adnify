@@ -181,7 +181,7 @@ export const createBranchSlice: StateCreator<
       const currentThread = state.threads[threadId]
       if (!currentThread) return state
 
-      let updatedBranches = [...(state.branches[threadId] || [])]
+      const updatedBranches = [...(state.branches[threadId] || [])]
 
       if (currentBranchId) {
         // 当前在某个分支上，保存该分支的消息
@@ -442,7 +442,7 @@ export const createBranchSlice: StateCreator<
       if (!currentThread) return state
 
       // 更新分支列表
-      let updatedBranches = [...(state.branches[threadId] || [])]
+      const updatedBranches = [...(state.branches[threadId] || [])]
       
       // 更新或添加 mainline 分支
       const mainlineIndex = updatedBranches.findIndex(b => b.id === MAINLINE_BRANCH_ID)

@@ -11,7 +11,7 @@
  * Cross-platform: Windows / macOS / Linux.
  */
 
-const { execFileSync, execSync } = require('child_process')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 
@@ -105,8 +105,8 @@ function activateVSEnv() {
 
   try {
     // Find the latest VS installation that has the C++ x64 tools
-    const vsPath = execSync(
-      `"${vswhere}" -latest -products * -requires Microsoft.VisualCpp.Tools.HostX86.TargetX64 -property installationPath`,
+    const vsPath = execFileSync(
+      vswhere, ['-latest', '-products', '*', '-requires', 'Microsoft.VisualCpp.Tools.HostX86.TargetX64', '-property', 'installationPath'],
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
     ).trim()
 
@@ -117,13 +117,16 @@ function activateVSEnv() {
 
     // The VS-default toolset may be incomplete; prefer one with x64 link libs.
     const toolsVersion = pickVCToolsVersion(vsPath)
-    const verArg = toolsVersion ? ` -vcvars_ver=${toolsVersion}` : ''
+    if (/["\r\n]/.test(vcvars)) throw new Error('Invalid VS installation path')
+    if (toolsVersion && !/^\d+(?:\.\d+)*$/.test(toolsVersion)) throw new Error('Invalid MSVC toolset version')
+    const verArg = toolsVersion ? `-vcvars_ver=${toolsVersion}` : ''
 
     // Run vcvars64 and dump the resulting environment. PATH must be sanitized
     // first or cmd.exe mis-parses it and vcvars silently no-ops (exit code 0).
-    const envDump = execSync(`"${vcvars}"${verArg} && set`, {
+    const envDump = execFileSync('cmd.exe', ['/d', '/v:off', '/s', '/c', '""%ADNIFY_VCVARS%" %ADNIFY_VCTOOLS_ARG% && set"'], {
       encoding: 'utf8',
-      env: { ...process.env, PATH: sanitizePath() },
+      windowsVerbatimArguments: true,
+      env: { ...process.env, PATH: sanitizePath(), ADNIFY_VCVARS: vcvars, ADNIFY_VCTOOLS_ARG: verArg },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
 
@@ -134,6 +137,9 @@ function activateVSEnv() {
         env[line.slice(0, idx)] = line.slice(idx + 1)
       }
     }
+
+    delete env.ADNIFY_VCVARS
+    delete env.ADNIFY_VCTOOLS_ARG
 
     // Drop the developer-prompt marker variables. With VSCMD_VER present,
     // MSBuild treats the toolset as already pinned by the shell and ignores the
@@ -431,7 +437,11 @@ async function main() {
   await rebuildNativeModules(vsEnv)
 }
 
-main().catch((err) => {
-  console.error('[postinstall] Fatal error:', err?.message ?? err)
-  process.exit(1)
-})
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[postinstall] Fatal error:', err?.message ?? err)
+    process.exit(1)
+  })
+}
+
+module.exports = { activateVSEnv }

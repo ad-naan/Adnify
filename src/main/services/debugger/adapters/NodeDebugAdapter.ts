@@ -211,7 +211,7 @@ class SimpleWebSocket extends EventEmitter {
       const totalLength = offset + payloadLength
       if (this.buffer.length < totalLength) return
 
-      let payload = this.buffer.slice(offset, totalLength)
+      const payload = this.buffer.slice(offset, totalLength)
       
       if (masked) {
         const mask = this.buffer.slice(offset - 4, offset)

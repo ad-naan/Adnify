@@ -427,7 +427,7 @@ class GitService {
 
                     const X = line[0]
                     const Y = line[1]
-                    let fullPathPart = line.slice(3)
+                    const fullPathPart = line.slice(3)
 
                     // 处理重命名 (format: R  old -> new)
                     let currentPath = fullPathPart

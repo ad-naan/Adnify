@@ -204,7 +204,7 @@ class SnippetService {
     const languages = new Set<string>()
     for (const snippet of this.snippets) {
       if (snippet.languages.length === 0) {
-        ;['javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'python', 'go', 'rust', 'java', 'cpp', 'c'].forEach(l => languages.add(l))
+        ['javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'python', 'go', 'rust', 'java', 'cpp', 'c'].forEach(l => languages.add(l))
       } else {
         snippet.languages.forEach(l => languages.add(l))
       }

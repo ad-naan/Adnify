@@ -349,8 +349,7 @@ export class McpClient extends EventEmitter {
       if (this.state.transport instanceof StdioClientTransport) {
         try {
           // StdioClientTransport 的 _process 是私有的，但我们可以通过这种方式获取
-          // @ts-ignore
-          const subProcess = this.state.transport._process
+          const subProcess = (this.state.transport as unknown as { _process?: cp.ChildProcess })._process
           if (subProcess && subProcess.pid) {
             logger.mcp?.info(`[MCP:${this.id}] Force killing process tree for PID ${subProcess.pid}`)
             if (process.platform === 'win32') {

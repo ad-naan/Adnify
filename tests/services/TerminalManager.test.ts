@@ -65,6 +65,7 @@ class MockTerminal {
   markerCounter = 0
   private oscHandlers = new Map<number, (payload: string) => boolean | Promise<boolean>>()
   write = vi.fn((data: string, callback?: () => void) => {
+    // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
     const visibleData = data.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
     const lines = visibleData.split(/\r?\n/)
     this.lines.push(...(visibleData.endsWith('\n') || visibleData.endsWith('\r') ? lines.slice(0, -1) : lines))

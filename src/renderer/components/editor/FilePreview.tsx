@@ -420,7 +420,7 @@ export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
 
     const handleOpenExternal = useCallback(() => {
         // 使用 shell:openPath IPC 打开文件
-        ; (window.electronAPI as any).openPath?.(path) ||
+         (window.electronAPI as any).openPath?.(path) ||
             api.shell.executeSecure?.({ command: 'start', args: ['""', path], cwd: '.' })
     }, [path])
 

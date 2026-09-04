@@ -268,7 +268,7 @@ export function registerHealthCheckHandlers() {
       logger.ipc.info(`[HealthCheck] Checking ${provider} at ${url} (protocol: ${activeProtocol})`)
 
       let fetchUrl: string
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 
       if (activeProtocol === 'google') {
         // Google Gemini: GET /v1beta/models?key=
@@ -414,7 +414,7 @@ export function registerHealthCheckHandlers() {
       url = url.endsWith('/') ? url.slice(0, -1) : url
 
       let fetchUrl = ''
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
 

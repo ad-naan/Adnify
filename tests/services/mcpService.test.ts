@@ -43,7 +43,7 @@ describe('mcpService', () => {
     })
 
     it('should handle initialization failure', async () => {
-      ;(window.electronAPI as any).mcpInitialize = vi.fn().mockResolvedValue({
+      (window.electronAPI as any).mcpInitialize = vi.fn().mockResolvedValue({
         success: false,
         error: 'Init failed',
       })

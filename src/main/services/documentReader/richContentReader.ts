@@ -2,6 +2,7 @@ import { execFile as execFileCallback } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type JSZip from 'jszip'
+import { stripXmlTags } from '../markupText'
 import type {
   DocumentReaderEmbeddedImage,
   RichContentReadResult,
@@ -733,10 +734,6 @@ function extractAttribute(attributes: string, name: string): string | undefined 
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = attributes.match(new RegExp(`${escapedName}="([^"]*)"`))
   return match?.[1]
-}
-
-function stripXmlTags(value: string): string {
-  return value.replace(/<[^>]+>/g, '')
 }
 
 function decodeXmlEntities(value: string): string {

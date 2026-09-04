@@ -362,6 +362,7 @@ const TerminalPanel = memo(function TerminalPanel() {
         if (!managerState.activeId) return
         const content = terminalManager
             .getOutputPreview(managerState.activeId, 24, 6000)
+            // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
             .replace(/\u001b\[[0-9;]*m/g, '')
             .slice(-2000)
             .trim()

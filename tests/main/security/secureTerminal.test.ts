@@ -5,7 +5,7 @@ import { logger } from '@shared/utils/Logger'
 import { commandApprovalScope } from '@shared/security/executionPolicy'
 
 const { handlers, childSpawnMock, dugiteExecMock, requestApprovalMock, runPipedShellCommandMock, workspaceDangerousTrustedMock } = vi.hoisted(() => ({
-  handlers: new Map<string, Function>(),
+  handlers: new Map<string, (...args: any[]) => any>(),
   childSpawnMock: vi.fn(),
   dugiteExecMock: vi.fn(),
   requestApprovalMock: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock('@shared/utils/errorHandler', () => ({
 }))
 
 vi.mock('@main/ipc/safeHandle', () => ({
-  safeIpcHandle: vi.fn((channel: string, handler: Function) => {
+  safeIpcHandle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
     handlers.set(channel, handler)
   }),
 }))

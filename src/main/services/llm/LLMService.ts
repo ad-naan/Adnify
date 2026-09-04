@@ -22,8 +22,10 @@ import type {
 function cleanSpecialCharacters(text: string): string {
   if (typeof text !== 'string') return text
   // 1. 过滤 ANSI 颜色和控制码
+  // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
   let cleaned = text.replace(/[\u001b\x1B]\[[0-9;]*[a-zA-Z]/g, '')
   // 2. 过滤除 \n, \r, \t 之外的所有 ASCII 控制字符
+  // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
   cleaned = cleaned.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
   return cleaned
 }

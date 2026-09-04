@@ -1110,7 +1110,7 @@ export class CodebaseIndexService {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       try {
         this.mainWindow.webContents.send('index:progress', this.status)
-      } catch { }
+      } catch { /* The renderer may close between the window check and progress delivery. */ }
     }
   }
 }

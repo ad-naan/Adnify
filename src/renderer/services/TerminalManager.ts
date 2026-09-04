@@ -831,7 +831,7 @@ class TerminalManagerClass {
           instance.webglAddon = undefined;
         }
       });
-    } catch { }
+    } catch { /* Keep the default renderer when WebGL is unavailable. */ }
   }
 
   private createWebLinksAddon(): WebLinksAddon {
@@ -1038,7 +1038,7 @@ class TerminalManagerClass {
           this.xtermInstances.get(id)!.webglAddon = undefined;
         }
       });
-    } catch { }
+    } catch { /* Keep the default renderer when WebGL is unavailable. */ }
 
     // 处理终端输入
     terminal.onData((data) => {
@@ -1136,7 +1136,7 @@ class TerminalManagerClass {
     existing.container = null;
 
     if (existing.webglAddon) {
-      try { existing.webglAddon.dispose(); } catch { }
+      try { existing.webglAddon.dispose(); } catch { /* Continue terminal disposal if the WebGL context is already lost. */ }
       existing.webglAddon = undefined;
     }
 
@@ -1146,7 +1146,7 @@ class TerminalManagerClass {
     // their next execution or data event.
     if (this.activeExecutions.has(id)) return
 
-    try { existing.terminal.dispose(); } catch { }
+    try { existing.terminal.dispose(); } catch { /* Release bookkeeping even when the terminal has already been disposed. */ }
 
     // 从 map 中移除，确保下次 mountTerminal 走"新建实例 + buffer replay"分支
     // 而不是尝试在已销毁的 terminal 上调用 open()（会静默失败导致空白）

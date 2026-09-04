@@ -16,6 +16,7 @@ function redactDetail(value: string, secrets: string[]): string {
   return text
     .replace(/((?:authorization|cookie|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*)[^\r\n]+/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
+    // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
     .replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 1000)
 }
 
@@ -28,7 +29,7 @@ export async function readAssetHttpError(response: Response, secrets: string[] =
       const chunks: Uint8Array[] = []
       let size = 0
       let oversized = false
-      while (true) {
+      for (;;) {
         const chunk = await reader.read()
         if (chunk.done) break
         size += chunk.value.byteLength

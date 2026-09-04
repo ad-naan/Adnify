@@ -33,7 +33,6 @@ interface SystemSettingsProps {
 function DataPathDisplay() {
     const [path, setPath] = useState('')
     useEffect(() => {
-        // @ts-ignore
         api.settings.getConfigPath?.().then(setPath)
     }, [])
     return <span>{path || '...'}</span>
@@ -210,7 +209,7 @@ export function SystemSettings({
             if (wsPath) {
                 try {
                     await api.index.clear(wsPath)
-                } catch { }
+                } catch { /* Continue clearing the other workspace indexes if one is unavailable. */ }
             }
 
             Agent.clearSession()

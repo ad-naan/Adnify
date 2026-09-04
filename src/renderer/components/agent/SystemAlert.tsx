@@ -130,7 +130,7 @@ export function parseSystemAlert(text: string): {
     }
 
     // 根据消息内容判断类型
-    let type: AlertType = 'warning'
+    const type: AlertType = 'warning'
     let title = 'Loop Detected'
 
     if (message.includes('repeating pattern')) {

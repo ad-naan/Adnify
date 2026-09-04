@@ -5,6 +5,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { safeIpcHandle } from './safeHandle'
+import { htmlToText } from '../services/markupText'
 
 // ===== 读取 URL 内容 =====
 
@@ -181,28 +182,6 @@ async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
     // Jina 失败，回退到直接抓取
     logger.ipc.warn('[HTTP] Jina Reader failed, falling back to direct fetch:', jinaResult.error)
     return fetchUrlDirect(url, timeout)
-}
-
-// 简单的 HTML 到文本转换
-function htmlToText(html: string): string {
-    // 先移除 script/style/comment，再处理文本，避免把脚本内容作为正文输出。
-    const withoutHiddenContent = html
-        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-        .replace(/<!--[\s\S]*?-->/g, '')
-
-    return decodeHtmlEntities(withoutHiddenContent
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/(p|div)>/gi, (_, tagName: string) => tagName.toLowerCase() === 'p' ? '\n\n' : '\n')
-        .replace(/<\/li>/gi, '\n')
-        .replace(/<\/h[1-6]>/gi, '\n\n')
-        .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, (_, href: string, text: string) => `${stripHtmlTags(text)} (${href})`)
-        .replace(/<[^>]+>/g, ''))
-        .replace(/\n\s*\n\s*\n/g, '\n\n')
-        .trim()
-}
-
-function stripHtmlTags(html: string): string {
-    return html.replace(/<[^>]+>/g, '')
 }
 
 function decodeHtmlEntities(text: string): string {

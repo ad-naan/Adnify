@@ -9,6 +9,7 @@ import { BrowserWindow, app, ipcMain } from 'electron'
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import * as path from 'path'
+import * as fs from 'fs'
 const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
 import { StringDecoder } from 'node:string_decoder'
@@ -75,7 +76,7 @@ interface CommandWhitelist {
 }
 
 // 白名单配置（已统一到 shared/config/securitySettings.ts）
-let WHITELIST: CommandWhitelist = {
+const WHITELIST: CommandWhitelist = {
   shell: new Set(SECURITY_SETTINGS_DEFAULTS.allowedShellCommands.map(cmd => cmd.toLowerCase())),
   git: new Set(SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands.map(cmd => cmd.toLowerCase())),
 }
@@ -160,7 +161,6 @@ function createUnixShellIntegrationRc(
   shellKind: 'bash' | 'zsh',
 ): { env: Record<string, string>; rcFile: string; cleanup: () => void } | null {
   try {
-    const fs = require('fs') as typeof import('fs')
     const home = process.env.HOME || ''
       const userRc = shellKind === 'zsh'
       ? path.join(home, '.zshrc')
@@ -174,7 +174,7 @@ function createUnixShellIntegrationRc(
     if (shellKind === 'bash') {
       const rcFile = path.join(app.getPath('temp'), `adnify-shell-integration-${id}.bashrc`)
       fs.writeFileSync(rcFile, `${sourceUserRc}. '${integrationLiteral}'\n`, { mode: 0o600 })
-      return { env: {}, rcFile, cleanup: () => { try { fs.rmSync(rcFile, { force: true }) } catch { } } }
+      return { env: {}, rcFile, cleanup: () => { try { fs.rmSync(rcFile, { force: true }) } catch { /* Temporary shell files may already have been removed. */ } } }
     }
 
     const zdotdir = path.join(app.getPath('temp'), `adnify-shell-integration-${id}`)
@@ -184,7 +184,7 @@ function createUnixShellIntegrationRc(
     return {
       env: { ZDOTDIR: zdotdir },
       rcFile,
-      cleanup: () => { try { fs.rmSync(zdotdir, { recursive: true, force: true }) } catch { } },
+      cleanup: () => { try { fs.rmSync(zdotdir, { recursive: true, force: true }) } catch { /* Temporary shell files may already have been removed. */ } },
     }
   } catch {
     return null
@@ -802,9 +802,10 @@ export function registerSecureTerminalHandlers(
         children: [],
         paths: [],
       } as unknown as NodeJS.Module
-    } catch {
+    } catch { /* cpu-features is optional; ssh2 can use its JavaScript fallback. */
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- Load ssh2 after configuring its optional native dependency.
     ssh2ClientCtor = require('ssh2').Client
     return ssh2ClientCtor
   }
@@ -843,7 +844,7 @@ export function registerSecureTerminalHandlers(
       }
 
       if (this.server.privateKeyPath?.trim()) {
-        config.privateKey = require('fs').readFileSync(this.server.privateKeyPath.trim(), 'utf8')
+        config.privateKey = fs.readFileSync(this.server.privateKeyPath.trim(), 'utf8')
       }
       if (this.server.password?.trim()) {
         config.password = this.server.password
@@ -903,7 +904,7 @@ export function registerSecureTerminalHandlers(
               stream.on('error', (err: unknown) => this.emit('error', err))
 
               if (this.server.remotePath?.trim()) {
-                const escaped = this.server.remotePath.trim().replace(/'/g, `'\''`)
+                const escaped = this.server.remotePath.trim().replace(/'/g, `'\\''`)
                 stream.write(`cd '${escaped}'\n`)
               }
 
@@ -975,7 +976,6 @@ export function registerSecureTerminalHandlers(
       if (shellKind === 'other') return
 
       const scriptPath = getShellIntegrationResourcePath('shellIntegration.sh')
-      const fs = require('fs') as typeof import('fs')
       const contents = await new Promise<Buffer>((resolve, reject) => {
         fs.readFile(scriptPath, (error: NodeJS.ErrnoException | null, data: Buffer) => {
           if (error) reject(error)
@@ -1027,7 +1027,7 @@ export function registerSecureTerminalHandlers(
       this.rows = rows
       try {
         this.stream?.setWindow(rows, cols, 0, 0)
-      } catch {
+      } catch { /* The remote terminal may already be closed during a resize. */
       }
     }
 
@@ -1040,11 +1040,11 @@ export function registerSecureTerminalHandlers(
       }
       try {
         this.stream?.end('exit\n')
-      } catch {
+      } catch { /* Continue cleanup if the remote stream has already closed. */
       }
       try {
         this.connection?.end()
-      } catch {
+      } catch { /* Still emit the local exit event if the SSH connection is closed. */
       }
       this.emit('exit', { exitCode: 0 })
     }
@@ -1198,7 +1198,6 @@ export function registerSecureTerminalHandlers(
       } else if (isWindows) {
         shellPath = 'powershell.exe'
       } else if (isMac) {
-        const fs = require('fs')
         const possibleShells = [
           process.env.SHELL,
           '/bin/zsh',
@@ -1234,10 +1233,7 @@ export function registerSecureTerminalHandlers(
 
       logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
-      const fs = require('fs')
-      const pathModule = require('path')
-
-      if (pathModule.isAbsolute(shellPath) && !fs.existsSync(shellPath)) {
+      if (path.isAbsolute(shellPath) && !fs.existsSync(shellPath)) {
         const error = `Shell not found: ${shellPath}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }
@@ -1362,8 +1358,6 @@ export function registerSecureTerminalHandlers(
   safeIpcHandle('shell:getAvailableShells', async () => {
     const shells: { label: string; path: string }[] = []
     const isWindows = process.platform === 'win32'
-    const fs = require('fs')
-    const pathModule = require('path')
 
     // 异步检查命令是否可执行
     const canExecute = async (cmd: string): Promise<boolean> => {
@@ -1394,8 +1388,8 @@ export function registerSecureTerminalHandlers(
         })
         const gitExecPath = stdout.trim()
         if (gitExecPath) {
-          const gitRoot = pathModule.resolve(gitExecPath, '..', '..', '..')
-          const bashPath = pathModule.join(gitRoot, 'bin', 'bash.exe')
+          const gitRoot = path.resolve(gitExecPath, '..', '..', '..')
+          const bashPath = path.join(gitRoot, 'bin', 'bash.exe')
           if (fs.existsSync(bashPath)) {
             shells.push({ label: 'Git Bash', path: bashPath })
           }
@@ -1636,6 +1630,7 @@ export function registerSecureTerminalHandlers(
 
         // 清理输出（移除 ANSI 序列）
         const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
+          // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
           .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
           .replace(/\r\n/g, '\n')
           .trim()

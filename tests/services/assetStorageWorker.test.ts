@@ -8,6 +8,7 @@ import ts from 'typescript'
 describe('asset SQLite worker', () => {
   it('persists records across worker restarts and separates collections', async () => {
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'adnify-asset-worker-'))
+    if (path.dirname(directory) !== path.resolve(tmpdir())) throw new Error('Unexpected test directory')
     const source = await fs.readFile(path.resolve('src/main/services/assets/assetStorage.worker.ts'), 'utf8')
     const entry = path.join(directory, 'worker.cjs')
     await fs.writeFile(entry, ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)
@@ -42,7 +43,6 @@ describe('asset SQLite worker', () => {
       expect(await send('get', 'capability', 'atomic')).toBeUndefined()
     } finally {
       await worker?.terminate()
-      if (path.dirname(directory) !== path.resolve(tmpdir())) throw new Error('Unexpected test directory')
       await fs.rm(directory, { recursive: true, force: true })
     }
   })

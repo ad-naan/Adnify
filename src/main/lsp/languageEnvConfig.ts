@@ -14,6 +14,7 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
+import { homedir } from 'os'
 import { logger } from '@shared/utils/Logger'
 import { createScopedStore } from '../services/configPath'
 
@@ -180,7 +181,7 @@ function detectPythonRuntime(workspacePath: string): string | null {
   try {
     const pyVersionFile = path.join(workspacePath, '.python-version')
     if (fs.existsSync(pyVersionFile)) {
-      const pyenvRoot = process.env.PYENV_ROOT || path.join(require('os').homedir(), '.pyenv')
+      const pyenvRoot = process.env.PYENV_ROOT || path.join(homedir(), '.pyenv')
       const version = fs.readFileSync(pyVersionFile, 'utf-8').trim()
       const pyenvPython = path.join(pyenvRoot, 'versions', version, binDir, pythonBin)
       if (fs.existsSync(pyenvPython)) return pyenvPython

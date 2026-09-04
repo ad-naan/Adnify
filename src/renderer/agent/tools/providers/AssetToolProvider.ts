@@ -87,7 +87,7 @@ export class AssetToolProvider implements ToolProvider {
     else if (name === 'asset_export') result = await assetService.request({ type: 'export', id: args.asset_id as string, destination: args.destination as string })
     else if (name === 'asset_job_cancel') result = await assetService.request({ type: 'cancel', id: args.job_id as string })
     else {
-      let job = await assetService.request<AssetJobSummary>({ type: 'job', id: args.job_id as string })
+      const job = await assetService.request<AssetJobSummary>({ type: 'job', id: args.job_id as string })
       if (name === 'asset_job_wait') {
         // Execute persisted legacy calls, but no longer advertise a separate wait tool.
         return this.waitForResult(job, ctx)

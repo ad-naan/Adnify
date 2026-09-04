@@ -30,6 +30,7 @@ export type WorktreeLaneDecision =
 const LANE_SUBCOMMANDS = new Set(['add', 'remove', 'list', 'prune'])
 
 /** 引用名里不允许出现的字符，以及 Git 自身禁止的 `..` / `@{` 序列。 */
+// eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
 const UNSAFE_REF_PATTERN = /[\s~^:?*[\\\x00-\x1f\x7f]|\.\.|@\{|\.lock$/u
 
 const deny = (reason: string): WorktreeLaneDecision => ({ allowed: false, reason })

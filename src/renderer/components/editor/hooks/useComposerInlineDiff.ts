@@ -76,7 +76,7 @@ function computeLCSOptimized(a: string[], b: string[]): string[] {
                 path[i][j] = 2
             }
         }
-        ;[prev, curr] = [curr, prev]
+        [prev, curr] = [curr, prev]
     }
 
     const lcs: string[] = []
@@ -289,7 +289,7 @@ export function useComposerInlineDiff(
                     const fontInfo = editorInstance.getOption(monacoInstance.editor.EditorOption.fontInfo)
                     fontFamily = fontInfo.fontFamily
                     fontSize = fontInfo.fontSize
-                } catch (e) { }
+                } catch (e) { /* Use the default font if Monaco font metadata is unavailable. */ }
 
                 for (const block of removedBlocks) {
                     const domNode = document.createElement('div')

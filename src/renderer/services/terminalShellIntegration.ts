@@ -75,7 +75,7 @@ export function createShellIntegrationOscParser(): {
           return payloads
         }
 
-        while (true) {
+        for (;;) {
           const start = pending.indexOf(prefix)
           if (start < 0) {
             // Retain only a possible prefix of a split start sequence.

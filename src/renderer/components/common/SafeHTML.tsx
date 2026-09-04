@@ -97,7 +97,7 @@ function escapeHtml(unsafe: string): string {
  */
 function containsDangerousContent(html: string): boolean {
   const dangerousPatterns = [
-    /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
+    /<script\b/i,
     /javascript:/gi,
     /on\w+\s*=/gi, // onclick, onerror 等事件处理器
     /<iframe\b/gi,

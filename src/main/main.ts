@@ -125,7 +125,7 @@ if (relaunchContext) {
 
 // 延迟加载的模块
 let ipcModule: typeof import('./ipc') | null = null
-let lspManager = mainLspManager
+const lspManager = mainLspManager
 let securityManager: typeof import('./security').securityManager | null = null
 
 ipcMain.handle('app:shutdown-response', (_event, requestId: string, success: boolean) => {

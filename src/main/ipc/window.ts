@@ -111,7 +111,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
   // 移除旧的 handler 再注册新的
   try {
     ipcMain.removeHandler('window:new')
-  } catch { }
+  } catch { /* The handler may not have been registered yet. */ }
   ipcMain.handle('window:new', () => {
     createWindow(true)
   })

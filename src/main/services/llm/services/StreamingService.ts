@@ -234,7 +234,7 @@ export class StreamingService {
     const iterator = result.stream[Symbol.asyncIterator]()
     const pseudoToolAdapter = new PseudoToolCallStreamAdapter(enablePseudoToolAdapter)
 
-    while (true) {
+    for (;;) {
       const next = await this.nextStreamPart(iterator, requestId, streamIdleTimeoutMs)
       if (next.done) break
       if (this.transport.isWindowDestroyed()) break

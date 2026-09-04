@@ -577,7 +577,7 @@ class EmotionAdapter {
           setTimeout(() => {
             try {
               bufferSource.stop()
-            } catch {}
+            } catch { /* An audio source can only be stopped once. */}
             this.currentAudioSource = null
             this.currentGainNode = null
             this.closeAudioContextIfIdle()
@@ -585,7 +585,7 @@ class EmotionAdapter {
         } else {
           try {
             bufferSource.stop()
-          } catch {}
+          } catch { /* An audio source can only be stopped once. */}
           this.currentAudioSource = null
           this.closeAudioContextIfIdle()
         }
@@ -607,7 +607,7 @@ class EmotionAdapter {
     if (this.audioContext && !this.currentAudioSource) {
       try {
         this.audioContext.close().catch(() => { })
-      } catch {}
+      } catch { /* The audio context may already be closed. */}
       this.audioContext = null
     }
   }

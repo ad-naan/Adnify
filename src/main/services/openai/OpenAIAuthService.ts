@@ -156,7 +156,6 @@ export const OpenAIAuthService = {
 
     const code = await new Promise<string>((resolve, reject) => {
       let settled = false
-      let timeout: NodeJS.Timeout | undefined
 
       // The callback server must be released on every exit path — otherwise port
       // 1455 stays bound for the life of the app and the next login fails with
@@ -220,7 +219,7 @@ export const OpenAIAuthService = {
 
       // Abandoned authorizations (user closes the browser tab) would otherwise
       // keep the port bound forever.
-      timeout = setTimeout(() => {
+      const timeout = setTimeout(() => {
         finish(providerAuthError('oauthLoginTimeout'))
       }, 5 * 60 * 1000)
 

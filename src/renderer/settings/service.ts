@@ -67,14 +67,14 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
       typeof targetValue === 'object' &&
       targetValue !== null
     ) {
-      ;(result as Record<string, unknown>)[key] = deepMerge(
+      (result as Record<string, unknown>)[key] = deepMerge(
         targetValue as object,
         sourceValue as object,
       )
       continue
     }
 
-    ;(result as Record<string, unknown>)[key] = sourceValue
+    (result as Record<string, unknown>)[key] = sourceValue
   }
 
   return result

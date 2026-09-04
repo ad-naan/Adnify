@@ -53,7 +53,7 @@ export async function executeWithGenerationRecovery<T>(
   let attempt = 0
   let cacheFallbackError: unknown
 
-  while (true) {
+  for (;;) {
     attempt += 1
 
     try {

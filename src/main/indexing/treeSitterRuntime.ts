@@ -31,7 +31,7 @@ async function createRuntime(
   // Electron/Vite can expose this CommonJS package as the constructor itself,
   // an ESM namespace, or a nested synthetic default export. Resolve the API by
   // capability instead of relying on one interop shape.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires -- The synchronous loader normalizes CommonJS export shapes.
   const imported: unknown = require('web-tree-sitter')
   const root = asModule(imported)
   const firstDefault = asModule(root.default)

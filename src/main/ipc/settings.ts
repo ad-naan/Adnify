@@ -236,7 +236,6 @@ export function registerSettingsHandlers(
 
   ipcMain.handle('settings:getRecentLogs', async () => {
     try {
-      const path = require('path')
       const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
       return await readRecentLogTail(logPath)
     } catch (err) {

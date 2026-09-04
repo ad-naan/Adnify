@@ -499,7 +499,7 @@ export class McpToolProvider implements ToolProvider {
       /^(import|export|const|let|var|function|class|interface|type)\s/m,
       /^(def|class|import|from|if|for|while)\s/m,
       /^(package|import|public|private|class)\s/m,
-      /[{}\[\]();]/,
+      /[{}[\]();]/,
       /=>/,
       /^\s{2,}/m,  // 缩进
     ]

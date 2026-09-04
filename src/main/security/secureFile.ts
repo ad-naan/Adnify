@@ -205,7 +205,7 @@ export function registerSecureFileHandlers(
   getWorkspaceSessionFn: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   windowManager?: WindowManagerContext
 ) {
-  ; (global as any).mainWindow = getMainWindowFn()
+   (global as any).mainWindow = getMainWindowFn()
 
   // 注册工作区相关处理器（从 workspaceHandlers.ts 导入）
   registerWorkspaceHandlers(getMainWindowFn, store, getWorkspaceSessionFn, windowManager)
@@ -575,7 +575,7 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
     const defaultPath =
-      workspace && workspace.roots.length > 0 ? workspace.roots[0] : require('os').homedir()
+      workspace && workspace.roots.length > 0 ? workspace.roots[0] : os.homedir()
 
     const result = await dialog.showSaveDialog(mainWindow, {
       defaultPath,

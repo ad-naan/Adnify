@@ -44,6 +44,7 @@ const EL_MARKER_RE = /[\uE000-\uE002]/g
 
 /** 若该 CSI 序列是 EL，返回对应标记；否则返回 null */
 function elMarkerFor(seq: string): string | null {
+  // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
   const m = /^\x1b\[([0-9;]*)K$/.exec(seq)
   if (!m) return null
   const param = m[1] === '' ? '0' : m[1]

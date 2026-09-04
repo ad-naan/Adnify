@@ -32,6 +32,7 @@ import {
 import { fileCacheService } from '../services/fileCacheService'
 import { approvalService } from './approvalService'
 import { EventBus } from './EventBus'
+import { getActiveListenerCount } from './stream'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { MessageContent, TextContent, ImageContent } from '../types'
 import type { CheckpointImage } from '../types'
@@ -470,7 +471,6 @@ export class AgentClass {
    * 获取诊断信息（用于调试）
    */
   getDiagnostics() {
-    const { getActiveListenerCount } = require('./stream')
     return {
       runningTaskCount: this.runningTasks.size,
       runningThreadIds: Array.from(this.runningTasks.keys()),

@@ -128,7 +128,7 @@ async function findNearestRoot(
       if (pattern.includes('*')) {
         try {
           const entries = await fs.promises.readdir(currentDir)
-          const re = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
+          const re = new RegExp('^' + pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$')
           if (entries.some(entry => re.test(entry))) {
             return currentDir
           }
@@ -474,7 +474,7 @@ const LSP_SERVERS: LspServerConfig[] = [
             if (content.includes('[workspace]')) {
               return currentDir
             }
-          } catch { }
+          } catch { /* Unreadable ancestor directories cannot provide a project marker. */ }
         }
         const parentDir = path.dirname(currentDir)
         if (parentDir === currentDir) break
@@ -783,7 +783,7 @@ class LspManager {
 
     instance.buffer = Buffer.concat([instance.buffer, data])
 
-    while (true) {
+    for (;;) {
       if (instance.contentLength === -1) {
         const headerEnd = instance.buffer.indexOf('\r\n\r\n')
         if (headerEnd === -1) return
@@ -807,7 +807,7 @@ class LspManager {
 
       try {
         this.handleServerMessage(key, JSON.parse(message))
-      } catch { }
+      } catch { /* Ignore a malformed server message and continue reading the next frame. */ }
     }
   }
 
@@ -946,10 +946,10 @@ class LspManager {
 
   private handleNotification(key: string, message: JsonRpcMessage): void {
     if (message.method === 'textDocument/publishDiagnostics') {
-      let { uri, diagnostics } = message.params as { uri: string; diagnostics: any[] }
+      const { uri: rawUri, diagnostics } = message.params as { uri: string; diagnostics: any[] }
 
       // 规范化 URI：处理不同 LSP 服务器返回的 URI 格式差异
-      uri = normalizeLspUri(uri)
+      const uri = normalizeLspUri(rawUri)
 
       this.setDiagnosticsCache(uri, diagnostics)
 
@@ -960,7 +960,7 @@ class LspManager {
         if (!win.isDestroyed()) {
           try {
             win.webContents.send('lsp:diagnostics', { uri, diagnostics, serverKey: key })
-          } catch { }
+          } catch { /* The renderer may close before diagnostics are delivered. */ }
         }
       })
     }
@@ -1235,7 +1235,7 @@ class LspManager {
         if (!win.isDestroyed()) {
           try {
             win.webContents.send('lsp:diagnostics', { uri, diagnostics: [], serverKey: key })
-          } catch { }
+          } catch { /* A closing renderer no longer needs cleared diagnostics. */ }
         }
       })
     }
@@ -1247,7 +1247,7 @@ class LspManager {
     try {
       await this.sendRequest(key, 'shutdown', null, 3000)
       this.sendNotification(key, 'exit', null)
-    } catch { }
+    } catch { /* Continue process cleanup when the server does not acknowledge shutdown. */ }
     this.rejectPendingRequests(instance, new Error(`LSP server ${key} stopped`))
     const processClosed = instance.process.exitCode !== null
       ? Promise.resolve()
