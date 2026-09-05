@@ -13,17 +13,17 @@
 
   <p>
     <a href="https://github.com/ad-naan/adnify"><img src="https://img.shields.io/github/stars/ad-naan/adnify?logo=github&color=181717" alt="GitHub" /></a>
-    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-152%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
+    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-156%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
     <a href="https://atomgit.com/adnaan/adnify"><img src="images/atomgit-badge.svg" alt="AtomGit" /></a>
     <a href="https://deepwiki.com/ad-naan/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
     <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
-    <img src="https://img.shields.io/badge/Electron-39.0-blueviolet" alt="Electron 39.0" />
+    <img src="https://img.shields.io/badge/Electron-43.6.0-blueviolet" alt="Electron 43.6.0" />
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
-    <img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript 5.0" />
+    <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
 </div>
 
-Adnify is more than an editor with a chat sidebar. It combines a production-grade code workspace with two focused AI workflows: **Agent Mode** for direct implementation and **Plan Mode** for requirement clarification, reviewed task graphs, dependency-aware execution, and result validation.
+Adnify brings code editing, AI execution, asset generation, and browser verification into one desktop workspace. Use **Agent Mode** for direct implementation or **Plan Mode** for requirement clarification, reviewed task graphs, dependency-aware execution, and result validation. Manage commands and background services across windows, and receive task results through system notifications or your own webhook receiver.
 
 <!-- Main Interface Demo -->
 <div align="center">
@@ -70,6 +70,10 @@ Join our community to discuss Adnify usage and development!
 
 - [Architecture Design](#-architecture-design)
 - [Core Features](#-core-features)
+- [Asset Generation](#-asset-generation-and-library)
+- [Browser Verification](#-browser-verification-and-device-preview)
+- [Execution Management](#-execution-management-and-service-hosting)
+- [Notifications & Background Tasks](#-notifications-and-background-tasks)
 - [What Makes Adnify Different](#-what-makes-adnify-different)
 - [Quick Start](#-quick-start)
 - [Brand Assets](#-brand-assets)
@@ -100,7 +104,7 @@ Join our community to discuss Adnify usage and development!
 - The Plan domain models requirements, task dependencies, execution state, artifacts, validation, and history independently from the UI, while reusing the same proven Agent kernel for each task.
 
 **State and Session**
-- Renderer-side stores manage UI state, threads, checkpoints, branches, and session lifecycle. A single-writer SQLite worker persists long-running sessions, while hot/cold message windows keep memory usage predictable.
+- Renderer-side stores manage UI state, threads, checkpoints, branches, and session lifecycle. A dedicated session-storage process persists SQLite history, while hot/cold message windows bound the amount of history loaded into the UI.
 
 **Frontend Services**
 - Lightweight client services in the renderer coordinate terminal UX, completions, workspace/session helpers, and requests that cross into Electron APIs.
@@ -118,18 +122,18 @@ Join our community to discuss Adnify usage and development!
 - `src/shared` contains cross-process types, config, utilities, and shared error definitions used by both renderer and main code.
 
 **Main Process Services**
-- `src/main` owns privileged capabilities: window/app lifecycle, filesystem and shell boundaries, LLM backends, MCP backends, LSP management, indexing, and auxiliary desktop services.
+- `src/main` owns window/app lifecycle, filesystem and shell permissions, command scheduling, LLM and MCP backends, LSP management, notifications, and coordination of isolated services.
 
-**Indexing Worker**
-- `src/main/indexing/indexer.worker.ts` moves indexing work onto a Node worker thread so parsing, embedding, and vector-store updates do not block the Electron main thread.
+**Isolated Service Processes**
+- Code indexing, session storage, asset storage, and content processing run in Electron utility processes started on demand. Each workspace has an index service shared by its windows; parsing and SQLite workers run inside that service. See [Process Isolation](docs/process-isolation.md).
 
 ### Concurrency Advantages
 
 **Process Isolation**
 - The renderer stays focused on UX and orchestration, while the main process contains privileged operations behind explicit IPC boundaries.
 
-**Threaded Work**
-- Heavy background work is split between renderer workers and a dedicated Node indexing worker, so expensive tasks do not stall the app shell.
+**Background Work**
+- Renderer workers handle UI-side computation, while service processes handle indexing, databases, embeddings, and large-document parsing. Service startup, deadlines, shutdown, and recovery share a managed lifecycle.
 
 **Operational Safety**
 - The preload bridge, shared contracts, and main-process security layers keep capability exposure narrow and auditable.
@@ -182,6 +186,41 @@ Adnify intentionally exposes two modes. The former standalone Chat mode has been
 
 ![Agent tools](images/tool.png)
 
+### 🎬 Asset Generation and Library
+
+- **Bring your own service**: connect HTTP JSON APIs for images, video, audio, and files under Settings → Extensions → Asset Capabilities. Generate a configuration draft from API documentation, edit it manually, or import JSON.
+- **Generate within a task**: enabled capabilities become Agent tools, including reference-image inputs when supported by the service. Synchronous results and asynchronous jobs are supported, with pending status checks restored after restart.
+- **Preview and reuse results**: enlarge images, switch between outputs, play video and audio, locate files, and export from the conversation. Browse saved results and reference-image history in the asset library.
+- **Control storage**: choose global or project-specific output directories and retry failed downloads without regenerating assets. Credentials use secure storage and are excluded from configuration exports.
+
+See [Asset Capabilities](docs/asset-capabilities.md) for setup and API examples.
+
+### 🌐 Browser Verification and Device Preview
+
+- **Verify frontend changes in the editor**: the Agent can open a development preview or HTTP(S) page, inspect the DOM, styles, layout, console, and network diagnostics, and capture screenshots for a configured vision model.
+- **Interact with the page**: click, fill forms, press keys, scroll, navigate, and wait for elements to appear as part of a verification task.
+- **Check responsive layouts**: switch between desktop, phone, and tablet views, including portrait and landscape. Device changes preserve the page and form input, and the preview scales to fit the panel.
+- **Keep project sessions separate**: each project has persistent browser storage shared by its windows. Different projects remain isolated even when using the same localhost address.
+
+Device emulation uses Chromium. After upgrading to project-specific sessions, sign in again in each project's preview. See [Browser Preview](docs/browser-preview.md).
+
+### ⚙️ Execution Management and Service Hosting
+
+- **One view across windows**: open the execution manager from the terminal panel or Settings → Editor to inspect commands, background services, terminal sessions, capacity usage, waiting reasons, and exit codes.
+- **Manage work and history**: cancel queued commands, stop running jobs, view or export logs, and pin or delete archived output. Saved history remains available after restarting the app.
+- **Host development services**: explicitly host a running local background service to keep it available after all windows close, with controls in the system tray. Quitting Adnify stops hosted services; restarting restores logs without restarting the service.
+- **Set resource limits**: configure concurrency and queues by window and task, plus output, disk-log, and history budgets. Ordinary commands and background services have separate budgets; history does not consume process slots.
+- **Reclaim selected idle sessions**: mark a local Agent terminal disposable to permit idle recycling. Manually controlled, occupied, unknown, and child-bearing sessions remain protected.
+
+### 🔔 Notifications and Background Tasks
+
+- **Choose what needs attention**: use recommended alerts, task-results-only, or selected events for completion, failures, input requests, approvals, Plan execution, indexing, and assets. System notifications support background-window-only delivery and opening the related conversation.
+- **Send results to your tools**: configure up to five generic webhook channels with event filters, headers, JSON message templates, and test delivery. Messages contain event summaries; webhook configuration is encrypted and kept out of ordinary settings exports.
+- **Follow long-running work**: taskbar or Dock progress reflects Agent and Plan activity where supported. Optional sleep prevention applies while tasks run, and wake-up checks report selected-model endpoint reachability and existing MCP connection status.
+- **Investigate performance**: export process memory snapshots or capture a ten-second trace under Settings → Logs & Diagnostics to correlate resource usage with windows and service processes.
+
+Setup details: [Notifications](docs/notifications.md), [Background Tasks](docs/background-tasks.md), and [Performance Diagnostics](docs/performance-diagnostics.md).
+
 ### 🧩 Open AI Ecosystem
 
 - **Skills**: install from the marketplace or GitHub, create project/global instruction packages, and load them automatically or explicitly.
@@ -193,9 +232,11 @@ Adnify intentionally exposes two modes. The former standalone Chat mode has been
 
 - **Governed planning, not a longer prompt**: Plan Mode turns requirements into an inspectable task graph, requires a plan review, projects execution onto a live TaskBoard, and ends with explicit result validation.
 - **Real task orchestration**: dependency scheduling, bounded concurrency, per-task role/model selection, artifact contracts, isolated task threads, and consolidated results are built into the runtime.
+- **Worktree isolation for concurrent edits**: writable parallel tasks use separate Git checkouts and branches, with a merge queue and recovery controls for conflicts. See [Worktree Execution Lanes](docs/worktree-lane-architecture.md).
 - **Long-session architecture**: four-level context compression, summary/handoff, SQLite-backed thread persistence, and hot/cold message loading keep extended work usable.
 - **Reliable terminal state**: OSC 633 shell integration captures command boundaries and exit codes, with a piped-shell fallback when native integration is unavailable.
-- **Built-in local app preview**: automatically detects dev servers, probes candidate ports, and opens local pages in protected Webview tabs with a Local Servers panel.
+- **Implementation through verification**: generate assets, edit the frontend, and inspect or interact with its live preview in the same task, including phone and tablet layouts.
+- **Visible background execution**: manage commands and hosted services across windows, preserve their logs, and receive completion or approval alerts through system notifications and webhooks.
 - **Resilient editing**: nine matching strategies handle formatting drift; streaming diffs, checkpoints, and thread branches make changes reviewable and reversible.
 - **Execution verification**: Agent tasks can use LSP diagnostics and project commands to validate their own changes before reporting completion.
 
@@ -227,6 +268,7 @@ Adnify intentionally exposes two modes. The former standalone Chat mode has been
 - **Local Server Preview**:
   - Detects dev-server URLs and candidate ports from terminal activity
   - Opens local applications in isolated Webview tabs and tracks them in a Local Servers panel
+  - Supports Agent browser inspection and interaction, phone/tablet layouts, and persistent sessions isolated by project
 - **Git Version Control**: 
   - Complete Git operation interface with change management, commit history, diff view
   - Visual branch management and conflict resolution
@@ -272,12 +314,12 @@ Adnify intentionally exposes two modes. The former standalone Chat mode has been
 
 | Tool | Version | Notes |
 |------|---------|--------|
-| **Node.js** | **24.19.0+** (`^24.19.0`) | Active LTS baseline **24.19.0** (pinned in `.nvmrc`). Allows newer 24.x patches; rejects Node 22 and 25+ (Node 26 breaks Electron’s `extract-zip` install). |
-| **pnpm** | **9.15.9** (exact) | Must match `packageManager` / `engines.pnpm`. Prefer [Corepack](https://nodejs.org/api/corepack.html): `corepack enable`. |
+| **Node.js** | **24.19.0+ within 24.x** (`^24.19.0`) | Repository baseline pinned in `.nvmrc` and `.node-version`; Node 22 and 25+ are outside the supported engine range. |
+| **pnpm** | **11.22.0** (exact) | Must match `packageManager` / `engines.pnpm`. Enable Corepack with `corepack enable`. |
 | Git | any recent | — |
 | Python | optional | Needed only when native addons must compile from source |
 
-`engines`, `.npmrc` (`engine-strict`, `package-manager-strict-version`), and `preinstall` (`scripts/ensure-pnpm.js`) reject the wrong Node, non-pnpm clients, or a mismatched pnpm version at install time. If your shell is still on Node 22 or 26, `pnpm install` will fail until you switch to **24.19.0+** via `.nvmrc`.
+The `engines` and `packageManager` fields in `package.json` declare the required versions, while `preinstall` (`scripts/ensure-pnpm.js`) rejects other package managers. Use the pinned Node version and pnpm **11.22.0** before installing.
 
 ### Development Environment
 
@@ -462,7 +504,7 @@ adnify/
 │   │   ├── lsp/         # LSP service gateway and lifecycle governance
 │   │   ├── memory/      # AI memory pool and multi-level caching engine
 │   │   ├── security/    # Sandbox isolation and terminal whitelist defense net
-│   │   ├── indexing/    # Global codebase parsing chain (Chunker, Embedding, LanceDB)
+│   │   ├── indexing/    # Per-workspace index service process (parsing, embeddings, LanceDB)
 │   │   └── services/    # Core main stack subsystems
 │   │       ├── agent/   # Agent log analysis and auto-correction
 │   │       ├── debugger/# Node/VSCode protocol deep debugging core
@@ -495,8 +537,9 @@ adnify/
 
 ## 🛠 Tech Stack
 
-- **Framework**: Electron 39 + React 18 + TypeScript 5
-- **Build**: Vite 6 + electron-builder
+- **Framework**: Electron 43.6.0 + React 18 + TypeScript 5
+- **Build**: Vite 8 + electron-builder; pnpm 11.22.0
+- **Process Architecture**: Electron utility processes for code indexing, session/asset storage, and content processing
 - **Editor**: Monaco Editor
 - **Terminal**: xterm.js + node-pty + WebGL Addon
 - **State Management**: Zustand

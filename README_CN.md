@@ -12,17 +12,17 @@
 
   <p>
     <a href="https://github.com/ad-naan/adnify"><img src="https://img.shields.io/github/stars/ad-naan/adnify?logo=github&color=181717" alt="GitHub" /></a>
-    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-150%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
+    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-156%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
     <a href="https://atomgit.com/adnaan/adnify"><img src="images/atomgit-badge.svg" alt="AtomGit" /></a>
     <a href="https://deepwiki.com/ad-naan/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
     <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
-    <img src="https://img.shields.io/badge/Electron-39.0-blueviolet" alt="Electron 39.0" />
+    <img src="https://img.shields.io/badge/Electron-43.6.0-blueviolet" alt="Electron 43.6.0" />
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
-    <img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript 5.0" />
+    <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
 </div>
 
-Adnify 不只是给编辑器加上一个聊天侧栏。它把完整的代码工作区与两套明确的 AI 工作流结合起来：使用 **Agent Mode** 直接分析和实现，或使用 **Plan Mode** 澄清需求、审查任务图、按依赖执行并验收结果。
+Adnify 将代码编辑、AI 执行、素材生成和浏览器验证放进同一个桌面工作区。使用 **Agent Mode** 直接分析和实现，或使用 **Plan Mode** 澄清需求、审查任务图、按依赖执行并验收结果；跨窗口管理命令和后台服务，通过系统通知或自己的 Webhook 接收工具获取任务结果。
 
 <!-- 主界面演示 -->
 <div align="center">
@@ -67,6 +67,10 @@ Adnify 不只是给编辑器加上一个聊天侧栏。它把完整的代码工�
 
 - [架构设计](#-架构设计)
 - [核心特性](#-核心特性)
+- [素材生成](#-素材生成与素材库)
+- [浏览器验证](#-浏览器验证与多设备预览)
+- [执行管理](#-执行管理与服务托管)
+- [通知与后台任务](#-通知推送与后台任务)
 - [为什么选择 Adnify](#-为什么选择-adnify)
 - [快速开始](#-快速开始)
 - [品牌素材](#-品牌素材)
@@ -97,7 +101,7 @@ Adnify 不只是给编辑器加上一个聊天侧栏。它把完整的代码工�
 - Plan 领域层独立管理需求、任务依赖、执行状态、产物、验收和历史记录；每个任务复用经过验证的 Agent 内核运行。
 
 **状态与会话**
-- 渲染侧 stores 管理 UI 状态、任务线程、检查点、分支和会话生命周期。单写入 SQLite Worker 负责持久化，冷热消息窗口则让长会话保持可控的内存占用。
+- 渲染侧 stores 管理 UI 状态、任务线程、检查点、分支和会话生命周期。独立会话存储进程持久化 SQLite 历史，冷热消息窗口限制界面加载的历史消息量。
 
 **前端服务**
 - 渲染进程中的轻量服务负责终端体验、补全、workspace/session 辅助能力, 并统一发起跨 Electron 边界的请求。
@@ -115,18 +119,18 @@ Adnify 不只是给编辑器加上一个聊天侧栏。它把完整的代码工�
 - `src/shared` 存放跨进程复用的类型、配置、工具函数以及共享错误定义。
 
 **主进程服务**
-- `src/main` 负责窗口与应用生命周期、文件系统和 shell 安全边界、LLM 后端、MCP 后端、LSP 管理、索引能力以及其他桌面端辅助服务。
+- `src/main` 负责窗口与应用生命周期、文件系统和 shell 权限、命令调度、LLM 与 MCP 后端、LSP 管理、通知及独立服务的协调。
 
-**索引 Worker**
-- `src/main/indexing/indexer.worker.ts` 将索引工作放到独立 Node worker 线程中, 避免解析、embedding 和向量库更新阻塞 Electron 主线程。
+**独立服务进程**
+- 代码索引、会话存储、素材存储和内容处理通过 Electron utility process 按需启动。同工作区的多个窗口共用索引服务，解析和 SQLite Worker 在该服务内部运行。详见[进程隔离](docs/process-isolation.md)。
 
 ### 并发处理优势
 
 **进程隔离**
 - renderer 专注交互与编排, main process 通过明确的 IPC 边界承载特权操作。
 
-**线程分工**
-- 重任务会拆分到 renderer workers 和独立的 Node 索引 worker 中执行, 避免拖慢应用外壳与 UI 响应。
+**后台任务分工**
+- renderer workers 承担界面侧计算，独立服务进程负责索引、数据库、嵌入计算和大文档解析，并统一管理启动、超时、退出和异常恢复。
 
 **运行安全**
 - preload bridge、共享契约和主进程安全层共同收窄能力暴露面, 让系统边界更清晰也更易审计。
@@ -179,6 +183,41 @@ Adnify 只保留两种工作模式。原有独立 Chat 模式已合并进 Agent�
 
 ![Agent 工具](images/tool.png)
 
+### 🎬 素材生成与素材库
+
+- **接入自己的服务**：在「设置 → 扩展 → 素材能力」中连接图片、视频、音频或文件的 HTTP JSON API，可根据接口文档生成配置草稿，也支持手动编辑与 JSON 导入。
+- **在任务中生成素材**：启用后的能力可由 Agent 直接调用，按服务能力传入参考图；支持同步结果和异步任务，重启后可恢复未完成任务的状态查询。
+- **预览和复用结果**：在会话中放大图片、切换多份结果、播放视频和音频、定位文件或导出，在素材库中浏览已保存的结果与参考图历史。
+- **控制保存位置**：支持全局或项目专属输出目录，下载失败可单独重试，无需重新生成；密钥使用安全存储，配置导出不包含密钥。
+
+配置方式与接口示例见[素材能力](docs/asset-capabilities.md)。
+
+### 🌐 浏览器验证与多设备预览
+
+- **直接验证前端修改**：Agent 可打开开发预览或 HTTP(S) 页面，检查 DOM、样式、布局、控制台和网络诊断，并截图交给已配置的视觉模型分析。
+- **操作真实页面**：支持点击、填写表单、按键、滚动、导航和等待元素出现，将页面交互纳入验证流程。
+- **检查响应式布局**：切换桌面、手机和平板视图，支持横竖屏；切换时保留页面和表单内容，预览会自动缩放以适应面板。
+- **项目登录态隔离**：每个项目拥有独立的持久浏览器存储，同项目多窗口共享登录态，不同项目使用相同 localhost 地址也不会串用数据。
+
+设备模拟基于 Chromium。升级到项目独立会话后，各项目预览首次使用需要重新登录。详见[浏览器预览](docs/browser-preview.md)。
+
+### ⚙️ 执行管理与服务托管
+
+- **跨窗口集中查看**：从终端面板或「设置 → 编辑器」打开执行管理器，查看命令、后台服务、终端会话、容量占用、等待原因和退出码。
+- **管理运行与历史**：取消排队、停止作业、查看或导出日志，固定保留或删除历史归档；重启应用后仍可查看已保存的输出。
+- **托管开发服务**：可显式托管运行中的本地后台服务，关闭所有窗口后仍通过系统托盘管理。退出 Adnify 会停止托管服务，重启只恢复日志，不自动重启服务。
+- **设置资源限额**：按窗口和任务配置并发、队列，以及输出、磁盘日志和历史预算；普通命令与后台服务分别计量，历史记录不占进程名额。
+- **回收选定的空闲会话**：将本地 Agent 终端标记为可丢弃后，才允许空闲回收；人工接管、仍被占用、状态未知或有子进程的会话会保留。
+
+### 🔔 通知推送与后台任务
+
+- **选择需要关注的事件**：使用「推荐提醒」「仅任务结果」或指定事件，接收完成、失败、等待输入、审批、Plan、索引和素材事件；系统通知支持仅后台窗口提醒，并可点击返回对应会话。
+- **将结果推送到自己的工具**：最多配置 5 个通用 Webhook 通道，支持事件筛选、请求头、JSON 消息模板和测试发送。推送内容为事件摘要，Webhook 配置加密保存，不随普通设置导出。
+- **跟进长时间任务**：在系统支持时显示任务栏或 Dock 进度，可选在任务执行期间防止自动休眠；唤醒后检查当前模型服务地址可达性与已有 MCP 连接状态。
+- **定位性能问题**：在「设置 → 日志与诊断」导出进程内存快照或采集 10 秒性能记录，将资源占用关联到窗口和独立服务进程。
+
+使用说明：[通知与外部推送](docs/notifications.md)、[后台任务](docs/background-tasks.md)、[性能诊断](docs/performance-diagnostics.md)。
+
 ### 🧩 开放的 AI 生态
 
 - **Skills**：从市场或 GitHub 安装，创建项目级/全局指令包，并支持自动或显式加载。
@@ -190,9 +229,11 @@ Adnify 只保留两种工作模式。原有独立 Chat 模式已合并进 Agent�
 
 - **真正受控的规划流程**：Plan Mode 不是更长的提示词，而是可审查的任务图、执行前确认、实时 TaskBoard 和最终结果验收。
 - **真实的任务编排**：内置依赖调度、并发上限、任务级角色/模型选择、产物契约、隔离任务线程和结果汇总。
+- **并发修改的 worktree 隔离**：可写并行任务使用独立 Git 检出与分支，通过合并队列回收结果，并提供冲突恢复操作。详见[Worktree 执行车道](docs/worktree-lane-architecture.md)。
 - **面向长会话的架构**：四级上下文压缩、摘要/Handoff、SQLite 任务线程持久化以及冷热消息加载共同支撑长周期工作。
 - **可信的终端状态**：OSC 633 Shell Integration 捕获命令边界和退出码，不支持原生集成时自动降级到管道 Shell 方案。
-- **内置本地应用预览**：自动识别开发服务器、探测候选端口，并在受保护的 Webview 标签页中打开页面，通过 Local Servers 面板集中管理。
+- **从实现到页面验证**：在同一任务中生成素材、修改前端并检查或操作实时预览，覆盖手机和平板布局。
+- **可查看和管理的后台执行**：跨窗口管理命令和托管服务、保留输出日志，并通过系统通知或 Webhook 接收完成与审批提醒。
 - **高容错代码编辑**：九种匹配策略应对格式漂移，配合流式 Diff、检查点和任务线程分支，使修改可审查、可恢复。
 - **执行后验证**：Agent 可调用 LSP 诊断与项目命令验证修改，再汇报最终结果。
 
@@ -224,6 +265,7 @@ Adnify 只保留两种工作模式。原有独立 Chat 模式已合并进 Agent�
 - **本地服务预览**:
   - 从终端活动中识别开发服务器地址和候选端口
   - 在隔离的 Webview 标签页中打开本地应用，并通过 Local Servers 面板统一管理
+  - 支持 Agent 页面检查与交互、手机和平板布局，以及按项目隔离的持久会话
 - **Git 版本控制**: 
   - 完整的 Git 操作界面，变更管理、提交历史、Diff 视图
   - 可视化分支管理、冲突解决
@@ -269,12 +311,12 @@ Adnify 只保留两种工作模式。原有独立 Chat 模式已合并进 Agent�
 
 | 工具 | 版本 | 说明 |
 |------|------|------|
-| **Node.js** | **24.19.0+**（`^24.19.0`） | Active LTS 基线 **24.19.0**（钉在 `.nvmrc`）。允许更新的 24.x 补丁；拒绝 Node 22 与 25+（Node 26 会导致 Electron `extract-zip` 安装失败）。 |
-| **pnpm** | **9.15.9**（精确） | 与 `packageManager` / `engines.pnpm` 完全一致。推荐 [Corepack](https://nodejs.org/api/corepack.html)：`corepack enable`。 |
+| **Node.js** | **24.x 中的 24.19.0+**（`^24.19.0`） | 仓库基线钉在 `.nvmrc` 和 `.node-version`，Node 22 与 25+ 不在支持的引擎版本范围内。 |
+| **pnpm** | **11.22.0**（精确） | 与 `packageManager` / `engines.pnpm` 完全一致，使用 `corepack enable` 启用 Corepack。 |
 | Git | 较新版本即可 | — |
 | Python | 可选 | 仅在需要从源码编译原生模块时需要 |
 
-`package.json` 的 `engines`、`.npmrc` 的 `engine-strict` / `package-manager-strict-version`，以及 `preinstall`（`scripts/ensure-pnpm.js`）会在安装时拦截：错误的 Node、非 pnpm、或 pnpm 版本不一致。本机若仍是 Node 22 或 26，`pnpm install` 会直接失败——先按 `.nvmrc` 切到 **24.19.0+**。
+`package.json` 的 `engines` 和 `packageManager` 声明了所需版本，`preinstall`（`scripts/ensure-pnpm.js`）会拦截其他包管理器。安装前请切换到仓库指定的 Node 版本和 pnpm **11.22.0**。
 
 ### 开发环境运行
 
@@ -459,7 +501,7 @@ adnify/
 │   │   ├── lsp/         # LSP 服务网关及生命周期治理
 │   │   ├── memory/      # AI 记忆池及长期/短期上下文缓存引擎
 │   │   ├── security/    # 沙盒越权拦截验证、多模态命令执行防御网
-│   │   ├── indexing/    # 全局代码库解析生成链 (Chunker、Embedding、LanceDB)
+│   │   ├── indexing/    # 按工作区隔离的索引服务进程（解析、Embedding、LanceDB）
 │   │   └── services/    # 核心总栈子系统
 │   │       ├── agent/   # 辅控层：Agent 日志分析与拦截纠错处理
 │   │       ├── debugger/# Node、VSCode 协议层深度调试模块
@@ -492,8 +534,9 @@ adnify/
 
 ## 🛠 技术栈
 
-- **框架**: Electron 39 + React 18 + TypeScript 5
-- **构建**: Vite 6 + electron-builder
+- **框架**: Electron 43.6.0 + React 18 + TypeScript 5
+- **构建**: Vite 8 + electron-builder；pnpm 11.22.0
+- **进程架构**: 代码索引、会话与素材存储、内容处理使用 Electron utility process
 - **编辑器**: Monaco Editor
 - **终端**: xterm.js + node-pty + WebGL Addon
 - **状态管理**: Zustand

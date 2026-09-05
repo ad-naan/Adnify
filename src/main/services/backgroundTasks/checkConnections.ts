@@ -22,9 +22,9 @@ export async function checkModelEndpoint(model: BackgroundTaskActivity['model'])
 }
 
 let pendingMcpCheck: Promise<McpConnectionCheck> | undefined
-export async function checkConnections(model: BackgroundTaskActivity['model']): Promise<ConnectionReport> {
+export async function checkConnections(model: BackgroundTaskActivity['model'], checkMcp: () => Promise<McpConnectionCheck>): Promise<ConnectionReport> {
   // MCP is shared by windows; waking several windows must not ping each server repeatedly.
-  pendingMcpCheck ??= import('../mcp/McpManager').then(({ mcpManager }) => mcpManager.checkConnections())
+  pendingMcpCheck ??= Promise.resolve().then(checkMcp)
     .finally(() => { pendingMcpCheck = undefined })
   const [modelResult, mcpResult] = await Promise.allSettled([checkModelEndpoint(model), pendingMcpCheck])
   return {

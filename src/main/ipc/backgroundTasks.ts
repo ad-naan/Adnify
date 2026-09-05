@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { safeIpcHandle } from './safeHandle'
 import { backgroundTaskService } from '../services/backgroundTasks/BackgroundTaskService'
 import { checkConnections } from '../services/backgroundTasks/checkConnections'
+import { mcpManager } from '../services/mcp'
 
 const activitySchema = z.object({
   state: z.enum(['idle', 'running', 'paused', 'error']),
@@ -23,7 +24,8 @@ export function registerBackgroundTaskHandlers(preferences: {
   get(key: 'backgroundTaskSettings'): unknown
   onDidChange(key: 'backgroundTaskSettings', callback: () => void): () => void
 }): void {
-  backgroundTaskService.start(() => preferences.get('backgroundTaskSettings'), checkConnections)
+  backgroundTaskService.start(() => preferences.get('backgroundTaskSettings'), model =>
+    checkConnections(model, () => mcpManager.checkConnections()))
   unsubscribeSettings = preferences.onDidChange('backgroundTaskSettings', () => backgroundTaskService.refresh())
   safeIpcHandle('backgroundTasks:update', (event, raw: unknown) => {
     backgroundTaskService.update(owner(event), activitySchema.parse(raw))

@@ -1,10 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkModelEndpoint } from '@main/services/backgroundTasks/checkConnections'
+import { checkModelEndpoint, checkConnections } from '@main/services/backgroundTasks/checkConnections'
+import type { McpConnectionCheck } from '@shared/types/backgroundTasks'
 import { normalizeBackgroundTaskSettings } from '@shared/types/backgroundTasks'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('wake connection probes', () => {
+  it('shares one MCP probe across simultaneous window checks and permits a fresh later check', async () => {
+    let resolve!: (value: McpConnectionCheck) => void
+    const probe = vi.fn(() => new Promise<McpConnectionCheck>(done => { resolve = done }))
+    const first = checkConnections(undefined, probe)
+    const second = checkConnections(undefined, probe)
+    await Promise.resolve()
+    expect(probe).toHaveBeenCalledOnce()
+    resolve({ checked: 2, failed: [] })
+    expect((await first).mcp.checked).toBe(2)
+    expect((await second).mcp.checked).toBe(2)
+    const third = checkConnections(undefined, probe)
+    await Promise.resolve()
+    expect(probe).toHaveBeenCalledTimes(2)
+    resolve({ checked: 1, failed: [] }); await third
+  })
+  it('reports a failed MCP probe without hiding model reachability', async () => {
+    const result = await checkConnections(undefined, () => { throw new Error('offline') })
+    expect(result).toMatchObject({ model: 'unconfigured', checkFailed: true, mcp: { checked: 0, failed: [] } })
+  })
   it('sends no credentials, strips query tokens, and never follows redirects', async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 401 }))
     vi.stubGlobal('fetch', fetch)

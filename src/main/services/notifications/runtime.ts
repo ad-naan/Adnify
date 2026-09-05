@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import { createScopedStore, getUserConfigDir } from '../configPath'
 import { mainEditorEvents } from './events'
 import { NotificationService, webhookAccepts } from './NotificationService'
-import { defaultNotificationSettings, notificationSettingsSchema } from './config'
+import { defaultNotificationSettings, editorEventSchema, notificationSettingsSchema } from './config'
 import { sendWebhook } from './webhook'
 import {
   matchesNotification,
@@ -25,6 +25,7 @@ export class NotificationRuntime {
   private store = createScopedStore('notifications')
   private historyPath = path.join(getUserConfigDir(), 'notification-history.json')
   private saveTimer?: ReturnType<typeof setTimeout>
+  private updateTimer?: ReturnType<typeof setTimeout>
   private writing = Promise.resolve()
   private unsubscribe?: () => void
   private webhookDisposers: Array<() => void> = []
@@ -46,7 +47,6 @@ export class NotificationRuntime {
       const raw = JSON.parse(await fs.readFile(this.historyPath, 'utf8'))
       if (Array.isArray(raw)) {
         // Disk state is bounded and must not introduce arbitrary properties on events.
-        const { editorEventSchema } = await import('./config')
         const records: NotificationRecord[] = []
         for (const item of raw.slice(0, 200)) {
           const { id, timestamp, windowId: _windowId, workspace, ...input } = item.event ?? {}
@@ -150,6 +150,13 @@ export class NotificationRuntime {
     return snapshot
   }
   private changed(): void {
+    // Invalidate history without broadcasting records or generating application toast cards.
+    this.updateTimer ??= setTimeout(() => {
+      this.updateTimer = undefined
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('notifications:changed')
+      }
+    }, 100)
     clearTimeout(this.saveTimer)
     this.saveTimer = setTimeout(() => this.persist(), 300)
   }
@@ -235,6 +242,7 @@ export class NotificationRuntime {
     })
   }
   async stop(): Promise<void> {
+    clearTimeout(this.updateTimer)
     this.unsubscribe?.()
     this.service.stop()
     for (const notification of this.native) notification.close()

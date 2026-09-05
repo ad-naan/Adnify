@@ -3,6 +3,21 @@
  */
 
 export const zh = {
+  'messageCenter.title': '消息中心',
+  'messageCenter.unreadCount': '消息中心，{count} 条未读',
+  'messageCenter.tabs': '消息分类',
+  'messageCenter.local': '编辑器消息',
+  'messageCenter.events': '任务事件',
+  'messageCenter.unread': '只看未读',
+  'messageCenter.readAll': '全部标记已读',
+  'messageCenter.clear': '清空当前列表',
+  'messageCenter.empty': '暂无消息记录',
+  'messageCenter.failed': '消息历史读取或更新失败。',
+  'messageCenter.retry': '重新加载消息历史',
+  'messageCenter.delivery.pending': '发送中',
+  'messageCenter.delivery.delivered': '已送达',
+  'messageCenter.delivery.failed': '发送失败',
+  'messageCenter.delivery.skipped': '已跳过',
   // Terminal execution and output archive
   'execution.capacity.commands': "全局普通命令并发",
   'execution.capacity.commandsPerWindow': "每窗口普通命令并发",

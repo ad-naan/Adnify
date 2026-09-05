@@ -69,6 +69,188 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.67",
+    "rawVersion": "1.7.67",
+    "date": "2026-09-06",
+    "title": "执行管理、通知推送与多设备预览",
+    "titleEn": "Execution Management, Notifications & Device Preview",
+    "highlight": "新增执行管理器，集中查看跨窗口命令、后台服务和日志，支持服务托管与资源限额设置；任务完成、失败和待审批可通过系统通知或 Webhook 提醒。内嵌预览新增手机、平板与横竖屏切换，并按项目隔离登录态。后台任务支持任务栏进度、防休眠和唤醒后连接检查，同时新增性能诊断，将索引、存储与内容解析迁入独立进程。",
+    "highlightEn": "The new execution manager brings commands, background services, and logs from all windows together, with service hosting and configurable resource limits. System notifications and webhooks can report completion, failures, and pending approvals. Embedded previews gain phone and tablet modes, orientation switching, and project-isolated sign-in state. Background controls add taskbar progress, optional sleep prevention, and connection checks after wake, alongside performance diagnostics and separate processes for indexing, storage, and content parsing.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "执行管理与后台服务 / Execution Management and Background Services",
+        "labelEn": "Execution Management and Background Services",
+        "items": [
+          {
+            "title": "集中管理命令、服务与终端会话",
+            "titleEn": "Manage Commands, Services, and Terminal Sessions",
+            "details": [
+              "从终端面板或「设置 → 编辑器」打开执行管理器，查看各窗口的运行作业、等待原因、退出码和资源占用，并按命令、目录或任务筛选。",
+              "支持取消排队、停止运行、查看和导出输出；已结束命令进入历史归档，可固定保留或删除，重启应用后仍可查看已保存的日志。"
+            ],
+            "detailsEn": [
+              "Open the execution manager from the terminal panel or Settings → Editor to inspect jobs across windows, waiting reasons, exit codes, and resource usage, with filters for commands, directories, and tasks.",
+              "Cancel queued work, stop running jobs, and view or export output. Completed commands enter a history archive that can be pinned or deleted; saved logs remain available after restarting the app."
+            ]
+          },
+          {
+            "title": "按工作区托管后台服务",
+            "titleEn": "Host Background Services by Workspace",
+            "details": [
+              "运行中的本地后台服务可显式设为托管，关闭所有窗口后仍可通过系统托盘管理；退出 Adnify 会停止服务，重启只恢复日志，不自动重启服务。",
+              "同一工作区中具有相同服务标识和启动配置的请求可复用已有服务，减少多个窗口重复启动开发服务器。"
+            ],
+            "detailsEn": [
+              "Running local background services can be explicitly hosted and managed from the system tray after all windows close. Quitting Adnify stops them; restarting restores logs without automatically restarting services.",
+              "Requests with the same service key and launch configuration can reuse an existing service in the same workspace, reducing duplicate development servers across windows."
+            ]
+          },
+          {
+            "title": "可配置的并发、日志与空闲会话限额",
+            "titleEn": "Configurable Concurrency, Logs, and Idle Session Limits",
+            "details": [
+              "统一管理全局、窗口和任务的命令并发与排队额度，普通命令和后台服务分别计量；容量不足时按窗口和任务轮转排队，显示具体等待原因。",
+              "可调整排队超时、输出缓存、日志磁盘预算和历史数量，日志截断或保存异常会明确提示；历史记录不占运行进程名额。",
+              "空闲回收仅适用于用户明确标记为可丢弃的本地 Agent 会话，保留人工接管、状态未知、有子进程或仍被占用的终端；再次输入命令会撤销回收许可。"
+            ],
+            "detailsEn": [
+              "Configure global, per-window, and per-task command concurrency and queue limits. Commands and background services use separate budgets, with rotating admission across windows and tasks and specific waiting reasons.",
+              "Adjust queue deadlines, output buffers, disk log budgets, and history counts. Truncation and storage failures are reported, and historical records do not consume live process slots.",
+              "Idle recycling applies only to local Agent sessions explicitly marked disposable by the user. Manually controlled, unknown, child-bearing, or occupied terminals are retained; new command input revokes recycling permission."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "系统通知与外部推送 / System Notifications and Webhooks",
+        "labelEn": "System Notifications and Webhooks",
+        "items": [
+          {
+            "title": "按事件选择任务提醒",
+            "titleEn": "Choose Which Task Events Trigger Notifications",
+            "details": [
+              "新增「通知与外部推送」设置，支持任务完成、失败、等待输入、工具审批、Plan、索引、素材和应用连接等事件；提供「推荐提醒」「仅任务结果」及指定事件筛选。",
+              "系统通知支持仅在窗口处于后台时提醒、静音和冷却时间；点击通知可返回对应会话。通知使用系统原生界面，原有简短操作提示保留在底部状态栏。"
+            ],
+            "detailsEn": [
+              "New Notifications & Webhooks settings cover task completion, failures, input requests, approvals, Plan execution, indexing, assets, and app connections, with recommended, task-results-only, and selected-event presets.",
+              "System notifications support background-window-only delivery, silent mode, and cooldowns. Clicking a notification can return to its conversation. Notifications use the native OS surface, while brief operation feedback remains in the bottom status bar."
+            ]
+          },
+          {
+            "title": "连接自己的 Webhook 接收工具",
+            "titleEn": "Connect Your Own Webhook Receiver",
+            "details": [
+              "最多配置 5 个通用 Webhook 通道，每个通道可设置事件与级别筛选、请求头和 JSON 消息模板，并从设置中发送测试消息。",
+              "推送只发送事件摘要；接收地址、请求头和模板通过系统安全存储加密保存，不随普通设置导出。失败发送不会自动重试，避免重复提醒。"
+            ],
+            "detailsEn": [
+              "Configure up to five generic webhook channels, each with event and severity filters, headers, and a JSON message template, and send test messages from settings.",
+              "Push messages contain event summaries. Receiver URLs, headers, and templates are encrypted with OS-backed secure storage and excluded from ordinary settings exports. Failed deliveries are not retried automatically, avoiding duplicate alerts."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "多设备预览与项目会话隔离 / Device Preview and Project Session Isolation",
+        "labelEn": "Device Preview and Project Session Isolation",
+        "items": [
+          {
+            "title": "桌面、手机和平板预览",
+            "titleEn": "Desktop, Phone, and Tablet Preview",
+            "details": [
+              "预览工具栏新增手机和平板模式、横竖屏切换及自动适配面板的显示缩放，页面保留设备逻辑视口与像素密度，便于检查响应式布局。",
+              "切换设备不重新加载页面，保留表单内容，并保存设备和方向偏好；模拟基于 Chromium。"
+            ],
+            "detailsEn": [
+              "The preview toolbar adds phone and tablet modes, orientation switching, and scaling to fit the panel while preserving the device's logical viewport and pixel density for responsive layout checks.",
+              "Switching devices keeps the page loaded and preserves form content. Device and orientation preferences are saved; emulation uses Chromium."
+            ]
+          },
+          {
+            "title": "登录态按项目隔离",
+            "titleEn": "Isolate Sign-In State by Project",
+            "details": [
+              "每个项目使用独立的持久浏览器存储，同项目的多个窗口共享登录态，不同项目使用相同 localhost 地址也不会串用 Cookie 和本地存储。",
+              "升级后首次打开项目预览需重新登录：旧的全局预览存储保留，但不会自动复制到各项目的新会话。未关联项目的预览使用当前窗口的临时存储。"
+            ],
+            "detailsEn": [
+              "Each project uses separate persistent browser storage. Windows for the same project share sign-in state, while different projects using the same localhost address keep cookies and local storage separate.",
+              "Project previews require a fresh sign-in after upgrading: the old global preview storage is retained but is not automatically copied into the new project sessions. Previews without a project use temporary storage scoped to the current window."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "后台任务与性能诊断 / Background Tasks and Performance Diagnostics",
+        "labelEn": "Background Tasks and Performance Diagnostics",
+        "items": [
+          {
+            "title": "任务栏进度与唤醒后的连接检查",
+            "titleEn": "Taskbar Progress and Connection Checks After Wake",
+            "details": [
+              "新增「后台任务」设置，汇总当前窗口内 Agent、子任务和 Plan 的状态，在系统支持时显示任务栏或 Dock 进度、等待和失败状态。",
+              "可选在任务执行期间防止自动休眠，任务结束或等待确认后释放；电脑唤醒后可检查当前模型服务地址和已有 MCP 连接，并手动重新检查或重连失败的 MCP。模型地址可达不代表认证或推理成功。"
+            ],
+            "detailsEn": [
+              "New Background Tasks settings aggregate Agent, subtask, and Plan activity within the window and show taskbar or Dock progress, waiting, and failure states where supported by the OS.",
+              "Optional sleep prevention is active only while tasks run and is released when they finish or await confirmation. After wake, check the selected model endpoint and existing MCP connections, then manually recheck or reconnect failed MCP servers. Endpoint reachability does not establish authentication or inference success."
+            ]
+          },
+          {
+            "title": "导出内存快照与性能记录",
+            "titleEn": "Export Memory Snapshots and Performance Traces",
+            "details": [
+              "在「日志与诊断」中导出进程内存快照，或采集 10 秒性能记录，将 CPU、内存、窗口和独立服务进程关联起来，便于定位多窗口卡顿与异常。",
+              "诊断文件保存到用户选择的本地目录；原生内存分配分析为可选实验功能，采集后需重启应用。"
+            ],
+            "detailsEn": [
+              "Export process memory snapshots or capture a ten-second performance trace from Logs & Diagnostics, correlating CPU and memory usage with windows and service processes to investigate stalls and multi-window issues.",
+              "Reports are saved to a local directory selected by the user. Native allocation profiling is an optional experimental feature that requires an app restart after capture."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "进程隔离与设置整理 / Process Isolation and Settings Organization",
+        "labelEn": "Process Isolation and Settings Organization",
+        "items": [
+          {
+            "title": "索引、存储与内容解析迁入独立进程",
+            "titleEn": "Separate Processes for Indexing, Storage, and Content Parsing",
+            "details": [
+              "代码索引、会话存储、素材存储和文档内容处理改为按需启动的独立服务进程，减少主进程中的同步计算和数据库工作；同工作区多个窗口共用索引服务。",
+              "统一处理服务启动、请求超时、退出和异常恢复，后续请求可重新启动服务；失败的写入不会自动重放，空闲内容处理进程会回收。"
+            ],
+            "detailsEn": [
+              "Code indexing, session storage, asset storage, and document processing now run in separate services started on demand, moving synchronous computation and database work out of the main process. Windows for the same workspace share an index service.",
+              "Service startup, request deadlines, shutdown, and crash handling follow a shared lifecycle. Later requests can restart a service without automatically replaying failed writes, and idle content-processing services are reclaimed."
+            ]
+          },
+          {
+            "title": "拆分系统设置并补齐中英文文案",
+            "titleEn": "Organized System Settings and Bilingual Labels",
+            "details": [
+              "将网络与服务、数据与备份、日志与诊断、后台任务、通知与外部推送拆为独立设置入口，并完善设置搜索。",
+              "补齐通知事件、执行状态、等待原因和资源配置的中英文显示。"
+            ],
+            "detailsEn": [
+              "Network & Services, Data & Backup, Logs & Diagnostics, Background Tasks, and Notifications & Webhooks now have separate settings entries with updated search coverage.",
+              "Added Chinese and English labels for notification events, execution states, waiting reasons, and resource settings."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.66",
     "rawVersion": "1.7.66",
     "date": "2026-09-04",
@@ -76,8 +258,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Custom Asset Capabilities, Embedded Browser Automation & Conversation Stability",
     "highlight": "新增可接入自定义 API 的素材能力，让 Agent 生成并管理图片、视频、音频和文件；内嵌浏览器支持页面检查与交互，方便直接验证前端效果。工具详情统一为紧凑的无边框样式，子任务审批整合进现有 Dock，同时修复会话切换重放、首次用户消息空白和工具收纳时的滚动跳动。上下文压缩、代码诊断、终端与桌面运行时也得到改进。",
     "highlightEn": "Custom API-backed asset capabilities let the Agent generate and manage images, video, audio, and files. Embedded browser inspection and interaction enable direct verification of frontend changes. Tool details now share a compact borderless layout, and subtask approvals are integrated into the existing Dock. Fixes address replay when switching conversations, blank initial user messages, and scroll jumps when collapsing tools, alongside improvements to context compression, code diagnostics, terminals, and the desktop runtime.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",

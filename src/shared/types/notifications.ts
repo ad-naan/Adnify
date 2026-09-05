@@ -72,6 +72,8 @@ export interface NotificationAPI {
   activate: (id: string) => Promise<void>
   test: (channel: string, options?: { sound: boolean }) => Promise<{ success: boolean; error?: string }>
   onActivate: (callback: (event: EditorEvent) => void) => () => void
+  /** History invalidation only; this never asks the renderer to show a notification. */
+  onChanged: (callback: () => void) => () => void
 }
 
 export function matchesEvent(pattern: string, type: string): boolean {

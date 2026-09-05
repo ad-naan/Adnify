@@ -14,7 +14,6 @@ import {
   Maximize2,
   MessageSquare,
   Bug,
-  Volume2,
   Search,
   RefreshCw,
   Check,
@@ -27,8 +26,7 @@ import { indexWorkerService, type IndexProgress } from '@services/indexWorkerSer
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
-import { useInlineToast } from '../common/InlineToast'
-import { useHasElevatedToastLayer } from '../common/toastLayerStore'
+import InlineToastAnchor from '../common/InlineToastAnchor'
 import {
   useAgentStore,
   selectMessageCount,
@@ -46,6 +44,7 @@ import FileFormatControls from './FileFormatControls'
 import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
 import { toast } from '../common/ToastProvider'
 import AdministratorModeIndicator from './AdministratorModeIndicator'
+import NotificationCenterIndicator from './NotificationCenterIndicator'
 import { t } from '@shared/i18n'
 
 export default function StatusBar() {
@@ -178,14 +177,6 @@ export default function StatusBar() {
     }
     setSwitchingBranch(null)
   }, [language, refreshGitState, switchingBranch, workspacePath])
-
-  const { toasts, visibleIds } = useInlineToast()
-  const latestVisibleToastId = [...visibleIds].reverse().find(id => {
-    const toast = toasts.find(item => item.id === id)
-    return toast?.variant === 'inline'
-  })
-  const activeToast = latestVisibleToastId ? toasts.find(item => item.id === latestVisibleToastId) : null
-  const shouldEject = useHasElevatedToastLayer()
 
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)
   const version = useDiagnosticsStore(state => state.version)
@@ -584,24 +575,9 @@ export default function StatusBar() {
           </button>
         </div>
 
-        <div className="flex items-center h-full pr-1" role="status">
-          <AnimatePresence mode="wait">
-            {activeToast && !shouldEject && (
-              <motion.div
-                layoutId="adnify-dynamic-island"
-                key={activeToast.id}
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex items-center gap-1.5 whitespace-nowrap px-1 max-w-[320px]"
-              >
-                <Volume2 className="w-3.5 h-3.5 shrink-0 text-text-muted" />
-                <span className="text-[10.5px] text-text-primary font-medium truncate max-w-[260px]">
-                  {activeToast.message}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="flex items-center h-full pr-1">
+          <NotificationCenterIndicator language={language} scope={workspacePath || ''} />
+          <InlineToastAnchor />
         </div>
       </div>
     </div>

@@ -3,6 +3,21 @@
  */
 
 export const en = {
+  'messageCenter.title': 'Message center',
+  'messageCenter.unreadCount': 'Message center, {count} unread',
+  'messageCenter.tabs': 'Message categories',
+  'messageCenter.local': 'Editor messages',
+  'messageCenter.events': 'Task events',
+  'messageCenter.unread': 'Unread only',
+  'messageCenter.readAll': 'Mark all as read',
+  'messageCenter.clear': 'Clear current list',
+  'messageCenter.empty': 'No messages yet',
+  'messageCenter.failed': 'Message history could not be loaded or updated.',
+  'messageCenter.retry': 'Reload message history',
+  'messageCenter.delivery.pending': 'Sending',
+  'messageCenter.delivery.delivered': 'Delivered',
+  'messageCenter.delivery.failed': 'Failed',
+  'messageCenter.delivery.skipped': 'Skipped',
   // Terminal execution and output archive
   'execution.capacity.commands': "Global commands",
   'execution.capacity.commandsPerWindow': "Commands per window",

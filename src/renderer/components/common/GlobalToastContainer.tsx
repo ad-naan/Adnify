@@ -1,8 +1,11 @@
 import { useStore } from '@/renderer/store'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useInlineToast } from './InlineToast'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUpRight, Terminal, X } from 'lucide-react'
-import { useHasElevatedToastLayer } from './toastLayerStore'
+import { ArrowUpRight, Terminal, Volume2, X } from 'lucide-react'
+import { useHasElevatedToastLayer, useToastAnchor } from './toastLayerStore'
+import { useViewportRect } from './useViewportRect'
 import { Button } from '../ui'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type { ToastType } from './InlineToast'
@@ -19,8 +22,12 @@ export default function GlobalToastContainer() {
   const { toasts, visibleIds, dismissToast } = useInlineToast()
   const hasElevatedToastLayer = useHasElevatedToastLayer()
   const hasWorkspace = useStore((state) => (state.workspace?.roots.length ?? 0) > 0)
+  const anchor = useToastAnchor()
+  const anchorRect = useViewportRect(anchor)
+  const [cardElement, setCardElement] = useState<HTMLDivElement | null>(null)
+  const cardRect = useViewportRect(cardElement)
 
-  const shouldEject = hasElevatedToastLayer || !hasWorkspace
+  const shouldEject = hasElevatedToastLayer || !hasWorkspace || !anchor
 
   const visibleToasts = visibleIds
     .map((id) => toasts.find((toast) => toast.id === id) || null)
@@ -28,30 +35,42 @@ export default function GlobalToastContainer() {
   const activeInlineToast = [...visibleToasts].reverse().find((toast) => toast.variant === 'inline') || null
   const activeCardToast = [...visibleToasts].reverse().find((toast) => toast.variant === 'card') || null
 
-  return (
+  const target = shouldEject
+    ? {
+        right: 12,
+        bottom: 36 + ((cardRect?.height || 0) > 0 ? cardRect!.height + 8 : 0),
+        width: Math.min(window.innerWidth - 24, Math.max(240, anchorRect?.width || 320)),
+      }
+    : {
+        right: Math.max(0, (anchorRect?.viewportWidth || window.innerWidth) - (anchorRect?.right || window.innerWidth)),
+        bottom: Math.max(0, (anchorRect?.viewportHeight || window.innerHeight) - (anchorRect?.bottom || window.innerHeight)),
+        width: anchorRect?.width || 0,
+      }
+
+  return createPortal(
     <>
-      <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none flex flex-col items-center justify-start">
-        <AnimatePresence mode="wait">
-          {shouldEject && activeInlineToast && (
+        <AnimatePresence>
+          {activeInlineToast && (shouldEject || target.width > 0) && (
             <motion.div
-              layoutId="adnify-dynamic-island"
-              key={activeInlineToast.id}
-              initial={{ opacity: 0, y: -20, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.9 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-background-secondary/80 backdrop-blur-md border border-border/50 rounded-full shadow-lg pointer-events-auto cursor-pointer max-w-[400px]"
+              key="inline-toast"
+              data-inline-toast
+              data-toast-placement={shouldEject ? 'floating' : 'docked'}
+              role="status"
+              initial={{ ...target, opacity: 0 }}
+              animate={{ ...target, opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className={`fixed z-[9999] flex items-center gap-1.5 overflow-hidden pointer-events-none ${shouldEject ? 'rounded-full border border-border/50 bg-background-secondary/95 px-3 py-1.5 shadow-lg backdrop-blur-md' : 'h-6 px-1'}`}
             >
-              <OtterAsset asset={toastAssetByType[activeInlineToast.type]} className="h-5 w-5 shrink-0 object-contain" />
-              <span className="text-xs text-text-primary font-medium truncate">
+              <Volume2 className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <span className={`${shouldEject ? 'text-xs' : 'text-[10.5px]'} text-text-primary font-medium truncate`}>
                 {activeInlineToast.message}
               </span>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
 
-      <div className="fixed right-3 bottom-9 z-[9500] pointer-events-none">
+      <div ref={setCardElement} className="fixed right-3 bottom-9 z-[9500] pointer-events-none">
         <AnimatePresence mode="wait">
           {activeCardToast && (
             <motion.div
@@ -119,6 +138,6 @@ export default function GlobalToastContainer() {
           )}
         </AnimatePresence>
       </div>
-    </>
+    </>, document.body
   )
 }

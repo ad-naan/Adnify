@@ -674,6 +674,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notifications: {
     publish: events => invokeNotification('publish', events),
     history: () => invokeNotification('history'),
+    onChanged: callback => {
+      const listener = () => callback()
+      ipcRenderer.on('notifications:changed', listener)
+      return () => ipcRenderer.removeListener('notifications:changed', listener)
+    },
     settings: () => invokeNotification('settings'),
     saveSettings: settings => invokeNotification('saveSettings', settings),
     markRead: ids => invokeNotification('markRead', ids),

@@ -1,9 +1,19 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useSyncExternalStore } from 'react'
 
 type Listener = () => void
 
 let elevatedLayerCount = 0
 const listeners = new Set<Listener>()
+let toastAnchor: HTMLElement | null = null
+const anchorListeners = new Set<Listener>()
+export function setToastAnchor(element: HTMLElement | null): void {
+  toastAnchor = element
+  for (const listener of anchorListeners) listener()
+}
+const subscribeAnchor = (listener: Listener) => { anchorListeners.add(listener); return () => { anchorListeners.delete(listener) } }
+export function useToastAnchor(): HTMLElement | null {
+  return useSyncExternalStore(subscribeAnchor, () => toastAnchor, () => null)
+}
 
 function emitChange(): void {
   for (const listener of listeners) {
@@ -40,7 +50,7 @@ export function useHasElevatedToastLayer(): boolean {
 }
 
 export function useElevatedToastLayer(active: boolean = true): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) return
     return acquireElevatedToastLayer()
   }, [active])
