@@ -8,7 +8,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { createHash, randomUUID } from 'crypto'
-import type { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
 import { logger, normalizePath } from '@shared/utils'
 import { EmbeddingService } from './embedder'
@@ -21,7 +20,8 @@ import {
   EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk, IndexedChunk,
   DEFAULT_EMBEDDING_MODELS, DEFAULT_INDEX_CONFIG,
 } from './types'
-import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
+
+export interface IndexRuntimePaths { workspaceCachePath: string; modelCachePath: string }
 
 // Worker 消息类型
 interface WorkerStructuralResultMessage { type: 'structural_result'; requestId: number; chunks: CodeChunk[]; processed: number; total: number }
@@ -43,6 +43,7 @@ type WorkerBatchUpdateResultMessage =
 interface WorkerCompleteMessage { type: 'complete'; totalChunks: number }
 interface WorkerErrorMessage { type: 'error'; error: string; requestId?: number }
 type WorkerMessage =
+  | { type: 'embedding_request'; requestId: number; texts: string[]; config: EmbeddingConfig }
   | { type: 'progress'; processed: number; total: number; message?: string }
   | WorkerStructuralResultMessage
   | WorkerResultMessage
@@ -56,7 +57,7 @@ export class CodebaseIndexService {
   private workspacePath: string
   private workspaceCachePath: string
   private config: IndexConfig
-  private mainWindow: BrowserWindow | null = null
+  private onProgress?: (status: IndexStatus) => void
 
   // 结构化索引组件
   private bm25Index: BM25Index
@@ -67,6 +68,8 @@ export class CodebaseIndexService {
 
   // 语义索引组件（按需初始化）
   private embedder: EmbeddingService | null = null
+  private embeddingQueue: Promise<unknown> = Promise.resolve()
+  private embedderConfig = ''
   private vectorStore: VectorStoreService | null = null
   private semanticManifestValid = false
   private semanticVectorDimension: number | undefined
@@ -95,13 +98,13 @@ export class CodebaseIndexService {
   private lastProgressEmit = 0
   private readonly PROGRESS_THROTTLE_MS = 100
 
-  constructor(workspacePath: string, config?: Partial<IndexConfig>) {
+  constructor(workspacePath: string, config: Partial<IndexConfig> | undefined, paths: IndexRuntimePaths) {
     this.workspacePath = workspacePath
-    this.workspaceCachePath = getWorkspaceCacheDir(workspacePath)
-    this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
+    this.workspaceCachePath = paths.workspaceCachePath
+    this.config = { ...DEFAULT_INDEX_CONFIG, ...config, embedding: { ...DEFAULT_INDEX_CONFIG.embedding, ...config?.embedding } }
     // 注入缓存路径（用于 Worker 中的 Transformers.js）
     if (!this.config.embedding.cacheDir) {
-      this.config.embedding.cacheDir = path.join(getUserConfigDir(), 'models')
+      this.config.embedding.cacheDir = paths.modelCachePath
     }
     this.status.mode = this.config.mode
 
@@ -114,8 +117,8 @@ export class CodebaseIndexService {
 
   // ==================== 公共 API ====================
 
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
+  setProgressListener(listener: (status: IndexStatus) => void): void {
+    this.onProgress = listener
   }
 
   private get structuralIndexPath(): string {
@@ -401,6 +404,10 @@ export class CodebaseIndexService {
       await this.initSemanticComponents()
       await this.validateSemanticIndex()
     } else {
+      await this.embeddingQueue.catch(() => {})
+      await EmbeddingService.releaseLocalModel()
+      this.embedder = null
+      this.embedderConfig = ''
       await this.loadStructuralIndex()
     }
 
@@ -492,7 +499,7 @@ export class CodebaseIndexService {
       }
     }
 
-    const queryVector = await this.embedder.embed(query)
+    const [queryVector] = await this.embedTexts([query], this.config.embedding)
     return this.vectorStore.search(queryVector, topK)
   }
 
@@ -693,35 +700,48 @@ export class CodebaseIndexService {
       this.semanticManifestValid = false
       this.status.lastIndexedAt = undefined
     }
-    if (this.embedder) {
-      this.embedder.updateConfig(this.config.embedding)
-    }
   }
 
   /** 测试 Embedding 连接 */
   async testEmbeddingConnection(): Promise<{ success: boolean; error?: string; latency?: number }> {
-    if (!this.embedder) {
-      this.embedder = new EmbeddingService(this.config.embedding)
-    }
-    return this.embedder.testConnection()
+    const started = Date.now()
+    try {
+      await this.embedTexts(['test connection'], this.config.embedding)
+      return { success: true, latency: Date.now() - started }
+    } catch (error) { return { success: false, error: error instanceof Error ? error.message : String(error) } }
   }
 
-  destroy(): void {
+  private embedTexts(texts: string[], config: EmbeddingConfig): Promise<number[][]> {
+    const snapshot = { ...config }
+    const operation = this.embeddingQueue.catch(() => {}).then(() => {
+      if (this.destroyed) throw new Error('Index service destroyed')
+      const fingerprint = JSON.stringify(snapshot)
+      if (!this.embedder || fingerprint !== this.embedderConfig) {
+        this.embedder = new EmbeddingService(snapshot)
+        this.embedderConfig = fingerprint
+      }
+      return this.embedder.embedBatch(texts)
+    })
+    this.embeddingQueue = operation
+    return operation
+  }
+
+  async destroy(): Promise<void> {
     if (this.destroyed) return
     this.destroyed = true
     this.status.isIndexing = false
-    void this.structuralStore.close().catch(error => {
-      logger.index.warn('[IndexService] Failed to close structural index store:', error)
-    })
     const worker = this.worker
     this.worker = null
-    void worker?.terminate()
+    const terminated = worker?.terminate()
     const error = new Error('Index service destroyed')
     this.pendingIndexReject?.(error)
     this.pendingIndexResolve = null
     this.pendingIndexReject = null
     for (const pending of this.pendingWorkerUpdates.values()) pending.reject(error)
     this.pendingWorkerUpdates.clear()
+    await terminated
+    await this.mutationQueue.catch(() => {})
+    await this.structuralStore.close()
   }
 
   // ==================== 结构化索引 ====================
@@ -841,10 +861,18 @@ export class CodebaseIndexService {
   private initWorker(): void {
     try {
       const workerPath = path.join(__dirname, 'indexer.worker.js')
-      const worker = new Worker(workerPath)
+      const worker = new Worker(workerPath, { workerData: { resourcesPath: process.resourcesPath } })
       this.worker = worker
 
       worker.on('message', (message: WorkerMessage) => {
+        if (message.type === 'embedding_request') {
+          void this.embedTexts(message.texts, message.config).then(vectors => {
+            if (!this.destroyed && worker === this.worker) worker.postMessage({ type: 'embedding_result', requestId: message.requestId, vectors })
+          }, error => {
+            if (!this.destroyed && worker === this.worker) worker.postMessage({ type: 'embedding_result', requestId: message.requestId, error: error instanceof Error ? error.message : String(error) })
+          }).catch(() => {})
+          return
+        }
         // worker_threads does not await async event handlers. Chain messages so
         // vector-store writes are committed in the same order the worker emits
         // them, and `complete` cannot overtake an earlier result batch.
@@ -1107,62 +1135,6 @@ export class CodebaseIndexService {
     if (!force && now - this.lastProgressEmit < this.PROGRESS_THROTTLE_MS) return
     this.lastProgressEmit = now
 
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      try {
-        this.mainWindow.webContents.send('index:progress', this.status)
-      } catch { /* The renderer may close between the window check and progress delivery. */ }
-    }
-  }
-}
-
-// ==================== 实例管理 ====================
-
-const instances = new Map<string, CodebaseIndexService>()
-
-export function getIndexService(workspacePath: string): CodebaseIndexService {
-  const normalized = normalizePath(workspacePath)
-  let instance = instances.get(normalized)
-  if (!instance) {
-    instance = new CodebaseIndexService(workspacePath)
-    instances.set(normalized, instance)
-  }
-  return instance
-}
-
-export function initIndexServiceWithConfig(workspacePath: string, config: Partial<IndexConfig>): CodebaseIndexService {
-  const normalized = normalizePath(workspacePath)
-  let instance = instances.get(normalized)
-  if (!instance) {
-    instance = new CodebaseIndexService(workspacePath, config)
-    instances.set(normalized, instance)
-  } else {
-    // 更新现有实例的配置。
-    // setMode 走 mutationQueue，这里同步入队即可保证它排在随后的
-    // initialize()/indexWorkspace() 之前；但返回的 promise 必须接住 ——
-    // 不接的话 initSemanticComponents 的失败会变成主进程里的
-    // unhandledRejection，而这个函数的调用方（7 个 IPC 处理器）都不等它。
-    if (config.mode) {
-      void instance.setMode(config.mode).catch(error => {
-        logger.index.error('[IndexService] Failed to apply index mode:', error)
-      })
-    }
-    if (config.embedding) instance.updateEmbeddingConfig(config.embedding)
-  }
-  return instance
-}
-
-export function destroyIndexService(workspacePath?: string): void {
-  if (workspacePath) {
-    const normalized = normalizePath(workspacePath)
-    const instance = instances.get(normalized)
-    if (instance) {
-      instance.destroy()
-      instances.delete(normalized)
-    }
-  } else {
-    for (const instance of instances.values()) {
-      instance.destroy()
-    }
-    instances.clear()
+    this.onProgress?.({ ...this.status })
   }
 }

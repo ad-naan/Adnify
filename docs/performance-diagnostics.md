@@ -13,7 +13,9 @@
 
 采样默认每 30 秒进行一次，页面加载完成也会补采样；录制期间每秒采样。历史仅保存在内存中，最多 60 条。崩溃和无响应日志包含故障前最后一次匹配采样及当前采样，避免 renderer 退出后只能看到主进程内存。请依据 `sampledAt` 判断采样距故障的时间。
 
-进程以 `pid + creationTime` 区分，防止 PID 重用造成混淆。同一 renderer 承载多个页面时，只记录一份进程内存并列出所有页面；不能将该进程的内存重复加到每个页面上。不同进程的工作集也可能包含共享内存，因此不能简单相加当作应用独占内存。Node Worker 仍属于所在进程，不能从这些数据单独推断某个索引 Worker 的内存。
+进程以 `pid + creationTime` 区分，防止 PID 重用造成混淆。同一 renderer 承载多个页面时，只记录一份进程内存并列出所有页面；不能将该进程的内存重复加到每个页面上。不同进程的工作集也可能包含共享内存，因此不能简单相加当作应用独占内存。
+
+独立服务通过 `name` 标识：`Adnify Code Index`、`Adnify Session Storage`、`Adnify Asset Storage`、`Adnify Content Tools`。`serviceName` 是 Chromium 服务标识，可能相同，不能用于区分这些业务。索引的解析和 SQLite Worker 现在属于索引服务进程，其内存计入该 PID；仍不能单独推断每个 Worker 的内存。进程职责和验证方式见 [进程隔离](./process-isolation.md)。
 
 普通采样不记录页面标题、URL、工作区路径或页面内容。Chromium trace 可能包含 URL 和文件路径，分享前应检查内容。采集文件只保存在本地，不会自动上传。
 

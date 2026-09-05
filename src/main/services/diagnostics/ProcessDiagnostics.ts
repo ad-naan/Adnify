@@ -22,6 +22,7 @@ export interface ProcessMemorySnapshot {
     pid: number
     creationTime: number
     type: string
+    name?: string
     serviceName?: string
     cpuPercent: number
     workingSetMB: number
@@ -91,6 +92,7 @@ export class ProcessDiagnostics {
         pid: metric.pid,
         creationTime: metric.creationTime,
         type: metric.type,
+        name: metric.name,
         serviceName: metric.serviceName,
         cpuPercent: metric.cpu.percentCPUUsage,
         workingSetMB: mb(metric.memory.workingSetSize * 1024),

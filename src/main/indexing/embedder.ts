@@ -508,9 +508,36 @@ export class EmbeddingService {
    */
   private static transformersPipeline: any = null
   private static loadingPromise: Promise<any> | null = null
+  private static transformersModelKey = ''
+  private static transformersUseQueue: Promise<unknown> = Promise.resolve()
 
   private async embedTransformers(texts: string[]): Promise<number[][]> {
     const model = this.config.model || 'Xenova/all-MiniLM-L6-v2'
+    const cacheDir = this.config.cacheDir
+    const operation = EmbeddingService.transformersUseQueue.catch(() => {}).then(() => this.runTransformers(texts, model, cacheDir))
+    EmbeddingService.transformersUseQueue = operation
+    return operation
+  }
+
+  static releaseLocalModel(): Promise<void> {
+    const operation = this.transformersUseQueue.catch(() => {}).then(async () => {
+      await this.transformersPipeline?.dispose?.()
+      this.transformersPipeline = null
+      this.loadingPromise = null
+      this.transformersModelKey = ''
+    })
+    this.transformersUseQueue = operation
+    return operation
+  }
+
+  private async runTransformers(texts: string[], model: string, cacheDir?: string): Promise<number[][]> {
+    const key = JSON.stringify([model, cacheDir])
+    if (EmbeddingService.transformersModelKey !== key) {
+      await EmbeddingService.transformersPipeline?.dispose?.()
+      EmbeddingService.transformersPipeline = null
+      EmbeddingService.loadingPromise = null
+      EmbeddingService.transformersModelKey = key
+    }
 
     // 懒加载 pipeline (带竞态条件处理)
     if (!EmbeddingService.transformersPipeline) {
@@ -521,8 +548,8 @@ export class EmbeddingService {
             const { pipeline, env } = await import('@xenova/transformers')
 
             // 配置缓存目录
-            if (this.config.cacheDir) {
-              env.cacheDir = this.config.cacheDir
+            if (cacheDir) {
+              env.cacheDir = cacheDir
             }
             env.allowLocalModels = false // 允许从 HF 下载
 

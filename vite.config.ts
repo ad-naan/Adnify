@@ -100,6 +100,20 @@ export default defineConfig({
           }
         }
       },
+      ...[
+        ['src/main/indexing/indexService.utility.ts', 'indexService.utility.js'],
+        ['src/main/services/documentReader/content.utility.ts', 'content.utility.js'],
+      ].map(([entry, filename]) => ({
+        entry,
+        vite: {
+          resolve: { alias: aliases },
+          build: {
+            outDir: 'dist/main',
+            lib: { entry, formats: ['cjs'] as const, fileName: () => filename },
+            rollupOptions: { external: EXTERNAL_DEPS },
+          },
+        },
+      })),
       {
         entry: 'src/main/services/session/sessionStorage.worker.ts',
         vite: {

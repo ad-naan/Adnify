@@ -7,6 +7,7 @@ import type { AssetCapability, AssetInputSchema, AssetJob, AssetSnapshot, AssetS
 import { summarizeAssetJob } from '@shared/types/assets'
 import { compileInputs, mapRequest, parseCapability, readPointer } from '@shared/assets/capability'
 import type { AssetRepository } from './AssetRepository'
+import { contentProcess } from '../documentReader/ContentProcessClient'
 
 export function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, target)
@@ -341,11 +342,7 @@ export class AssetService {
     await fs.access(root)
     let width: number | undefined; let height: number | undefined
     if (kind === 'image') {
-      // Use sharp's native CommonJS entry in the CJS Electron main process.
-      // Its ESM entry depends on import.meta.url, which can be lost by dev loaders.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Preserve sharp's native CommonJS entry for Electron dev loaders.
-      const sharp = require('sharp') as typeof import('sharp').default
-      const meta = await sharp(bytes).metadata()
+      const meta = await contentProcess.imageMetadata(bytes)
       if (!['png', 'jpeg', 'webp', 'gif'].includes(meta.format || '')) throw new Error('Supported image outputs: PNG, JPEG, WebP, GIF')
       mimeType = `image/${meta.format}`; width = meta.width; height = meta.height
     }
@@ -409,9 +406,6 @@ export class AssetService {
     return this.imagePreview(target)
   }
   private async imagePreview(filePath: string): Promise<string> {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires -- Preserve sharp's native CommonJS entry for Electron dev loaders.
-    const sharp = require('sharp') as typeof import('sharp').default
-    const buffer = await sharp(filePath).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
-    return `data:image/webp;base64,${buffer.toString('base64')}`
+    return contentProcess.imagePreview(filePath)
   }
 }

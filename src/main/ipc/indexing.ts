@@ -25,14 +25,14 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   _configStore = configStore || null
 
   // 初始化
-  ipcMain.handle('index:initialize', async (_, workspacePath: string): Promise<Result<void>> => {
+  ipcMain.handle('index:initialize', async (event, workspacePath: string): Promise<Result<void>> => {
     try {
       const saved = getSavedConfig()
       const indexService = saved
         ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
 
-      const mainWindow = getMainWindow()
+      const mainWindow = BrowserWindow.fromWebContents(event.sender) ?? getMainWindow()
       if (mainWindow) indexService.setMainWindow(mainWindow)
       await indexService.initialize()
       return ok(undefined)
@@ -43,14 +43,14 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   })
 
   // 开始索引
-  ipcMain.handle('index:start', async (_, workspacePath: string): Promise<Result<void>> => {
+  ipcMain.handle('index:start', async (event, workspacePath: string): Promise<Result<void>> => {
     try {
       const saved = getSavedConfig()
       const indexService = saved
         ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
 
-      const mainWindow = getMainWindow()
+      const mainWindow = BrowserWindow.fromWebContents(event.sender) ?? getMainWindow()
       if (mainWindow) indexService.setMainWindow(mainWindow)
       await indexService.initialize()
       await indexService.indexWorkspace()
@@ -80,7 +80,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     try {
       const indexService = getIndexService(workspacePath)
       await indexService.initialize()
-      return indexService.hasIndex()
+      return await indexService.hasIndex()
     } catch {
       return false
     }
@@ -120,7 +120,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   ipcMain.handle('index:searchSymbols', async (_, workspacePath: string, query: string, topK?: number) => {
     try {
       const indexService = getIndexService(workspacePath)
-      return indexService.searchSymbols(query, topK || 20)
+      return await indexService.searchSymbols(query, topK || 20)
     } catch (e) {
       logger.ipc.error('[Index] Symbol search failed:', e)
       return []
@@ -135,7 +135,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
         ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
       await indexService.initialize()
-      return indexService.getProjectSummary()
+      return await indexService.getProjectSummary()
     } catch {
       return null
     }
@@ -149,7 +149,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
         ? initIndexServiceWithConfig(workspacePath, saved)
         : getIndexService(workspacePath)
       await indexService.initialize()
-      return indexService.getProjectSummaryText()
+      return await indexService.getProjectSummaryText()
     } catch {
       return ''
     }
@@ -182,7 +182,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   ipcMain.handle('index:updateEmbeddingConfig', async (_, workspacePath: string, config: Partial<EmbeddingConfig>): Promise<Result<void>> => {
     try {
       const indexService = getIndexService(workspacePath)
-      indexService.updateEmbeddingConfig(config)
+      await indexService.updateEmbeddingConfig(config)
       const saved = getSavedConfig() || {}
       saveConfig({ embedding: { ...saved.embedding, ...config } as EmbeddingConfig })
       return ok(undefined)
@@ -237,10 +237,8 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
   // AST 解析调用图
   ipcMain.handle('index:parseCallGraph', async (_, filePath: string, content: string) => {
     try {
-      const { ASTParser } = await import('../indexing/astParser')
-      const parser = new ASTParser()
-      await parser.init()
-      return await parser.parseCallGraph(filePath, content)
+      const { contentProcess } = await import('../services/documentReader/ContentProcessClient')
+      return await contentProcess.parseCallGraph(filePath, content)
     } catch (e) {
       logger.ipc.error('[Index] Parse Call Graph failed:', e)
       return []

@@ -201,6 +201,9 @@ export class TreeSitterChunker {
     const loaded = await this.loadLanguage(langName)
     if (!loaded) return [] // Fallback
 
+    // Another file can finish loading its language during the await above.
+    // Set the grammar immediately before the synchronous parse/query operation.
+    this.parser.setLanguage(this.languages.get(langName)!)
     const tree = this.parser.parse(content)
     if (!tree) return [] // Parse failed
 
@@ -218,9 +221,10 @@ export class TreeSitterChunker {
     // Store ranges covered by TS captures to fill gaps later
     const coveredRanges: Array<{ start: number, end: number }> = []
 
+    let query: Parser.Query | undefined
     try {
       const lang = this.languages.get(langName)!
-      const query = lang.query(queryStr)
+      query = lang.query(queryStr)
       const captures = query.captures(tree.rootNode)
 
       // Sort captures by start index to process in order
@@ -291,6 +295,7 @@ export class TreeSitterChunker {
     } catch (e) {
       logger.index.error(`[TreeSitterChunker] Error querying ${filePath}:`, e)
     } finally {
+      query?.delete()
       tree.delete()
     }
 

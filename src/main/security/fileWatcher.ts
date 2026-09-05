@@ -6,7 +6,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
-import { destroyIndexService, getIndexService } from '../indexing/indexService'
+import { destroyIndexService, getIndexService } from '../indexing/indexProcess'
 import { lspManager } from '../lsp/lspManager'
 import * as watcher from '@parcel/watcher'
 import picomatch from 'picomatch'
@@ -176,7 +176,7 @@ async function createWatcherEntry(
     return { subscription, buffer: fileChangeBuffer, root: workspaceRoot, subscribers }
   } catch (error) {
     await fileChangeBuffer?.destroy()
-    if (fileChangeBuffer) destroyIndexService(workspaceRoot)
+    if (fileChangeBuffer) await destroyIndexService(workspaceRoot)
     throw error
   }
 }
@@ -229,7 +229,7 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
     await entry.buffer?.destroy()
-    destroyIndexService(entry.root)
+    await destroyIndexService(entry.root)
     return
   }
 
@@ -243,7 +243,7 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
     await entry.buffer?.destroy()
-    destroyIndexService(entry.root)
+    await destroyIndexService(entry.root)
   }))
 }
 

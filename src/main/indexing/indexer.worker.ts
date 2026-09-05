@@ -1,5 +1,5 @@
 import { logger } from '@shared/utils/Logger'
-import { parentPort } from 'worker_threads'
+import { parentPort, workerData } from 'worker_threads'
 import * as fs from 'fs/promises'
 import { Dirent } from 'fs'
 import * as path from 'path'
@@ -7,8 +7,7 @@ import * as crypto from 'crypto'
 import pLimit from 'p-limit'
 import { ChunkerService } from './chunker'
 import { TreeSitterChunker } from './treeSitterChunker'
-import { EmbeddingService } from './embedder'
-import { CodeChunk, IndexedChunk, IndexConfig } from './types'
+import { CodeChunk, IndexedChunk, IndexConfig, EmbeddingConfig } from './types'
 
 /**
  * Worker 消息类型定义
@@ -18,6 +17,7 @@ type WorkerMessage =
   | { type: 'index'; workspacePath: string; config: IndexConfig; existingHashes?: Record<string, string> }
   | { type: 'batch_update'; requestId: number; workspacePath: string; files: string[]; config: IndexConfig }
   | { type: 'structural_ack'; requestId: number }
+  | { type: 'embedding_result'; requestId: number; vectors?: number[][]; error?: string }
 
 /**
  * Worker 响应消息类型
@@ -41,10 +41,12 @@ type WorkerResponse =
     }
   | { type: 'complete'; totalChunks: number }
   | { type: 'error'; error: string; requestId?: number }
+  | { type: 'embedding_request'; requestId: number; texts: string[]; config: EmbeddingConfig }
 
 if (!parentPort) {
   throw new Error('This file must be run as a worker thread.')
 }
+if (workerData?.resourcesPath) Object.defineProperty(process, 'resourcesPath', { value: workerData.resourcesPath })
 
 // 全局 Chunker 实例（跨请求复用）
 let regexChunker: ChunkerService | null = null
@@ -71,8 +73,31 @@ function postResponse(response: WorkerResponse): void {
 let operationQueue = Promise.resolve()
 let nextStructuralRequestId = 1
 const pendingStructuralAcks = new Map<number, () => void>()
+let nextEmbeddingRequestId = 1
+const pendingEmbeddings = new Map<number, { resolve: (vectors: number[][]) => void; reject: (error: Error) => void }>()
+
+// Parsing stays in this thread. Batch and query embeddings share one model/rate
+// limiter in the owning index utility, avoiding a second local model in this V8 isolate.
+class RemoteEmbeddingService {
+  constructor(private readonly config: EmbeddingConfig) {}
+  embedBatch(texts: string[]): Promise<number[][]> {
+    const requestId = nextEmbeddingRequestId++
+    return new Promise((resolve, reject) => {
+      pendingEmbeddings.set(requestId, { resolve, reject })
+      postResponse({ type: 'embedding_request', requestId, texts, config: this.config })
+    })
+  }
+  async embed(text: string): Promise<number[]> { return (await this.embedBatch([text]))[0] }
+}
 
 parentPort.on('message', (message: WorkerMessage) => {
+  if (message.type === 'embedding_result') {
+    const pending = pendingEmbeddings.get(message.requestId)
+    pendingEmbeddings.delete(message.requestId)
+    if (message.error) pending?.reject(new Error(message.error))
+    else pending?.resolve(message.vectors || [])
+    return
+  }
   if (message.type === 'structural_ack') {
     pendingStructuralAcks.get(message.requestId)?.()
     pendingStructuralAcks.delete(message.requestId)
@@ -141,7 +166,7 @@ async function handleIndex(
   }
 
   const { regexChunker, tsChunker } = await getChunkers(config)
-  const embedder = config.mode === 'semantic' ? new EmbeddingService(config.embedding) : null
+  const embedder = config.mode === 'semantic' ? new RemoteEmbeddingService(config.embedding) : null
 
   // 预热 Embedder (触发模型加载) 并通知 UI
   if (config.mode === 'semantic' && config.embedding.provider === 'transformers') {
@@ -254,7 +279,7 @@ async function handleBatchUpdate(
   config: IndexConfig,
 ): Promise<void> {
   const { regexChunker, tsChunker } = await getChunkers(config)
-  const embedder = config.mode === 'semantic' ? new EmbeddingService(config.embedding) : null
+  const embedder = config.mode === 'semantic' ? new RemoteEmbeddingService(config.embedding) : null
   const limit = pLimit(4)
   const structuralResults: Array<{ filePath: string; chunks: CodeChunk[]; deleted: boolean }> = []
   const semanticResults: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> = []

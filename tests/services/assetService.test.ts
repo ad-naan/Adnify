@@ -8,6 +8,16 @@ import type { AssetRepository, AssetTable } from '@/main/services/assets/AssetRe
 import type { AssetCapability, AssetJob } from '@/shared/types/assets'
 import { compileInputs, mapRequest, parseCapability } from '@/shared/assets/capability'
 
+// Keep the repository/path tests running actual image decoding; process transport
+// is exercised separately by the native utility-process smoke test.
+vi.mock('@/main/services/documentReader/ContentProcessClient', () => ({ contentProcess: {
+  imageMetadata: async (bytes: Uint8Array) => sharp(Buffer.from(bytes)).metadata(),
+  imagePreview: async (filePath: string) => {
+    const bytes = await sharp(filePath).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
+    return `data:image/webp;base64,${bytes.toString('base64')}`
+  },
+} }))
+
 class MemoryRepository implements AssetRepository {
   values = new Map<string, unknown>()
   async get<T>(table: AssetTable, id: string) { return structuredClone(this.values.get(`${table}:${id}`)) as T | undefined }

@@ -33,7 +33,7 @@ import {
 } from './workspaceHandlers'
 import { openExternalSafely } from './externalUrl'
 import { analyzeImage } from '@main/services/documentReader/imageAnalysisService'
-import { readRichContent } from '@main/services/documentReader/richContentReader'
+import { contentProcess } from '@main/services/documentReader/ContentProcessClient'
 import type { ImageAnalysisRequest, ReadRichContentOptions } from '@shared/types'
 
 interface SharedFileRead {
@@ -420,7 +420,7 @@ export function registerSecureFileHandlers(
     }
 
     const imageAnalysisConfig = options?.imageAnalysis?.config
-    const result = await readRichContent(filePath, {
+    const result = await contentProcess.readRichContent(filePath, {
       embeddedImageAnalyzer: imageAnalysisConfig
         ? async (image) => {
             const analysis = await analyzeImage({

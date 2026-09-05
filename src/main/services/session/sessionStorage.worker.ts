@@ -3,6 +3,8 @@ import { promises as fs } from 'fs'
 import * as path from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { parentPort } from 'worker_threads'
+import { serveUtility } from '../process/utilityServer'
+import type { SessionWorkerOperation } from '@shared/types/sessionPersistence'
 import type {
   SessionBranchMetadata,
   SessionBranchPatch,
@@ -1423,7 +1425,7 @@ async function respond(request: SessionWorkerRequest): Promise<void> {
     response = {
       requestId: request.requestId,
       ok: true,
-      result: await executeSessionStorageOperation(request.operation),
+      result: await enqueueOperation(request.operation),
     }
   } catch (error) {
     response = {
@@ -1435,18 +1437,22 @@ async function respond(request: SessionWorkerRequest): Promise<void> {
   parentPort?.postMessage(response)
 }
 
-parentPort?.on('message', (request: SessionWorkerRequest) => {
-  if (request.operation.type === 'closeAll') {
-    const pending = [...operationQueues.values()]
-    void Promise.allSettled(pending).then(() => respond(request))
-    return
+function enqueueOperation(operation: SessionWorkerOperation): Promise<SessionWorkerResult> {
+  if (operation.type === 'closeAll') {
+    return Promise.allSettled([...operationQueues.values()]).then(() => executeSessionStorageOperation(operation))
   }
-
-  const databasePath = request.operation.databasePath
-  const previous = operationQueues.get(databasePath) || Promise.resolve()
-  const next = previous.catch(() => undefined).then(() => respond(request))
-  operationQueues.set(databasePath, next)
-  void next.finally(() => {
-    if (operationQueues.get(databasePath) === next) operationQueues.delete(databasePath)
+  const previous = operationQueues.get(operation.databasePath) || Promise.resolve()
+  const result = previous.catch(() => {}).then(() => executeSessionStorageOperation(operation))
+  const settled = result.then(() => {}, () => {})
+  operationQueues.set(operation.databasePath, settled)
+  void settled.then(() => {
+    if (operationQueues.get(operation.databasePath) === settled) operationQueues.delete(operation.databasePath)
   })
+  return result
+}
+
+if (process.parentPort) serveUtility(raw => enqueueOperation(raw as SessionWorkerOperation))
+
+parentPort?.on('message', (request: SessionWorkerRequest) => {
+  void respond(request)
 })

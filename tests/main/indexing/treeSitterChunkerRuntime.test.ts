@@ -10,7 +10,7 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 delete (globalThis as any).window
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { TreeSitterChunker } from '@main/indexing/treeSitterChunker'
 
 const SOURCE = `import { Foo } from 'bar'
@@ -38,6 +38,36 @@ function local(input: string): string {
 `
 
 describe('TreeSitterChunker.chunkFile', () => {
+  it('uses the correct grammar for concurrent cached-language parses', async () => {
+    const chunker = new TreeSitterChunker()
+    await chunker.init()
+    const python = 'def calculate(value):\n    doubled = value * 2\n    result = doubled + 42\n    return result\n'
+    const expectedTs = await chunker.chunkFile('C:/workspace/warm.ts', SOURCE, 'C:/workspace')
+    const expectedPy = await chunker.chunkFile('C:/workspace/warm.py', python, 'C:/workspace')
+    expect(expectedTs.length).toBeGreaterThan(0)
+    expect(expectedPy.length).toBeGreaterThan(0)
+    const [typescript, py] = await Promise.all([
+      chunker.chunkFile('C:/workspace/widget.ts', SOURCE, 'C:/workspace'),
+      chunker.chunkFile('C:/workspace/calculator.py', python, 'C:/workspace'),
+    ])
+    expect(typescript.map(chunk => chunk.content)).toEqual(expectedTs.map(chunk => chunk.content))
+    expect(py.map(chunk => chunk.content)).toEqual(expectedPy.map(chunk => chunk.content))
+  })
+
+  it.each([false, true])('releases the native query and tree even when capture fails: %s', async throws => {
+    const chunker = new TreeSitterChunker()
+    const query = { captures: () => { if (throws) throw new Error('fixture'); return [] }, delete: vi.fn() }
+    const tree = { rootNode: {}, delete: vi.fn() }
+    Object.assign(chunker, {
+      initialized: true,
+      parser: { setLanguage: () => {}, parse: () => tree },
+      languages: new Map([['typescript', { query: () => query }]]),
+    })
+    await chunker.chunkFile('C:/workspace/test.ts', SOURCE, 'C:/workspace')
+    expect(query.delete).toHaveBeenCalledTimes(1)
+    expect(tree.delete).toHaveBeenCalledTimes(1)
+  })
+
   it('不产生重复 chunk id（export 声明被双重捕获的回归）', async () => {
     const chunker = new TreeSitterChunker()
     await chunker.init()

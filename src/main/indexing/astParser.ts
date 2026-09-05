@@ -110,8 +110,9 @@ export class ASTParser {
             return []
         }
 
+        let query: Parser.Query | undefined
         try {
-            const query = lang.query(queryStr)
+            query = lang.query(queryStr)
             const captures = query.captures(tree.rootNode)
 
             const nodes: CodeGraphNode[] = []
@@ -174,6 +175,7 @@ export class ASTParser {
             logger.index.error(`[ASTParser] Error querying ${filePath}:`, e)
             return []
         } finally {
+            query?.delete()
             tree.delete()
         }
     }

@@ -16,7 +16,8 @@ import { asLanguage, t, type Language } from '@shared/i18n'
 import { performanceMonitor } from '@shared/utils/PerformanceMonitor'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import type Store from 'electron-store'
-import { destroyIndexService } from './indexing/indexService'
+import { destroyIndexService } from './indexing/indexProcess'
+import { closeUtilityProcesses } from './services/process/UtilityProcessClient'
 import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
 import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
@@ -62,7 +63,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'adnify-asset', privileges: { st
 
 // 主进程没有 Chrome 的 performance.memory，堆上限只能由这里注入，
 // 否则 performanceMonitor 的 OOM 预警在主进程恒不触发。
-// 放在模块顶层而非 whenReady：indexService 一 import 就会拉起监控单例并开始采样。
+// 放在模块顶层而非 whenReady，让监控首次采样时就能读取堆上限。
 performanceMonitor.setHeapLimitProvider(() => v8.getHeapStatistics().heap_size_limit ?? null)
 
 ipcMain.handle('clipboard:readText', () => clipboard.readText())
@@ -692,14 +693,15 @@ async function performGlobalCleanup() {
       import('./services/debugger').then(m => m.debugService.stopAll()).catch(() => { }),
       2000, 'DebugService stopAll'
     )
-    // 4. 销毁所有 IndexService Worker 线程
+    // 4. Drain index/storage utilities before the final process cleanup.
     try {
-      destroyIndexService()
+      await destroyIndexService()
     } catch { /* ignore */ }
     await withTimeout(
       import('./services/session/SessionStorageWorkerClient').then(m => m.sessionStorageWorker.closeAll()),
       3000, 'SessionStorageWorker closeAll'
     )
+    await closeUtilityProcesses()
     logger.system.info('[Main] Global cleanup completed successfully')
   } catch (err) {
     logger.system.error('[Main] Global cleanup error:', err)
@@ -1094,6 +1096,7 @@ app.on('before-quit', async (e) => {
 app.on('activate', () => { if (windows.size === 0) createWindow() })
 
 app.on('will-quit', () => {
+  void closeUtilityProcesses()
   backgroundTaskService.stop()
   processDiagnostics.stop()
   void applicationDiagnostics.stop()

@@ -3,15 +3,19 @@ import { Worker } from 'node:worker_threads'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
-import ts from 'typescript'
+import { build } from 'esbuild'
 
 describe('asset SQLite worker', () => {
   it('persists records across worker restarts and separates collections', async () => {
     const directory = await fs.mkdtemp(path.join(tmpdir(), 'adnify-asset-worker-'))
     if (path.dirname(directory) !== path.resolve(tmpdir())) throw new Error('Unexpected test directory')
-    const source = await fs.readFile(path.resolve('src/main/services/assets/assetStorage.worker.ts'), 'utf8')
     const entry = path.join(directory, 'worker.cjs')
-    await fs.writeFile(entry, ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)
+    await build({ entryPoints: ['src/main/services/assets/assetStorage.worker.ts'], outfile: path.join(directory, 'storage.cjs'), bundle: true, platform: 'node', format: 'cjs' })
+    // Node test transport for the same utility RPC server. Electron process
+    // isolation/crash recovery is verified by utility-process-smoke.cjs.
+    await fs.writeFile(entry, `const {parentPort}=require('node:worker_threads');
+      process.parentPort={on:(_,cb)=>parentPort.on('message',data=>cb({data})),postMessage:value=>parentPort.postMessage(value)};
+      require('./storage.cjs');`)
     let worker: Worker | undefined
     let sequence = 0
     const start = () => { worker = new Worker(entry, { workerData: { databasePath: path.join(directory, 'assets.sqlite') } }) }
@@ -24,7 +28,7 @@ describe('asset SQLite worker', () => {
         clearTimeout(timeout); worker!.removeListener('error', onError)
         if (response.error) reject(new Error(response.error)); else resolve(response.result)
       })
-      worker!.postMessage({ id, operation, table, key, value })
+      worker!.postMessage({ requestId: String(id), operation: { operation, databasePath: path.join(directory, 'assets.sqlite'), table, key, value } })
     })
     try {
       start()

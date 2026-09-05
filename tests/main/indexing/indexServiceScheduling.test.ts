@@ -93,7 +93,7 @@ describe('CodebaseIndexService scheduling', () => {
     structuralStoreState.operations.length = 0
     structuralStoreState.loadBatches = []
     structuralStoreState.metadata = null
-    service = new CodebaseIndexService('C:/workspace')
+    service = new CodebaseIndexService('C:/workspace', undefined, { workspaceCachePath: 'C:/adnify-test/cache', modelCachePath: 'C:/adnify-test/models' })
   })
 
   it('runs watcher mutations after an active full index', async () => {
