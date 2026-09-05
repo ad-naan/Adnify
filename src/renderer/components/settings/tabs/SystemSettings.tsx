@@ -20,6 +20,7 @@ import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 import type { ProxyConfig } from '@shared/config/types'
 import { DiagnosticsSettings } from './DiagnosticsSettings'
+import { BackgroundTaskSettings } from './BackgroundTaskSettings'
 
 interface SystemSettingsProps {
     language: Language
@@ -466,6 +467,10 @@ export function SystemSettings({
             </section>
 
             {/* 日志管理 */}
+            <section>
+                <BackgroundTaskSettings language={language} />
+            </section>
+
             <section>
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <FileText className="w-4 h-4 text-accent" />

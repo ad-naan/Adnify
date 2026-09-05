@@ -22,6 +22,7 @@ export interface SettingsSearchEntry {
 }
 
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
+  { id: 'system.backgroundTasks', tab: 'system', labelKey: 'backgroundTasks.title', keywords: ['background', 'taskbar', 'sleep', 'wake', 'resume', '后台', '任务栏', '休眠', '唤醒', '连接恢复'] },
   // ========== provider（模型提供商）==========
   { id: 'provider.selection', tab: 'provider', labelKey: 'settingsSearch.providerSelection', keywords: ['provider', 'model', '提供商', '模型', 'openai', 'anthropic', 'claude', 'gemini', 'deepseek', 'ollama'] },
   { id: 'provider.apiKey', tab: 'provider', labelKey: 'settingsSearch.providerApiKey', keywords: ['api', 'key', '密钥', 'token', 'apikey', '认证', 'authentication'] },

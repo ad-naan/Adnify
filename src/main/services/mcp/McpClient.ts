@@ -40,7 +40,6 @@ import {
 export { normalizeLocalCommandArgs }
 
 const DEFAULT_TIMEOUT = 30000
-const NPX_TIMEOUT = 60000  // npx 首次需要下载包，给更长超时
 
 type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -432,6 +431,18 @@ export class McpClient extends EventEmitter {
   }
 
   /** 刷新能力列表 */
+  /** Read-only liveness probe; never reconnect or replay a tool call on wake. */
+  async checkConnection(): Promise<boolean> {
+    const client = this.state.client
+    if (this.status !== 'connected' || !client) return false
+    try {
+      await client.ping({ timeout: 5000, resetTimeoutOnProgress: false })
+      return this.state.client === client && this.status === 'connected'
+    } catch {
+      return false
+    }
+  }
+
   async refreshCapabilities(): Promise<void> {
     if (!this.state.client) {
       throw new Error(`MCP server ${this.id} is not connected`)

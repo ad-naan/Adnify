@@ -14,6 +14,7 @@ import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, Setting
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import SystemPrivilegeCoordinator from './components/system/SystemPrivilegeCoordinator'
+import { useBackgroundTasks } from './backgroundTasks/useBackgroundTasks'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -92,6 +93,7 @@ function AppContent() {
   useGlobalShortcuts()
   usePreviewDiscovery(hasWorkspace && isInitialized)
   useVersionNotice(isInitialized)
+  useBackgroundTasks(isInitialized)
 
   useAppInit({
     onInitialized: (result) => {

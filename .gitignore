@@ -45,6 +45,7 @@ package-lock.json
 /tmp
 /.tmp/performance-smoke/
 /.tmp/preview-environment-smoke/
+/.tmp/background-tasks-smoke/
 
 .pnpm-store/
 

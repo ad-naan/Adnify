@@ -27,6 +27,7 @@ import { createScopedStore, getBootstrapStore, getUserConfigDir } from './servic
 import { ProviderCredentialStore } from './services/credentials/ProviderCredentialStore'
 import { createFileLogWriter } from './services/fileLogWriter'
 import { processDiagnostics } from './services/diagnostics/ProcessDiagnostics'
+import { backgroundTaskService } from './services/backgroundTasks/BackgroundTaskService'
 import { applicationDiagnostics } from './services/diagnostics/ApplicationDiagnostics'
 import {
   shutdownWindowController,
@@ -1093,6 +1094,7 @@ app.on('before-quit', async (e) => {
 app.on('activate', () => { if (windows.size === 0) createWindow() })
 
 app.on('will-quit', () => {
+  backgroundTaskService.stop()
   processDiagnostics.stop()
   void applicationDiagnostics.stop()
 })

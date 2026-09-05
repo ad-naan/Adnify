@@ -202,6 +202,22 @@ export class McpManager extends EventEmitter {
   }
 
   /** 重连服务器 */
+  async checkConnections(): Promise<import('@shared/types/backgroundTasks').McpConnectionCheck> {
+    // Explicitly disconnected servers have been removed from this map. Do not start them.
+    const clients = [...this.clients.entries()].filter(([, client]) => client.status !== 'connecting')
+    const results = await Promise.all(clients.map(async ([id, client]) => ({
+      id, client, healthy: await client.checkConnection(),
+    })))
+    // Ignore connections deliberately removed/replaced while a probe was in flight.
+    const current = results.filter(result => this.clients.get(result.id) === result.client)
+    return {
+      checked: current.length,
+      failed: current.filter(result => !result.healthy).map(({ id }) => ({
+        id, name: this.cachedConfigs?.find(config => config.id === id)?.name || id,
+      })),
+    }
+  }
+
   async reconnectServer(serverId: string): Promise<void> {
     if (this.clients.has(serverId)) {
       await this.disconnectServer(serverId)

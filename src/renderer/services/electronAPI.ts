@@ -39,6 +39,13 @@ function createGroupedAPI() {
     // 应用生命周期
     appReady: () => raw.appReady(),
     getAppVersion: () => raw.getAppVersion(),
+    backgroundTasks: {
+      update: (activity: Parameters<typeof raw.backgroundTasksUpdate>[0]) => raw.backgroundTasksUpdate(activity),
+      getConnections: () => raw.backgroundTasksGetConnections(),
+      check: () => raw.backgroundTasksCheck(),
+      onConnections: (callback: Parameters<typeof raw.onBackgroundConnections>[0]) => raw.onBackgroundConnections(callback),
+      onResume: (callback: () => void) => raw.onBackgroundResume(callback),
+    },
     systemPrivilege: {
       getStatus: () => raw.systemPrivilegeGetStatus(),
       requestElevation: (request: Parameters<typeof raw.systemPrivilegeRequestElevation>[0]) =>

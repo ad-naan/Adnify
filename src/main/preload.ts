@@ -13,6 +13,7 @@ import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/
 import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 import type { FileMutationResult } from '@shared/types/fileMutation'
 import type { DiagnosticsCaptureOptions, DiagnosticsCaptureResult } from '@shared/types/diagnostics'
+import type { BackgroundTaskActivity, BackgroundConnectionState } from '@shared/types/backgroundTasks'
 import type { RendererStreamChunk } from '@shared/types/llm'
 import type { Language } from '@shared/i18n'
 import { forEachStreamChunk, type StreamBatchEnvelope } from '@shared/utils/llmStreamBatch'
@@ -662,6 +663,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserDataPath: () => ipcRenderer.invoke('settings:getUserDataPath'),
   getRecentLogs: () => ipcRenderer.invoke('settings:getRecentLogs'),
   captureDiagnostics: (options: DiagnosticsCaptureOptions): Promise<DiagnosticsCaptureResult> => ipcRenderer.invoke('diagnostics:capture', options),
+  backgroundTasksUpdate: (activity: BackgroundTaskActivity): Promise<boolean> => ipcRenderer.invoke('backgroundTasks:update', activity),
+  backgroundTasksGetConnections: (): Promise<BackgroundConnectionState> => ipcRenderer.invoke('backgroundTasks:getConnections'),
+  backgroundTasksCheck: (): Promise<BackgroundConnectionState> => ipcRenderer.invoke('backgroundTasks:check'),
+  onBackgroundConnections: (callback: (state: BackgroundConnectionState) => void) => {
+    const handler = (_: IpcRendererEvent, state: BackgroundConnectionState) => callback(state)
+    ipcRenderer.on('backgroundTasks:connections', handler)
+    return () => ipcRenderer.removeListener('backgroundTasks:connections', handler)
+  },
+  onBackgroundResume: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('backgroundTasks:resumed', handler)
+    return () => ipcRenderer.removeListener('backgroundTasks:resumed', handler)
+  },
   deepCleanCache: () => ipcRenderer.invoke('cache:deepClean'),
 
   sendMessage: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:sendMessage', params),

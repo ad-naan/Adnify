@@ -436,6 +436,11 @@ export interface ElectronAPI {
   getUserDataPath: () => Promise<string>
   getRecentLogs: () => Promise<string>
   captureDiagnostics: (options: DiagnosticsCaptureOptions) => Promise<DiagnosticsCaptureResult>
+  backgroundTasksUpdate: (activity: import('@shared/types/backgroundTasks').BackgroundTaskActivity) => Promise<boolean>
+  backgroundTasksGetConnections: () => Promise<import('@shared/types/backgroundTasks').BackgroundConnectionState>
+  backgroundTasksCheck: () => Promise<import('@shared/types/backgroundTasks').BackgroundConnectionState>
+  onBackgroundConnections: (callback: (state: import('@shared/types/backgroundTasks').BackgroundConnectionState) => void) => () => void
+  onBackgroundResume: (callback: () => void) => () => void
   deepCleanCache: () => Promise<{ success: boolean; error?: string }>
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
