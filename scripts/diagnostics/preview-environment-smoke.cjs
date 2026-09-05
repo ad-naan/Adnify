@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 const electron = require('electron')
 
 if (typeof electron === 'string') {
-  ;(async () => {
+  (async () => {
     const root = path.resolve(__dirname, '../..')
     const outputRoot = path.join(root, '.tmp', 'preview-environment-smoke')
     fs.mkdirSync(outputRoot, { recursive: true })
@@ -38,7 +38,18 @@ if (typeof electron === 'string') {
       prepareSession: workspaceRoot => ipcRenderer.invoke('preview:prepareSession', { workspaceRoot }),
       configureDevice: request => ipcRenderer.invoke('preview:configureDevice', request),
       openExternal: () => Promise.resolve(false),
-    } });`)
+    } });
+    ipcRenderer.on('smoke:click', (_event, { requestId, label }) => {
+      try {
+        const button = [...document.querySelectorAll('button')].find(button =>
+          button.textContent.trim() === label || button.getAttribute('aria-label') === label);
+        if (!button) throw new Error('Button missing: ' + label);
+        button.click();
+        ipcRenderer.send('smoke:clicked', { requestId });
+      } catch (error) {
+        ipcRenderer.send('smoke:clicked', { requestId, error: String(error) });
+      }
+    });`)
     const env = { ...process.env, ADNIFY_PREVIEW_SMOKE: output }
     delete env.ELECTRON_RUN_AS_NODE
     const result = require('node:child_process').spawnSync(electron, [__filename], { cwd: root, env, stdio: 'inherit', windowsHide: true, timeout: 60000 })
@@ -47,7 +58,7 @@ if (typeof electron === 'string') {
     process.exitCode = result.status ?? 1
   })().catch(error => { console.error(error); process.exitCode = 1 })
 } else {
-  const { app, BrowserWindow } = electron
+  const { app, BrowserWindow, ipcMain } = electron
   const output = process.env.ADNIFY_PREVIEW_SMOKE
   app.setPath('userData', path.join(output, 'profile'))
   app.on('window-all-closed', () => {})
@@ -64,7 +75,21 @@ if (typeof electron === 'string') {
   }
   const guestOf = window => electron.webContents.fromId(previewBrowserService.list(window.webContents.id)[0]?.id || -1)
   const metrics = guest => guest.executeJavaScript('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,touch:navigator.maxTouchPoints,value:document.querySelector("#keep").value})')
-  const click = (window, label) => window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)}); if (!button) throw new Error('Button missing'); button.click(); })()`)
+  let nextClickId = 0
+  // Button labels cross IPC as data; they are never interpolated into executable code.
+  const click = (window, label) => new Promise((resolve, reject) => {
+    const requestId = ++nextClickId
+    const cleanup = () => { clearTimeout(timer); ipcMain.removeListener('smoke:clicked', onClicked) }
+    const onClicked = (event, result) => {
+      if (event.sender !== window.webContents || result.requestId !== requestId) return
+      cleanup()
+      if (result.error) reject(new Error(result.error)); else resolve()
+    }
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Click timed out: ' + label)) }, 5000)
+    ipcMain.on('smoke:clicked', onClicked)
+    try { window.webContents.send('smoke:click', { requestId, label }) }
+    catch (error) { cleanup(); reject(error) }
+  })
   const screenshot = async (window, name) => {
     await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     fs.writeFileSync(path.join(output, name), (await window.webContents.capturePage()).toPNG())
