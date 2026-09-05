@@ -8,6 +8,7 @@ import { sanitizePersistedLLMConfig } from './llmPersistence'
 import { normalizeAssetConfiguration } from '../assets/configuration'
 import { sanitizePersistedModelRoutingConfig } from './modelRouting'
 import { normalizeSecuritySettings } from './securitySettings'
+import { normalizeExecutionSettings } from './executionSettings'
 import type { TerminalCommandRule } from './types'
 import { legacyTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 
@@ -422,6 +423,8 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
   if (value === null || value === undefined) return value
 
   switch (key) {
+    case 'executionSettings':
+      return normalizeExecutionSettings(value)
     case 'assetConfiguration':
       return normalizeAssetConfiguration(value)
     case 'editorConfig':

@@ -760,6 +760,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   killTerminal: (id: string) => ipcRenderer.invoke('terminal:kill', id),
   executionSubmit: (request: import('@shared/types/execution').ExecutionRequest) => ipcRenderer.invoke('execution:submit', request),
   executionList: () => ipcRenderer.invoke('execution:list'),
+  executionOverview: () => ipcRenderer.invoke('execution:overview'),
+  executionManagerRequested: () => ipcRenderer.invoke('execution:open-request'),
+  onExecutionManagerRequested: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('execution:open-manager', handler)
+    return () => ipcRenderer.removeListener('execution:open-manager', handler)
+  },
+  executionManage: (id: string, action: import('@shared/types/execution').ExecutionManagementAction) => ipcRenderer.invoke('execution:manage', { id, action }),
   executionWait: (jobId: string, afterRevision: number, waitMs = 30_000) => ipcRenderer.invoke('execution:wait', { jobId, afterRevision, waitMs }),
   executionCancel: (jobId: string) => ipcRenderer.invoke('execution:cancel', { jobId }),
   executionInput: (jobId: string, data: string) => ipcRenderer.invoke('execution:input', { jobId, data }),
@@ -774,8 +782,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('terminal:data', handler)
     return () => ipcRenderer.removeListener('terminal:data', handler)
   },
-  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) => {
-    const handler = (_: IpcRendererEvent, event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => callback(event)
+  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' | 'idle_reclaimed'; message?: string }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' | 'idle_reclaimed'; message?: string }) => callback(event)
     ipcRenderer.on('terminal:exit', handler)
     return () => ipcRenderer.removeListener('terminal:exit', handler)
   },

@@ -93,7 +93,7 @@ export function registerAllHandlers(context: IPCContext) {
       getWindowWorkspace: context.getWindowWorkspace,
       workspaceMetaStore,
     }),
-  context.getWindowWorkspace)
+  context.getWindowWorkspace, preferencesStore)
 
   // 搜索
   registerSearchHandlers()

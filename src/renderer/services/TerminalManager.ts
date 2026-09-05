@@ -6,7 +6,7 @@
  * - 管理 xterm 实例和 PTY 进程
  * - 提供统一 API 给 UI 层
  *
- * 注意：普通短命令使用 shell:executeBackground；Agent 长命令会通过此服务创建交互会话。
+ * 普通命令由主进程执行服务管理；此服务展示作业输出并承载显式交互会话。
  */
 
 import { api } from "@/renderer/services/electronAPI";
@@ -143,7 +143,8 @@ export interface TerminalExitEvent {
   signal?: number;
   seq: number;
   occurredAt: number;
-  reason: 'process_exit' | 'killed_by_user' | 'remote_close';
+  reason: 'process_exit' | 'killed_by_user' | 'remote_close' | 'idle_reclaimed';
+  message?: string;
 }
 
 export interface TerminalErrorEvent {
@@ -526,7 +527,7 @@ class TerminalManagerClass {
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
           xterm.terminal.write(
-            `\r\n\x1b[33m[Process exited with code ${exitCode}]\x1b[0m\r\n`,
+            `\r\n\x1b[33m[${event.message || `Process exited with code ${exitCode}`}]\x1b[0m\r\n`,
           );
         }
 
@@ -558,6 +559,7 @@ class TerminalManagerClass {
         this.agentLeases.delete(id)
         this.removeAgentTerminalReference(id)
         this.shellIntegrationRawParsers.delete(id);
+        this.notify();
       },
     );
 

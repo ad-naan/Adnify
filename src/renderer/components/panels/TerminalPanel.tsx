@@ -19,9 +19,11 @@ import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { readClipboardText, writeClipboardText } from '@/renderer/services/clipboardService'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@shared/i18n'
+import { executionStatusLabel, executionReasonLabel } from '@shared/executionPresentation'
 import { formatShortcut } from '@services/keybindingService'
 import { discoverProjectTasks, type ProjectFileSnapshot, type ProjectTask } from '@shared/utils/projectTasks'
 import { isExecutionFinished } from '@shared/types/execution'
+import { ExecutionManager } from './ExecutionManager'
 
 const TASK_MANIFESTS = new Set([
     'package.json', 'deno.json', 'pyproject.toml', 'pom.xml', 'build.gradle', 'build.gradle.kts',
@@ -36,6 +38,16 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     // UI 状态
     const [isCollapsed, setIsCollapsed] = useState(false)
+    const [showExecutionManager, setShowExecutionManager] = useState(false)
+    useEffect(() => {
+        const open = () => { setTerminalVisible(true); setShowExecutionManager(true) }
+        const cleanup = api.execution.onManagerRequested?.(() => {
+            void api.execution.managerRequested?.()
+            open()
+        })
+        void api.execution.managerRequested?.().then(requested => { if (requested) open() })
+        return cleanup
+    }, [setTerminalVisible])
     const [height, setHeight] = useState(280)
     const [isResizing, setIsResizing] = useState(false)
     const [availableShells, setAvailableShells] = useState<{ label: string; path: string }[]>([])
@@ -399,6 +411,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     return (
         <>
             <style>{XTERM_STYLE}</style>
+            {showExecutionManager && <ExecutionManager language={language} onClose={() => setShowExecutionManager(false)} />}
             <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 42 : height }}>
                 {/* 拖拽调整高度的区域 */}
                 <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
@@ -507,6 +520,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 </div>
                             )}
                         </div>
+                        <button onClick={() => setShowExecutionManager(true)} className="shrink-0 rounded-lg px-2 py-1 text-xs text-text-muted hover:bg-surface-hover hover:text-text-primary">{t('execution.panelOpen', language)}</button>
                         <Button variant="ghost" size="icon" onClick={handleFixWithAI} className="h-7 w-7 rounded-lg text-accent hover:bg-accent/10" title="Fix with AI">
                             <Sparkles className="w-3.5 h-3.5" />
                         </Button>
@@ -520,17 +534,15 @@ const TerminalPanel = memo(function TerminalPanel() {
                 {/* 移除原来位置错误的 Shell Menu */}
                 {activeId && terminalManager.getManagedJob(activeId) && (() => {
                     const job = terminalManager.getManagedJob(activeId)!
-                    const zh = language === 'zh'
-                    const labels = zh
-                        ? { queued: '等待执行名额', starting: '正在启动', running: job.mode === 'background' ? '后台运行中' : '执行中', stopping: '正在停止，等待退出确认', completed: '已完成', failed: '执行失败', cancelled: '已停止', expired: '等待已结束，命令未启动', unknown: '状态未确认，仍保留资源' }
-                        : { queued: 'Waiting for capacity', starting: 'Starting', running: job.mode === 'background' ? 'Running in background' : 'Running', stopping: 'Stopping — awaiting process exit', completed: 'Completed', failed: 'Failed', cancelled: 'Stopped', expired: 'Not started: queue wait ended', unknown: 'Outcome unknown; still tracked' }
+                    const status = job.mode === 'background' && job.status === 'running' ? 'background' : job.status
                     return <div className="flex items-center gap-3 px-3 py-1 text-xs text-text-muted border-b border-border/50" role="status">
-                        <span>{labels[job.status]}{job.exitCode !== null ? ` · ${zh ? '退出码' : 'Exit code'} ${job.exitCode}` : ''}{job.reason === 'execution_timeout' ? ` · ${zh ? '执行超时' : 'Execution timeout'}` : ''}</span>
-                        {job.truncated && <span>{zh ? '较早日志已截断' : 'Earlier output truncated'}</span>}
-                        {(job.consumers || 0) > 1 && <span>{zh ? `${job.consumers} 个窗口共享，停止会影响所有窗口` : `Shared by ${job.consumers} windows; stopping affects all`}</span>}
+                        <span>{executionStatusLabel(status, language)}{job.exitCode !== null && <> · {t('execution.panelExitCode', language, { code: job.exitCode })}</>}{job.reason === 'execution_timeout' && <> · {t('execution.timeout', language)}</>}</span>
+                        {job.waitingReason && <span>{executionReasonLabel(job.waitingReason, language)}</span>}
+                        {job.truncated && <span>{t('execution.earlierTruncated', language)}</span>}
+                        {(job.consumers || 0) > 1 && <span>{t('execution.panelShared', language, { count: job.consumers })}</span>}
                         {!isExecutionFinished(job.status) && <button className="ml-auto hover:text-text-primary" disabled={job.status === 'stopping'} onClick={() => {
                             void api.execution.cancel(job.jobId).then(response => { if (response.success) terminalManager.applyExecutionSnapshot(response.job) })
-                        }}>{job.status === 'queued' ? (zh ? '取消等待' : 'Cancel') : (zh ? '停止' : 'Stop')}</button>}
+                        }}>{t(job.status === 'queued' ? 'execution.cancelWait' : 'execution.stop', language)}</button>}
                     </div>
                 })()}
 

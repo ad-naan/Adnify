@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { EXECUTION_LIMITS, isExecutionFinished, type ExecutionRequest, type ExecutionSnapshot } from '@shared/types/execution'
+import { isExecutionFinished, type ExecutionRequest, type ExecutionSnapshot } from '@shared/types/execution'
 import { ExecutionScheduler, ExecutionCapacityError } from './ExecutionScheduler'
 import { startExecutionProcess, type ProcessHandle, type ProcessSpec } from './ProcessRunner'
+import { normalizeExecutionSettings, type ExecutionSettings } from '@shared/config/executionSettings'
+import type { ExecutionLogStore } from './ExecutionLogStore'
+import { utf8Tail } from './ExecutionLogStore'
 
 interface Job {
   ownerId: number
@@ -23,11 +26,69 @@ export class ExecutionService {
   private requests = new Map<string, { jobId: string; signature: string; acceptedAt: number }>()
   private closedOwners = new Set<number>()
   private shuttingDown = false
+  private settings = normalizeExecutionSettings(undefined)
+  private workspaceOwners = new Map<string, number>()
+  otherOutputBytes: () => number = () => 0
+  outputBytes(): number { return [...this.jobs.values()].reduce((sum, job) => sum + Buffer.byteLength(job.snapshot.output), 0) }
   constructor(
     readonly scheduler = new ExecutionScheduler(),
     private readonly emit: (ownerId: number, snapshot: ExecutionSnapshot) => void = () => {},
     private readonly runner: Runner = startExecutionProcess,
+    private readonly logs?: ExecutionLogStore,
+    private readonly onHostedChanged: () => void = () => {},
   ) {}
+
+  configure(settings: ExecutionSettings): void {
+    this.settings = settings
+    this.scheduler.configure(settings)
+    this.logs?.configure(settings)
+    for (const job of this.jobs.values()) {
+      if (Buffer.byteLength(job.snapshot.output) <= settings.outputBytes) continue
+      job.snapshot.output = utf8Tail(job.snapshot.output, settings.outputBytes)
+      job.snapshot.truncated = true
+      this.changed(job, true)
+    }
+    this.trimLogs()
+  }
+
+  listAll(): ExecutionSnapshot[] {
+    return [...this.jobs.values()].filter(job => !isExecutionFinished(job.snapshot.status))
+      .map(job => this.snapshot(job))
+  }
+  hosted(): ExecutionSnapshot[] { return this.listAll().filter(job => job.hosted) }
+
+  setHosted(ownerId: number, id: string, hosted: boolean): ExecutionSnapshot {
+    const job = this.owned(ownerId, id)
+    if (job.spec.mode !== 'background' || job.snapshot.status !== 'running' || !job.spec.workspaceId) throw new Error('Only a running local workspace service can be hosted')
+    if (Boolean(job.snapshot.hosted) === hosted) return this.snapshot(job)
+    if (hosted) {
+      let owner = this.workspaceOwners.get(job.spec.workspaceId)
+      if (owner === undefined) { owner = -1 - this.workspaceOwners.size; this.workspaceOwners.set(job.spec.workspaceId, owner) }
+      if (this.scheduler.usage(owner).background >= this.settings.backgroundPerWindow) throw new Error('workspace_background_capacity')
+      job.ownerId = owner
+      job.consumers.add(owner)
+    } else {
+      job.consumers.delete(job.ownerId)
+      job.ownerId = ownerId
+    }
+    job.snapshot.hosted = hosted
+    this.scheduler.transfer(id, job.ownerId)
+    this.changed(job)
+    if (!hosted) this.onHostedChanged()
+    return this.snapshot(job)
+  }
+
+  // Called only by the user's management UI. Agent APIs remain consumer-scoped.
+  manage(ownerId: number, id: string, action: 'stop' | 'host' | 'unhost'): ExecutionSnapshot {
+    const job = this.jobs.get(id)
+    if (!job) throw new Error('job_not_found')
+    if (action === 'stop') return this.cancel(job.ownerId, id)
+    if (this.closedOwners.has(ownerId)) throw new Error('owner_closed')
+    const alreadyAttached = job.consumers.has(ownerId)
+    job.consumers.add(ownerId)
+    try { return this.setHosted(ownerId, id, action === 'host') }
+    catch (error) { if (!alreadyAttached) job.consumers.delete(ownerId); throw error }
+  }
 
   private requestId(ownerId: number, key: string) { return `${ownerId}:${key}` }
 
@@ -75,12 +136,15 @@ export class ExecutionService {
       },
     }
     this.jobs.set(job.snapshot.jobId, job)
+    this.logs?.update(this.snapshot(job))
     this.requests.set(this.requestId(ownerId, spec.requestKey), { jobId: job.snapshot.jobId, signature, acceptedAt: Date.now() })
     void this.run(job)
     return this.snapshot(job)
   }
 
-  private snapshot(job: Job): ExecutionSnapshot { return { ...job.snapshot } }
+  private snapshot(job: Job): ExecutionSnapshot { return { ...job.snapshot, ownerId: job.ownerId,
+    workspaceId: job.spec.workspaceId, consumers: [...job.consumers].filter(id => id >= 0).length,
+    waitingReason: job.snapshot.status === 'queued' ? this.scheduler.waitingReason(job.snapshot.jobId) : undefined } }
   private owned(ownerId: number, id: string): Job {
     const job = this.jobs.get(id)
     if (!job || !job.consumers.has(ownerId)) throw new Error('job_not_found')
@@ -89,7 +153,7 @@ export class ExecutionService {
   list(ownerId: number): ExecutionSnapshot[] {
     const own = [...this.jobs.values()].filter(job => job.consumers.has(ownerId))
     return own.filter(job => !isExecutionFinished(job.snapshot.status))
-      .concat(own.filter(job => isExecutionFinished(job.snapshot.status)).slice(-EXECUTION_LIMITS.history))
+      .concat(own.filter(job => isExecutionFinished(job.snapshot.status)).slice(-this.settings.history))
       .map(job => this.snapshot(job))
   }
   get(ownerId: number, id: string) { return this.snapshot(this.owned(ownerId, id)) }
@@ -167,7 +231,7 @@ export class ExecutionService {
     }
     const protectedIds = new Set([...this.requests.values()].map(request => request.jobId))
     const recent = new Set([...this.jobs.values()].filter(job => isExecutionFinished(job.snapshot.status))
-      .slice(-EXECUTION_LIMITS.history).map(job => job.snapshot.jobId))
+      .slice(-this.settings.history).map(job => job.snapshot.jobId))
     for (const [id, job] of this.jobs) {
       if (isExecutionFinished(job.snapshot.status) && !protectedIds.has(id) && !recent.has(id)) this.jobs.delete(id)
     }
@@ -175,6 +239,10 @@ export class ExecutionService {
 
   private changed(job: Job, outputOnly = false): void {
     job.snapshot.revision++
+    if (!outputOnly) {
+      this.logs?.update(this.snapshot(job))
+      if (job.snapshot.hosted) this.onHostedChanged()
+    }
     if (outputOnly && job.emitTimer) return
     const publish = () => {
       job.emitTimer = undefined
@@ -189,9 +257,10 @@ export class ExecutionService {
 
   private output(job: Job, text: string): void {
     if (!text) return
+    this.logs?.append(job.snapshot.jobId, text)
     const bytes = Buffer.from(job.snapshot.output + text)
-    if (bytes.length > EXECUTION_LIMITS.outputBytes) {
-      let start = bytes.length - EXECUTION_LIMITS.outputBytes
+    if (bytes.length > this.settings.outputBytes) {
+      let start = bytes.length - this.settings.outputBytes
       while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++
       job.snapshot.output = bytes.subarray(start).toString('utf8')
       job.snapshot.truncated = true
@@ -206,7 +275,7 @@ export class ExecutionService {
       || a.snapshot.submittedAt - b.snapshot.submittedAt)
     let total = ordered.reduce((sum, job) => sum + Buffer.byteLength(job.snapshot.output), 0)
     for (const job of ordered) {
-      if (total <= 16 * 1024 * 1024) break
+      if (total <= Math.max(0, this.settings.memoryBytes - this.otherOutputBytes())) break
       const size = Buffer.byteLength(job.snapshot.output)
       if (!size) continue
       total -= size

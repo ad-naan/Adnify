@@ -15,6 +15,7 @@ import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPrev
 import {
     loadEmotionPanelSettings, subscribeEmotionPanelSettings, updateEmotionPanelSettings, } from '@/renderer/agent/emotion/panelSettings'
 import { t } from '@shared/i18n'
+import { ExecutionManager } from '../../panels/ExecutionManager'
 
 const CUSTOM_FONT_VALUE = '__custom__'
 
@@ -99,6 +100,7 @@ const TRIGGER_CHAR_OPTIONS = [
 ]
 
 export function EditorSettings({ settings, setSettings, advancedConfig, setAdvancedConfig, language }: EditorSettingsProps) {
+    const [executionSettingsOpen, setExecutionSettingsOpen] = useState(false)
     const { currentTheme, setTheme } = useStore(useShallow(s => ({ currentTheme: s.currentTheme, setTheme: s.setTheme })))
     const allThemes = themeManager.getAllThemes().map(theme => theme.id)
     const [decorativeAnimations, setDecorativeAnimations] = useState(
@@ -131,6 +133,12 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
+            {executionSettingsOpen && <ExecutionManager language={language} initialTab="settings" onClose={() => setExecutionSettingsOpen(false)} />}
+            <section className={sectionClass}>
+                <h4 className="text-sm font-bold text-text-primary">{t('execution.settingsTitle', language)}</h4>
+                <p className="text-xs text-text-muted">{t('execution.settingsSummary', language)}</p>
+                <button type="button" className="rounded-lg border border-border/60 px-3 py-2 text-xs text-accent hover:bg-accent/10" onClick={() => setExecutionSettingsOpen(true)}>{t('execution.openSettings', language)}</button>
+            </section>
             {/* Theme Section */}
             <section>
                 <div className="flex items-center gap-2 mb-5 ml-1">

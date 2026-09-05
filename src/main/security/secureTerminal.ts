@@ -5,7 +5,8 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { createKeyedLeadingEdgeThrottle } from '@shared/utils/keyedLeadingEdgeThrottle'
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow, app, dialog } from 'electron'
+import type Store from 'electron-store'
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import * as path from 'path'
@@ -37,6 +38,13 @@ import { ExecutionScheduler } from '../services/execution/ExecutionScheduler'
 import { InteractiveSessionRegistry } from '../services/execution/InteractiveSessionRegistry'
 import { resolveDefaultShell } from './pipedShell'
 import type { ExecutionRequest, ExecutionReply } from '@shared/types/execution'
+import type { ExecutionManagementAction } from '@shared/types/execution'
+import { normalizeExecutionSettings } from '@shared/config/executionSettings'
+import { ExecutionLogStore } from '../services/execution/ExecutionLogStore'
+import { IdleSessionReaper, hasNoChildProcesses } from '../services/execution/IdleSessionReaper'
+import { executionRuntime } from '../services/execution/runtime'
+import { getUserConfigDir } from '../services/configPath'
+import { asLanguage, t } from '@shared/i18n'
 
 
 interface SecureShellRequest {
@@ -105,6 +113,7 @@ const terminalClaims = new Map<string, AbortController>()
 const terminalDeadlines = new Map<string, { leaseId: string; timeoutMs: number; timer?: ReturnType<typeof setTimeout> }>()
 const terminalStops = new Map<string, Promise<boolean>>()
 const interactiveSessions = new InteractiveSessionRegistry()
+let idleSweepTimer: ReturnType<typeof setInterval> | undefined
 let executionService: ExecutionService | undefined
 let executionScheduler = new ExecutionScheduler()
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
@@ -324,6 +333,7 @@ function killPtyReliably(ptyProcess: any): void {
  * 清理所有终端进程
  */
 export function cleanupTerminals(): void {
+  clearInterval(idleSweepTimer)
   executionService?.shutdown()
   for (const creation of terminalCreations.values()) creation.abort()
   for (const claim of terminalClaims.values()) claim.abort()
@@ -424,7 +434,8 @@ function isExpectedGitQueryMiss(args: string[], stderr: string, stdout: string):
 export function registerSecureTerminalHandlers(
   getMainWindow: () => BrowserWindow | null,
   getWorkspace: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
-  getWindowWorkspace?: (windowId: number) => string[] | null
+  getWindowWorkspace?: (windowId: number) => string[] | null,
+  preferencesStore?: Store,
 ) {
   const authorizeDecision = async (
     operation: OperationType,
@@ -683,12 +694,66 @@ export function registerSecureTerminalHandlers(
 
   const ownerWindows = new Map<number, BrowserWindow>()
   const trackedWindows = new Set<number>()
-  executionScheduler = new ExecutionScheduler()
+  let executionSettings = normalizeExecutionSettings(preferencesStore?.get('executionSettings'))
+  const logs = preferencesStore ? new ExecutionLogStore(path.join(getUserConfigDir(), 'execution-logs'), executionSettings) : undefined
+  executionScheduler = new ExecutionScheduler(executionSettings)
   executionService = new ExecutionService(executionScheduler, (ownerId, snapshot) => {
     const window = ownerWindows.get(ownerId)
     if (window && !window.isDestroyed()) window.webContents.send('execution:changed', snapshot)
-  })
+  }, undefined, logs, () => executionRuntime.hostedChanged())
   const executions = executionService
+  executions.otherOutputBytes = () => interactiveSessions.outputBytes()
+  interactiveSessions.otherOutputBytes = () => executions.outputBytes()
+  executions.configure(executionSettings)
+  interactiveSessions.configure(executionSettings)
+  preferencesStore?.onDidChange('executionSettings', value => {
+    executionSettings = normalizeExecutionSettings(value)
+    executions.configure(executionSettings)
+    interactiveSessions.configure(executionSettings)
+  })
+  executionRuntime.hasHosted = () => executions.hosted().length > 0
+  executionRuntime.hosted = () => executions.hosted()
+  executionRuntime.stopHosted = id => {
+    const job = executions.hosted().find(row => row.jobId === id)
+    if (job) executions.manage(job.ownerId!, id, 'stop')
+  }
+  executionRuntime.flush = async () => {
+    // Cleanup has already requested stops. Preserve unconfirmed outcomes if the deadline wins.
+    const deadline = Date.now() + 3500
+    while ((executions.listAll().length || terminals.size) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50))
+    await logs?.flush()
+  }
+  const reclaimed = new Set<string>()
+  const stopSession = async (id: string): Promise<boolean> => {
+    terminalCreations.get(id)?.abort()
+    terminalClaims.get(id)?.abort()
+    const terminal = terminals.get(id)
+    if (!terminal) return true
+    interactiveSessions.stopping(id)
+    let stopped = terminalStops.get(id)
+    if (!stopped) {
+      stopped = new Promise<boolean>(resolve => {
+        const timer = setTimeout(() => { interactiveSessions.error(id); resolve(false) }, 10_000)
+        timer.unref?.()
+        terminal.onExit(() => { clearTimeout(timer); resolve(true) })
+        killPtyReliably(terminal)
+      })
+      terminalStops.set(id, stopped)
+    }
+    const confirmed = await stopped
+    if (terminalStops.get(id) === stopped) terminalStops.delete(id)
+    return confirmed
+  }
+  const reaper = new IdleSessionReaper(interactiveSessions, () => executionSettings,
+    async id => { const pid = terminals.get(id)?.pid; return pid ? hasNoChildProcesses(pid) : false },
+    id => { if (terminals.has(id)) { reclaimed.add(id); void stopSession(id) } })
+  clearInterval(idleSweepTimer)
+  idleSweepTimer = setInterval(() => {
+    const usage = executionScheduler.usage()
+    void reaper.sweep(usage.queued > 0 && usage.sessions + usage.background >= executionSettings.persistent)
+      .catch(error => logger.security.warn('[Terminal] Idle inspection failed:', error))
+  }, 5000)
+  idleSweepTimer.unref?.()
   const ownerFor = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): number => {
     const window = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
     const ownerId = event.sender?.id ?? window?.webContents.id ?? 0
@@ -696,6 +761,12 @@ export function registerSecureTerminalHandlers(
       ownerWindows.set(ownerId, window)
       if (!trackedWindows.has(ownerId)) {
         trackedWindows.add(ownerId)
+        const releaseUnsubmitted = () => {
+          for (const [id, claim] of terminalClaims) if (terminalOwners.get(id) === ownerId) claim.abort()
+          interactiveSessions.releaseUnsubmitted(ownerId)
+        }
+        window.webContents.on?.('render-process-gone', releaseUnsubmitted)
+        window.webContents.on?.('did-start-loading', releaseUnsubmitted)
         window.once?.('closed', () => {
           executions.closeOwner(ownerId)
           for (const [id, owner] of terminalOwners) {
@@ -766,6 +837,52 @@ export function registerSecureTerminalHandlers(
     return { success: true, job: executions.submit(ownerId, spec) }
   })
   safeIpcHandle('execution:list', (event) => ({ success: true, jobs: executions.list(ownerFor(event)), usage: executionScheduler.usage() }))
+  safeIpcHandle('execution:overview', async event => {
+    ownerFor(event)
+    const archives = await logs?.list() || []
+    const archivedById = new Map(archives.map(row => [row.jobId, row]))
+    return { success: true, settings: executionSettings, usage: executionScheduler.usage(),
+      jobs: executions.listAll().map(job => ({ ...job, output: '', logError: archivedById.get(job.jobId)?.logError, logTruncated: archivedById.get(job.jobId)?.logTruncated })),
+      archives, sessions: interactiveSessions.list().map(session => ({ ...session, output: '' })), ownerId: ownerFor(event) }
+  })
+  safeIpcHandle('execution:open-request', event => executionRuntime.managerRequests.delete(ownerFor(event)))
+  safeIpcHandle('execution:manage', async (event, { id, action }: { id: string; action: ExecutionManagementAction }) => {
+    const ownerId = ownerFor(event)
+    if (typeof id !== 'string' || id.length > 512) throw new Error('Invalid execution ID')
+    if (action === 'stop-session') {
+      if (!terminalOwners.has(id)) throw new Error('Terminal not found')
+      return await stopSession(id) ? { success: true } : { success: false, error: 'Terminal stop unconfirmed; capacity remains reserved' }
+    }
+    if (action === 'stop' || action === 'host' || action === 'unhost') {
+      if (action === 'host') executionRuntime.prepareHosting()
+      return { success: true, job: executions.manage(ownerId, id, action) }
+    }
+    if (action === 'recycle' || action === 'retain') {
+      interactiveSessions.setDisposable(ownerId, id, action === 'recycle')
+      void reaper.sweep().catch(error => logger.security.warn('[Terminal] Idle inspection failed:', error))
+      return { success: true }
+    }
+    if (!logs) throw new Error('Log archive is unavailable')
+    if (action === 'log') {
+      const result = await logs.read(id)
+      if (result.error) {
+        result.output = executions.listAll().find(job => job.jobId === id)?.output
+          || interactiveSessions.list().find(session => `session:${session.id}` === id)?.output || result.output
+        result.truncated = true
+      }
+      return { success: true, ...result }
+    }
+    if (action === 'pin' || action === 'unpin') await logs.pin(id, action === 'pin')
+    else if (action === 'delete') await logs.delete(id)
+    else if (action === 'export') {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) throw new Error('Window unavailable')
+      const target = await dialog.showSaveDialog(window, { defaultPath: 'execution.log', filters: [{ name: 'Log', extensions: ['log', 'txt'] }] })
+      if (target.canceled || !target.filePath) return { success: true, cancelled: true }
+      await logs.export(id, target.filePath)
+    } else throw new Error('Invalid management action')
+    return { success: true }
+  })
   safeIpcHandle('execution:wait', async (event, { jobId, afterRevision = 0, waitMs = 30_000 }) =>
     ({ success: true, job: await executions.wait(ownerFor(event), jobId, afterRevision, waitMs) }))
   safeIpcHandle('execution:cancel', (event, { jobId }) => ({ success: true, job: executions.cancel(ownerFor(event), jobId) }))
@@ -1152,6 +1269,11 @@ export function registerSecureTerminalHandlers(
 
   const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
     terminals.set(id, terminalProcess)
+    const session = interactiveSessions.list().find(row => row.id === id)!
+    const archive = { jobId: `session:${id}`, requestKey: '', threadId: id, command: session.shell,
+      cwd: session.cwd, shell: session.shell, mode: 'background' as const, status: 'running' as const,
+      submittedAt: Date.now(), exitCode: null, output: '', truncated: false, revision: 1, ownerId: session.ownerId }
+    logs?.update(archive)
     let seq = 0
     const ptyUtf8 = new StringDecoder('utf8')
 
@@ -1196,6 +1318,7 @@ export function registerSecureTerminalHandlers(
         return
       }
       interactiveSessions.output(id, text)
+      logs?.append(archive.jobId, text)
       ptyPacer.push(id, text)
     })
 
@@ -1227,6 +1350,11 @@ export function registerSecureTerminalHandlers(
       }
       // 解码残留字节并入缓冲，再整体刷出，保证退出前不丢输出且顺序正确
       const tail = ptyUtf8.end()
+      logs?.append(archive.jobId, tail)
+      logs?.update({ ...archive, status: terminalProcess instanceof SshShellSession ? 'unknown' : exitCode === 0 ? 'completed' : 'failed',
+        exitCode, endedAt: Date.now(), revision: 2,
+        reason: terminalProcess instanceof SshShellSession ? 'remote_result_unknown' : reclaimed.has(id) ? 'idle_reclaimed' : undefined }, false)
+      const wasReclaimed = reclaimed.delete(id)
       if (tail.length > 0) {
         ptyPacer.push(id, tail)
       }
@@ -1236,7 +1364,8 @@ export function registerSecureTerminalHandlers(
           id,
           exitCode,
           signal,
-          reason: terminalProcess instanceof SshShellSession ? 'remote_close' : 'process_exit',
+          reason: terminalProcess instanceof SshShellSession ? 'remote_close' : wasReclaimed ? 'idle_reclaimed' : 'process_exit',
+          message: t(wasReclaimed ? 'execution.sessionReclaimed' : 'execution.processExited', asLanguage(preferencesStore?.get('language') as string | undefined), { code: exitCode }),
           ...nextMeta(),
         })
       }
@@ -1728,21 +1857,6 @@ export function registerSecureTerminalHandlers(
    */
   safeIpcHandle('terminal:kill', async (event, id: string) => {
     if (!id || terminalOwners.get(id) !== ownerFor(event)) return { success: false, error: 'Terminal not found in this window' }
-    terminalCreations.get(id)?.abort()
-    terminalClaims.get(id)?.abort()
-    const ptyProcess = terminals.get(id)
-    if (!ptyProcess) return { success: true }
-    interactiveSessions.stopping(id)
-    let stopped = terminalStops.get(id)
-    if (!stopped) {
-      stopped = new Promise<boolean>(resolve => {
-        const timer = setTimeout(() => resolve(false), 10_000)
-        timer.unref?.()
-        ptyProcess.onExit(() => { clearTimeout(timer); resolve(true) })
-        killPtyReliably(ptyProcess)
-      })
-      terminalStops.set(id, stopped)
-    }
-    return await stopped ? { success: true } : { success: false, error: 'Terminal stop is not confirmed; its capacity is still reserved' }
+    return await stopSession(id) ? { success: true } : { success: false, error: 'Terminal stop is not confirmed; its capacity is still reserved' }
   })
 }

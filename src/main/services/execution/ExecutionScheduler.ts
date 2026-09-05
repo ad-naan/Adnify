@@ -17,7 +17,28 @@ export class ExecutionScheduler {
   private queue: Waiter[] = []
   private lastOwner = new Map<ResourcePool, number>()
   private lastThread = new Map<number, string>()
-  constructor(private readonly limits: { [K in keyof typeof EXECUTION_LIMITS]: number } = EXECUTION_LIMITS) {}
+  constructor(private limits: { [K in keyof typeof EXECUTION_LIMITS]: number } = EXECUTION_LIMITS) {}
+
+  configure(limits: typeof this.limits): void {
+    this.limits = { ...limits }
+    // Lowering a budget never evicts a running process. Existing queue deadlines remain fixed.
+    this.drain()
+  }
+
+  waitingReason(key: string): string | undefined {
+    const item = this.queue.find(q => q.key === key)
+    if (!item) return undefined
+    const own = this.usage(item.ownerId)
+    if (item.pool === 'session') return 'session_capacity'
+    if (item.pool === 'background') {
+      if (own.background >= this.limits.backgroundPerWindow) return 'window_background_capacity'
+      if (this.usage().background >= this.limits.background) return 'background_capacity'
+      return 'session_capacity'
+    }
+    if ([...this.active].filter(a => a.pool === 'command' && a.ownerId === item.ownerId && a.threadId === item.threadId).length >= this.limits.commandsPerThread) return 'thread_command_capacity'
+    if (own.commands >= this.limits.commandsPerWindow) return 'window_command_capacity'
+    return 'command_capacity'
+  }
 
   usage(ownerId?: number): ExecutionUsage {
     const items = [...this.active].filter(a => ownerId === undefined || a.ownerId === ownerId)

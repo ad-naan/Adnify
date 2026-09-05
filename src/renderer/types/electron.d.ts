@@ -529,10 +529,14 @@ export interface ElectronAPI {
   executionWait: (jobId: string, afterRevision: number, waitMs?: number) => Promise<import('@shared/types/execution').ExecutionReply>
   executionCancel: (jobId: string) => Promise<import('@shared/types/execution').ExecutionReply>
   executionInput: (jobId: string, data: string) => Promise<{ success: boolean; error?: string }>
+  executionOverview: () => Promise<import('@shared/types/execution').ExecutionOverview>
+  executionManagerRequested: () => Promise<boolean>
+  onExecutionManagerRequested: (callback: () => void) => () => void
+  executionManage: (id: string, action: import('@shared/types/execution').ExecutionManagementAction) => Promise<{ success: boolean; error?: string; output?: string; truncated?: boolean; cancelled?: boolean }>
   onExecutionChanged: (callback: (job: import('@shared/types/execution').ExecutionSnapshot) => void) => () => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
   onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => () => void
-  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) => () => void
+  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' | 'idle_reclaimed'; message?: string }) => void) => () => void
   onTerminalError: (callback: (event: { id: string; error: string; seq: number; occurredAt: number; fatal?: boolean; reason: 'process_error' | 'spawn_error' | 'unknown' }) => void) => () => void
 
   // Remote Shell / SFTP

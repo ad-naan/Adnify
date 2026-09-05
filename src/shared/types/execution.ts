@@ -38,6 +38,14 @@ export interface ExecutionSnapshot {
   truncated: boolean
   revision: number
   consumers?: number
+  ownerId?: number
+  workspaceId?: string
+  hosted?: boolean
+  waitingReason?: string
+  archived?: boolean
+  pinned?: boolean
+  logTruncated?: boolean
+  logError?: string
 }
 export const isExecutionFinished = (status: ExecutionStatus): boolean =>
   ['completed', 'failed', 'cancelled', 'expired'].includes(status)
@@ -62,4 +70,18 @@ export interface InteractiveSessionSnapshot {
   output: string
   revision: number
   exitCode?: number
+  disposable?: boolean
+  lastUsedAt?: number
 }
+
+export interface ExecutionOverview {
+  success: boolean
+  ownerId?: number
+  error?: string
+  settings: import('../config/executionSettings').ExecutionSettings
+  usage: ExecutionUsage
+  jobs: ExecutionSnapshot[]
+  archives: ExecutionSnapshot[]
+  sessions: (InteractiveSessionSnapshot & { ownerId: number })[]
+}
+export type ExecutionManagementAction = 'stop' | 'stop-session' | 'host' | 'unhost' | 'pin' | 'unpin' | 'delete' | 'export' | 'log' | 'recycle' | 'retain'

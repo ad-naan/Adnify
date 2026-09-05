@@ -6,7 +6,8 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, clipboard, crashReporter, dialog, ipcMain, net, shell, protocol } from 'electron'
+import { app, BrowserWindow, Menu, Tray, clipboard, crashReporter, dialog, ipcMain, net, shell, protocol } from 'electron'
+import { executionRuntime } from './services/execution/runtime'
 import { randomUUID } from 'crypto'
 import * as os from 'os'
 import * as path from 'path'
@@ -113,6 +114,39 @@ let lastActiveWindow: BrowserWindow | null = null
 const pendingShutdownRequests = new Map<string, (success: boolean) => void>()
 const authorizedCloseWindows = new Set<number>()
 let appQuitInProgress = false
+let executionTray: Tray | undefined
+function openExecutionManager(): void {
+  const win = getMainWindow() || createWindow(false)
+  executionRuntime.managerRequests.add(win.webContents.id)
+  if (win.isMinimized()) win.restore()
+  win.show(); win.focus()
+  win.webContents.send('execution:open-manager')
+}
+function ensureExecutionTray(): void {
+  if (executionTray) return
+  const icon = path.join(app.getAppPath(), 'public/brand/icons', process.platform === 'win32' ? 'app.ico' : 'app.png')
+  executionTray = new Tray(icon)
+  executionTray.on('double-click', openExecutionManager)
+}
+executionRuntime.prepareHosting = ensureExecutionTray
+executionRuntime.hostedChanged = () => {
+  const hosted = executionRuntime.hosted()
+  if (hosted.length) ensureExecutionTray()
+  if (!executionTray) return
+  const language = asLanguage(configStore?.get('language') as string | undefined)
+  executionTray.setToolTip(t('execution.traySummary', language, { count: hosted.length }))
+  executionTray.setContextMenu(Menu.buildFromTemplate([
+    { label: t('execution.trayOpen', language), click: openExecutionManager },
+    { type: 'separator' },
+    ...hosted.map(job => ({ label: t('execution.trayStop', language, { command: job.command.slice(0, 70).replace(/&/g, '&&') }), click: () => executionRuntime.stopHosted(job.jobId) })),
+    { type: 'separator' },
+    { label: t('execution.trayQuit', language), click: () => app.quit() },
+  ]))
+  if (!hosted.length) {
+    executionTray.destroy(); executionTray = undefined
+    if (!windows.size && !appQuitInProgress && process.platform !== 'darwin') app.quit()
+  }
+}
 const launchFiles = collectLaunchFiles(process.argv)
 queueLaunchFiles(launchFiles, 'startup')
 const relaunchContext = parseRelaunchContext(process.argv)
@@ -555,7 +589,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     logger.system.warn(`[Main] Window ${windowId} close event intercepted for state save`)
 
     void (async () => {
-      const isLastWindowQuit = process.platform !== 'darwin' && windows.size === 1
+      const isLastWindowQuit = process.platform !== 'darwin' && windows.size === 1 && !executionRuntime.hasHosted()
       const shutdownReason = isLastWindowQuit ? 'app-quit' : 'window-close'
       const presentation = await getShutdownPresentation(win)
       await shutdownWindowController.show(shutdownReason, presentation, win)
@@ -686,6 +720,7 @@ async function performGlobalCleanup() {
   try {
     // 1. 清理 IPC 处理器（包括终端）
     ipcModule?.cleanupAllHandlers()
+    await executionRuntime.flush()
     // 2. 停止所有 LSP 服务器（超时 3 秒）
     await withTimeout(
       lspManager?.stopAllServers() ?? Promise.resolve(),
@@ -1024,6 +1059,7 @@ app.on('second-instance', (_event, argv) => {
 
 app.on('window-all-closed', () => {
   logger.system.warn('[Main] All windows closed, platform:', process.platform)
+  if (!appQuitInProgress && executionRuntime.hasHosted()) return
   if (appQuitInProgress && !isCleanupDone) {
     return
   }
@@ -1054,9 +1090,14 @@ app.on('window-all-closed', () => {
 let isCleanupDone = false
 app.on('before-quit', async (e) => {
   if (isDevelopmentRuntime() && !isCleanupDone) {
+    e.preventDefault()
     appQuitInProgress = true
     isCleanupDone = true
-    logger.system.info('[Main] Skipping shutdown cleanup during development hot restart')
+    logger.system.info('[Main] Stopping execution processes during development restart')
+    try {
+      ipcModule?.cleanupAllHandlers()
+      await withTimeout(executionRuntime.flush(), 4000, 'Execution cleanup during development restart')
+    } finally { app.quit() }
     return
   }
 
@@ -1100,6 +1141,7 @@ app.on('before-quit', async (e) => {
 app.on('activate', () => { if (windows.size === 0) createWindow() })
 
 app.on('will-quit', () => {
+  executionTray?.destroy()
   void closeUtilityProcesses()
   backgroundTaskService.stop()
   processDiagnostics.stop()

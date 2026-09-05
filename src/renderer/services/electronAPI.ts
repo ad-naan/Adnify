@@ -209,6 +209,10 @@ function createGroupedAPI() {
     },
 
     execution: {
+      overview: () => raw.executionOverview(),
+      managerRequested: () => raw.executionManagerRequested(),
+      onManagerRequested: (callback: () => void) => raw.onExecutionManagerRequested(callback),
+      manage: (id: string, action: import('@shared/types/execution').ExecutionManagementAction) => raw.executionManage(id, action),
       submit: (request: import('@shared/types/execution').ExecutionRequest) => raw.executionSubmit(request),
       list: () => raw.executionList(),
       wait: (jobId: string, afterRevision: number, waitMs?: number) => raw.executionWait(jobId, afterRevision, waitMs),

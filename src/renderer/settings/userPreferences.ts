@@ -1,6 +1,7 @@
 import { DEFAULT_EMOTION_PANEL_SETTINGS, normalizeEmotionPanelSettings, type EmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { DEFAULT_PREVIEW_SETTINGS, normalizePreviewSettings, type PreviewSettings } from '@/renderer/preview/previewSettings'
 import { DEFAULT_BACKGROUND_TASK_SETTINGS, normalizeBackgroundTaskSettings, type BackgroundTaskSettings } from '@shared/types/backgroundTasks'
+import { EXECUTION_SETTINGS_DEFAULTS, normalizeExecutionSettings, type ExecutionSettings } from '@shared/config/executionSettings'
 import { normalizeUserProfile, DEFAULT_USER_PROFILE, type UserProfile } from '@/renderer/settings/userProfile'
 import { normalizeCodeSnippets, type CodeSnippet } from '@/renderer/services/snippetService'
 import { normalizeKeybindingOverrides } from '@/renderer/services/keybindingService'
@@ -94,6 +95,11 @@ function restoreShellState(imported: ShellState, current: ShellState): ShellStat
 }
 
 export const USER_PREFERENCES = {
+  executionSettings: {
+    ...USER_PREFERENCE_KEYS.executionSettings,
+    fallback: EXECUTION_SETTINGS_DEFAULTS,
+    normalize: normalizeExecutionSettings,
+  } satisfies UserPreferenceDefinition<ExecutionSettings>,
   backgroundTaskSettings: {
     ...USER_PREFERENCE_KEYS.backgroundTaskSettings,
     fallback: DEFAULT_BACKGROUND_TASK_SETTINGS,
