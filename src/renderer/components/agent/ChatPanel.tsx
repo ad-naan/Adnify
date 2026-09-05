@@ -1246,10 +1246,12 @@ function ChatPanelContent() {
     visibleRangeRef.current = range
   }, [])
 
-  const virtuosoComponents = useMemo(() => ({
+  // Keep the scroller type stable when focus toggles decorative animations.
+  // Recreating it remounts the list DOM and resets the viewport's scroll state.
+  const ChatScroller = useMemo(() =>
     // ref 回调必须 useCallback 住。内联箭头函数每次 Scroller 渲染都是新引用，
     // React 会先用 null 解绑再重新绑定，白白让下游把滚动监听拆装一轮。
-    Scroller: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => {
+    forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => {
       const setScrollerNode = useCallback((node: HTMLDivElement | null) => {
         attachScrollerNode(node)
 
@@ -1258,10 +1260,13 @@ function ChatPanelContent() {
         } else if (ref) {
           ref.current = node
         }
-      }, [ref])
+      }, [attachScrollerNode, ref])
 
       return <div {...props} ref={setScrollerNode} />
-    }),
+    }), [attachScrollerNode])
+
+  const virtuosoComponents = useMemo(() => ({
+    Scroller: ChatScroller,
     EmptyPlaceholder: () => (
       <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
         {/* Background Ambience — translate/opacity only.
@@ -1304,7 +1309,7 @@ function ChatPanelContent() {
         </div>
       </div>
     )
-  }), [attachScrollerNode, language, setInput, textareaRef, decorativeAnimations])
+  }), [ChatScroller, language, setInput, textareaRef, decorativeAnimations])
 
   return (
     <div
