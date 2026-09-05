@@ -3,11 +3,11 @@ import { useAgentStore } from '../agent/store/AgentStore'
 import { EventBus } from '../agent/core/EventBus'
 import { useStore } from '../store'
 import { api } from '../services/electronAPI'
-import { toast } from '../components/common/ToastProvider'
 import { t } from '@shared/i18n'
 import { resolveRuntimeLLMConfig } from '@shared/config/llmConfigResolver'
 import { projectBackgroundActivity } from './activity'
 import { useBackgroundConnections } from './connections'
+import { editorEvents } from '../notifications/events'
 
 export function useBackgroundTasks(enabled: boolean): void {
   useEffect(() => {
@@ -61,7 +61,7 @@ export function useBackgroundTasks(enabled: boolean): void {
         useBackgroundConnections.setState(state)
         const report = state.report
         if (!state.checking && report && (report.checkFailed || report.model === 'unreachable' || report.mcp.failed.length)) {
-          toast.warning(t('backgroundTasks.recoveryNeeded', useStore.getState().language))
+          editorEvents.publish({ type: 'app.connections.failed', title: t('backgroundTasks.recoveryNeeded', useStore.getState().language), message: t('notifications.openEditor', useStore.getState().language), level: 'warning', attention: true })
         }
       }),
     ]

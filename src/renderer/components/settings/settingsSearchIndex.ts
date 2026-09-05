@@ -22,7 +22,8 @@ export interface SettingsSearchEntry {
 }
 
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
-  { id: 'system.backgroundTasks', tab: 'system', labelKey: 'backgroundTasks.title', keywords: ['background', 'taskbar', 'sleep', 'wake', 'resume', '后台', '任务栏', '休眠', '唤醒', '连接恢复'] },
+  { id: 'notifications.channels', tab: 'notifications', labelKey: 'notifications.settingsTitle', keywords: ['notification', 'webhook', 'push', 'alert', '通知', '提醒', '推送', '声音', '飞书', '钉钉'] },
+  { id: 'system.backgroundTasks', tab: 'background', labelKey: 'backgroundTasks.title', keywords: ['background', 'taskbar', 'sleep', 'wake', 'resume', '后台', '任务栏', '休眠', '唤醒', '连接恢复'] },
   // ========== provider（模型提供商）==========
   { id: 'provider.selection', tab: 'provider', labelKey: 'settingsSearch.providerSelection', keywords: ['provider', 'model', '提供商', '模型', 'openai', 'anthropic', 'claude', 'gemini', 'deepseek', 'ollama'] },
   { id: 'provider.apiKey', tab: 'provider', labelKey: 'settingsSearch.providerApiKey', keywords: ['api', 'key', '密钥', 'token', 'apikey', '认证', 'authentication'] },
@@ -109,13 +110,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'security.commandScopes', tab: 'security', labelKey: 'settingsSearch.securityCommandScopes', keywords: ['terminal', 'command', 'scope', 'approve', 'agent', '终端', '命令', '范围', '审批', 'ai'] },
 
   // ========== system（系统）==========
-  { id: 'system.githubToken', tab: 'system', labelKey: 'settingsSearch.systemGithubToken', keywords: ['github', 'token', 'pat', 'personal access', '令牌'] },
-  { id: 'system.proxy', tab: 'system', labelKey: 'settingsSearch.systemProxy', keywords: ['proxy', '代理', 'network', '网络', 'socks', 'http', 'bypass', '绕过'] },
-  { id: 'system.storagePath', tab: 'system', labelKey: 'settingsSearch.systemStoragePath', keywords: ['storage', '存储', 'path', '路径', 'config', '配置', 'data', '数据'] },
-  { id: 'system.cache', tab: 'system', labelKey: 'settingsSearch.systemCache', keywords: ['cache', '缓存', 'clear', '清除', 'clean', '清理', 'deep', '深度'] },
-  { id: 'system.resetAll', tab: 'system', labelKey: 'settingsSearch.systemResetAll', keywords: ['reset', '重置', 'factory', '出厂', 'restore', '恢复', 'default', '默认'] },
-  { id: 'system.logging', tab: 'system', labelKey: 'settingsSearch.systemLogging', keywords: ['log', '日志', 'file', '文件', 'export', '导出', 'debug', '调试'] },
-  { id: 'system.diagnostics', tab: 'system', labelKey: 'systemSettings.diagnosticsTitle', keywords: ['diagnostics', '诊断', 'memory', '内存', 'performance', '性能', 'trace', '卡顿', 'gpu'] },
-  { id: 'system.backup', tab: 'system', labelKey: 'settingsSearch.systemBackup', keywords: ['backup', '备份', 'export', '导出', 'import', '导入', 'restore', '恢复'] },
+  { id: 'system.githubToken', tab: 'network', labelKey: 'settingsSearch.systemGithubToken', keywords: ['github', 'token', 'pat', 'personal access', '令牌'] },
+  { id: 'system.proxy', tab: 'network', labelKey: 'settingsSearch.systemProxy', keywords: ['proxy', '代理', 'network', '网络', 'socks', 'http', 'bypass', '绕过'] },
+  { id: 'system.storagePath', tab: 'data', labelKey: 'settingsSearch.systemStoragePath', keywords: ['storage', '存储', 'path', '路径', 'config', '配置', 'data', '数据'] },
+  { id: 'system.cache', tab: 'data', labelKey: 'settingsSearch.systemCache', keywords: ['cache', '缓存', 'clear', '清除', 'clean', '清理', 'deep', '深度'] },
+  { id: 'system.resetAll', tab: 'data', labelKey: 'settingsSearch.systemResetAll', keywords: ['reset', '重置', 'factory', '出厂', 'restore', '恢复', 'default', '默认'] },
+  { id: 'system.logging', tab: 'diagnostics', labelKey: 'settingsSearch.systemLogging', keywords: ['log', '日志', 'file', '文件', 'export', '导出', 'debug', '调试'] },
+  { id: 'system.diagnostics', tab: 'diagnostics', labelKey: 'systemSettings.diagnosticsTitle', keywords: ['diagnostics', '诊断', 'memory', '内存', 'performance', '性能', 'trace', '卡顿', 'gpu'] },
+  { id: 'system.backup', tab: 'data', labelKey: 'settingsSearch.systemBackup', keywords: ['backup', '备份', 'export', '导出', 'import', '导入', 'restore', '恢复'] },
   { id: 'system.changelog', tab: 'system', labelKey: 'settingsSearch.systemChangelog', keywords: ['version', 'release', 'changelog', '版本', '更新', '日志'] },
 ]

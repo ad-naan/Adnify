@@ -103,6 +103,7 @@ describe('i18n locale parity', () => {
     const RUNTIME_PREFIXES = [
       'agent.typing.', 'cmd.', 'errorCode.', 'gitExcludeService.', 'kb.category.',
       'planReview.risk.', 'providerAuthError.', 'providerSettings.effort.',
+      'notifications.level.', 'notifications.delivery.',
       'securityReason.', 'useFileSave.error.', 'worktreeLane.reason.', 'worktreeLane.status.',
     ]
     const UNREFERENCED: string[] = [
@@ -129,7 +130,7 @@ describe('i18n locale parity', () => {
       'proposedChanges', 'rawArguments', 'readFile', 'receivingData',
       'regenerateResponse', 'register', 'replaceInSelection', 'requestTimeout',
       'retry', 'returnToSend', 'runCode', 'runCommand',
-      'saveSettings', 'searchFile', 'searchFiles', 'settings.managePreferences',
+      'searchFile', 'searchFiles', 'settings.managePreferences',
       'success.fileSaved', 'success.indexComplete', 'terminalOutput', 'textResults',
       'toolArguments', 'toolCopyResult', 'toolResult', 'toolResultFor',
       'toolStreaming', 'toolTruncated', 'toolWaitingApproval', 'virtualized',

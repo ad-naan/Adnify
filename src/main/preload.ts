@@ -14,6 +14,7 @@ import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, Pr
 import type { FileMutationResult } from '@shared/types/fileMutation'
 import type { DiagnosticsCaptureOptions, DiagnosticsCaptureResult } from '@shared/types/diagnostics'
 import type { BackgroundTaskActivity, BackgroundConnectionState } from '@shared/types/backgroundTasks'
+import type { NotificationAPI, NotificationUpdate, EditorEvent } from '@shared/types/notifications'
 import type { RendererStreamChunk } from '@shared/types/llm'
 import type { Language } from '@shared/i18n'
 import { forEachStreamChunk, type StreamBatchEnvelope } from '@shared/utils/llmStreamBatch'
@@ -210,6 +211,7 @@ interface OpenFilesPayload {
 }
 
 export interface ElectronAPI {
+  notifications: NotificationAPI
   assetRequest: (action: import('@shared/types/assets').AssetAction) => Promise<{ ok: boolean; value?: unknown; error?: string }>
   // App lifecycle
   appReady: () => void
@@ -553,6 +555,12 @@ export interface ElectronAPI {
 
 // =================== 暴露 API ===================
 
+async function invokeNotification<T>(name: string, ...args: unknown[]): Promise<T> {
+  const result = await ipcRenderer.invoke(`notifications:${name}`, ...args)
+  if (result?.success === false && typeof result.code === 'string') throw new Error('Notification request failed')
+  return result as T
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   assetRequest: (action: import('@shared/types/assets').AssetAction) => ipcRenderer.invoke('assets:request', action),
   appReady: () => ipcRenderer.send('app:ready'),
@@ -663,6 +671,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserDataPath: () => ipcRenderer.invoke('settings:getUserDataPath'),
   getRecentLogs: () => ipcRenderer.invoke('settings:getRecentLogs'),
   captureDiagnostics: (options: DiagnosticsCaptureOptions): Promise<DiagnosticsCaptureResult> => ipcRenderer.invoke('diagnostics:capture', options),
+  notifications: {
+    publish: events => invokeNotification('publish', events),
+    history: () => invokeNotification('history'),
+    settings: () => invokeNotification('settings'),
+    saveSettings: settings => invokeNotification('saveSettings', settings),
+    markRead: ids => invokeNotification('markRead', ids),
+    clear: () => invokeNotification('clear'),
+    activate: id => invokeNotification('activate', id),
+    test: channel => invokeNotification('test', channel),
+    onUpdate: callback => {
+      const listener = (_: IpcRendererEvent, update: NotificationUpdate) => callback(update)
+      ipcRenderer.on('notifications:update', listener)
+      return () => ipcRenderer.removeListener('notifications:update', listener)
+    },
+    onActivate: callback => {
+      const listener = (_: IpcRendererEvent, event: EditorEvent) => callback(event)
+      ipcRenderer.on('notifications:activate', listener)
+      return () => ipcRenderer.removeListener('notifications:activate', listener)
+    },
+  } satisfies NotificationAPI,
   backgroundTasksUpdate: (activity: BackgroundTaskActivity): Promise<boolean> => ipcRenderer.invoke('backgroundTasks:update', activity),
   backgroundTasksGetConnections: (): Promise<BackgroundConnectionState> => ipcRenderer.invoke('backgroundTasks:getConnections'),
   backgroundTasksCheck: (): Promise<BackgroundConnectionState> => ipcRenderer.invoke('backgroundTasks:check'),

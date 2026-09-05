@@ -18,6 +18,7 @@ import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/c
 import type Store from 'electron-store'
 import { destroyIndexService } from './indexing/indexProcess'
 import { closeUtilityProcesses } from './services/process/UtilityProcessClient'
+import { mainEditorEvents } from './services/notifications/events'
 import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
 import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
@@ -338,6 +339,7 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') mainEditorEvents.publish({ type: 'app.renderer.crashed', title: 'notifications.windowCrashed', message: 'notifications.openEditor', level: 'error', attention: true, windowId: win.id })
     logger.system.error('[Window] render-process-gone', {
       windowId: win.id,
       reason: details.reason,
@@ -350,6 +352,7 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
 
   // 渲染进程卡死（长任务或内存压力下的 GC 抖动），通常是 OOM 前兆
   win.on('unresponsive', () => {
+    mainEditorEvents.publish({ type: 'app.window.unresponsive', title: 'notifications.windowUnresponsive', message: 'notifications.openEditor', level: 'warning', attention: true, windowId: win.id })
     logger.system.error('[Window] unresponsive', {
       windowId: win.id,
       memory: describeProcessMemory(),
@@ -702,6 +705,7 @@ async function performGlobalCleanup() {
       3000, 'SessionStorageWorker closeAll'
     )
     await closeUtilityProcesses()
+    await import('./ipc/notifications').then(module => module.cleanupNotificationHandlers())
     logger.system.info('[Main] Global cleanup completed successfully')
   } catch (err) {
     logger.system.error('[Main] Global cleanup error:', err)

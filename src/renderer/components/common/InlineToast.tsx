@@ -1,4 +1,7 @@
 import { useState, useCallback, createContext, useContext, useMemo, useRef, ReactNode } from 'react'
+import { editorEvents } from '../../notifications/events'
+import { t } from '@shared/i18n'
+import { useStore } from '../../store'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 export type ToastVariant = 'inline' | 'card'
@@ -24,6 +27,7 @@ export interface ToastMessage {
 }
 
 interface ShowCardOptions {
+  record?: boolean
   type?: ToastType
   title: string
   message: string
@@ -103,10 +107,14 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
     })
 
     scheduleDismiss(id, duration)
+    editorEvents.publish({ type: `ui.toast.${type}`, level: type, title: 'Adnify',
+      message: t('notifications.editorNotice', useStore.getState().language), attention: true, presented: true })
     return id
   }, [scheduleDismiss])
 
   const showCard = useCallback((options: ShowCardOptions) => {
+    if (options.record !== false) editorEvents.publish({ type: `ui.toast.${options.type || 'info'}`, level: options.type || 'info', title: 'Adnify',
+      message: t('notifications.editorNotice', useStore.getState().language), attention: true, presented: true, correlationId: options.dedupeKey })
     const existingToast = options.dedupeKey
       ? toastsRef.current.find((toast) => toast.dedupeKey === options.dedupeKey)
       : null

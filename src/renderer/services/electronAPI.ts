@@ -38,6 +38,7 @@ function createGroupedAPI() {
   return {
     // 应用生命周期
     appReady: () => raw.appReady(),
+    notifications: raw.notifications,
     getAppVersion: () => raw.getAppVersion(),
     backgroundTasks: {
       update: (activity: Parameters<typeof raw.backgroundTasksUpdate>[0]) => raw.backgroundTasksUpdate(activity),

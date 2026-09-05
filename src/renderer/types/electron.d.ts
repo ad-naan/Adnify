@@ -350,6 +350,7 @@ export type DebugEvent =
 // ============================================
 
 export interface ElectronAPI {
+  notifications: import('@shared/types/notifications').NotificationAPI
   assetRequest: (action: import('@shared/types/assets').AssetAction) => Promise<{ ok: boolean; value?: unknown; error?: string }>
   // App
   appReady: () => void

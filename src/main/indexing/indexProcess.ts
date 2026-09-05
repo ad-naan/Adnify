@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import * as path from 'node:path'
 import { UtilityProcessClient } from '../services/process/UtilityProcessClient'
+import { mainEditorEvents } from '../services/notifications/events'
 import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 import type { IndexProcessOperation } from './indexProcessProtocol'
 import type { EmbeddingConfig, IndexConfig, IndexMode, IndexStatus, ProjectSummary, SearchResult, SymbolInfo } from './types'
@@ -16,6 +17,8 @@ export class CodebaseIndexProcess {
   private configuration: Partial<IndexConfig>
   private configureQueue: Promise<void> = Promise.resolve()
   private processEpoch = 0
+  private previousIndexing = false
+  private previousError?: string
 
   constructor(
     private readonly workspacePath: string,
@@ -48,6 +51,15 @@ export class CodebaseIndexProcess {
     this.windowCleanup.set(id, () => window.removeListener('closed', closed))
   }
   private emitProgress(): void {
+    if (this.enabled && this.status.error && this.status.error !== this.previousError) {
+      mainEditorEvents.publish({ type: 'index.failed', title: 'notifications.indexFailed', message: 'notifications.openEditor', level: 'error', attention: true, workspace: this.workspacePath })
+    } else if (this.enabled && this.previousIndexing && !this.status.isIndexing && !this.status.error) {
+      mainEditorEvents.publish({ type: 'index.completed', title: 'notifications.indexComplete', message: 'notifications.openEditor', level: 'success', attention: true, workspace: this.workspacePath })
+    } else if (this.enabled && !this.previousIndexing && this.status.isIndexing) {
+      mainEditorEvents.publish({ type: 'index.started', title: 'notifications.indexStarted', message: '', level: 'info', workspace: this.workspacePath })
+    }
+    this.previousIndexing = this.status.isIndexing
+    this.previousError = this.status.error
     for (const window of this.windows.values()) {
       try {
         if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('index:progress', this.status)

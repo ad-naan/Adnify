@@ -17,6 +17,7 @@ import { ErrorCode, toAppError } from '@shared/utils/errorHandler'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fetchLatestRelease } from '../githubApiService'
+import { mainEditorEvents } from '../notifications/events'
 import {
   GITHUB_DOWNLOAD_MIRRORS,
   applyGithubDownloadMirror,
@@ -395,6 +396,11 @@ class UpdateService {
   }
 
   private updateStatus(partial: Partial<UpdateStatus>): void {
+    if (partial.status && partial.status !== this.status.status) mainEditorEvents.publish({
+      type: `app.update.${partial.status}`, title: 'notifications.updateChanged', message: 'notifications.openEditor',
+      level: partial.status === 'error' ? 'error' : partial.status === 'downloaded' || partial.status === 'available' ? 'success' : 'info',
+      attention: ['error', 'downloaded', 'available'].includes(partial.status), correlationId: partial.version,
+    })
     this.status = {
       ...this.status,
       ...partial,

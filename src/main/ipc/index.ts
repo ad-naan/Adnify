@@ -28,6 +28,7 @@ import { registerSystemPrivilegeHandlers } from './systemPrivilege'
 import { registerAssetHandlers, cleanupAssetHandlers } from './assets'
 import { registerDiagnosticsHandlers } from './diagnostics'
 import { registerBackgroundTaskHandlers, cleanupBackgroundTaskHandlers } from './backgroundTasks'
+import { registerNotificationHandlers } from './notifications'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -67,6 +68,7 @@ export function registerAllHandlers(context: IPCContext) {
   registerSystemPrivilegeHandlers(getMainWindow)
   registerDiagnosticsHandlers(context)
   registerBackgroundTaskHandlers(preferencesStore)
+  registerNotificationHandlers({ ...context, getLanguage: () => preferencesStore.get('language') as string })
 
   // 文件操作（安全版）
   registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) =>

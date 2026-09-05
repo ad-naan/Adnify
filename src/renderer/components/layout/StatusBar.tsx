@@ -29,6 +29,7 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
 import NotificationCenterContent from '../panels/NotificationCenterContent'
+import { useNotifications } from '../../notifications/store'
 import { useInlineToast } from '../common/InlineToast'
 import { useHasElevatedToastLayer } from '../common/toastLayerStore'
 import {
@@ -182,7 +183,7 @@ export default function StatusBar() {
   }, [language, refreshGitState, switchingBranch, workspacePath])
 
   const { toasts, visibleIds } = useInlineToast()
-  const notificationCount = toasts.length
+  const notificationCount = useNotifications(state => state.records.filter(record => !record.read).length)
   const latestVisibleToastId = [...visibleIds].reverse().find(id => {
     const toast = toasts.find(item => item.id === id)
     return toast?.variant === 'inline'

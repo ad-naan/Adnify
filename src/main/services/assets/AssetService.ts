@@ -8,6 +8,7 @@ import { summarizeAssetJob } from '@shared/types/assets'
 import { compileInputs, mapRequest, parseCapability, readPointer } from '@shared/assets/capability'
 import type { AssetRepository } from './AssetRepository'
 import { contentProcess } from '../documentReader/ContentProcessClient'
+import { mainEditorEvents } from '../notifications/events'
 
 export function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, target)
@@ -29,6 +30,7 @@ export class AssetService {
   private initialized?: Promise<void>
   private mutation: Promise<unknown> = Promise.resolve()
   private nextPoll = new Map<string, number>()
+  private announcedStates = new Map<string, AssetJob['state']>()
   private readonly request: typeof fetch
   constructor(readonly repository: AssetRepository, private options: AssetServiceOptions) { this.request = options.fetch || fetch }
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -180,6 +182,14 @@ export class AssetService {
   private async saveJob(job: AssetJob): Promise<void> {
     job.revision++; job.updatedAt = Date.now()
     await this.repository.put('job', job.id, job)
+    if (this.announcedStates.get(job.id) !== job.state) {
+      this.announcedStates.set(job.id, job.state)
+      while (this.announcedStates.size > 500) this.announcedStates.delete(this.announcedStates.keys().next().value!)
+      const failed = job.state === 'failed' || job.state === 'submission_unknown'
+      mainEditorEvents.publish({ type: `asset.job.${job.state}`, title: job.state === 'ready' ? 'notifications.assetComplete' : failed ? 'notifications.assetFailed' : 'notifications.assetChanged',
+        message: 'notifications.openEditor', level: failed ? 'error' : job.state === 'ready' ? 'success' : 'info', attention: failed || job.state === 'ready',
+        workspace: job.workspace, correlationId: `${job.id}:${job.state}`, threadId: job.threadId })
+    }
   }
   async cancel(id: string, workspace: string): Promise<AssetJob> {
     return this.exclusive(async () => {
