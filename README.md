@@ -214,6 +214,7 @@ Device emulation uses Chromium. After upgrading to project-specific sessions, si
 
 ### 🔔 Notifications and Background Tasks
 
+- **Review missed messages**: the persistent message center in the bottom-right corner keeps editor messages and workspace task events accessible, with unread filtering, mark-as-read, delivery status, and links back to tasks.
 - **Choose what needs attention**: use recommended alerts, task-results-only, or selected events for completion, failures, input requests, approvals, Plan execution, indexing, and assets. System notifications support background-window-only delivery and opening the related conversation.
 - **Send results to your tools**: configure up to five generic webhook channels with event filters, headers, JSON message templates, and test delivery. Messages contain event summaries; webhook configuration is encrypted and kept out of ordinary settings exports.
 - **Follow long-running work**: taskbar or Dock progress reflects Agent and Plan activity where supported. Optional sleep prevention applies while tasks run, and wake-up checks report selected-model endpoint reachability and existing MCP connection status.

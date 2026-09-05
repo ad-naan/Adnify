@@ -134,11 +134,23 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
             "titleEn": "Choose Which Task Events Trigger Notifications",
             "details": [
               "新增「通知与外部推送」设置，支持任务完成、失败、等待输入、工具审批、Plan、索引、素材和应用连接等事件；提供「推荐提醒」「仅任务结果」及指定事件筛选。",
-              "系统通知支持仅在窗口处于后台时提醒、静音和冷却时间；点击通知可返回对应会话。通知使用系统原生界面，原有简短操作提示保留在底部状态栏。"
+              "系统通知支持仅在窗口处于后台时提醒、静音和冷却时间；点击通知可返回对应会话。简短操作提示保留在底部，并在设置或弹层打开时调整显示位置。"
             ],
             "detailsEn": [
               "New Notifications & Webhooks settings cover task completion, failures, input requests, approvals, Plan execution, indexing, assets, and app connections, with recommended, task-results-only, and selected-event presets.",
-              "System notifications support background-window-only delivery, silent mode, and cooldowns. Clicking a notification can return to its conversation. Notifications use the native OS surface, while brief operation feedback remains in the bottom status bar."
+              "System notifications support background-window-only delivery, silent mode, and cooldowns. Clicking a notification can return to its conversation. Brief operation feedback stays at the bottom and adjusts its position when settings or overlays are open."
+            ]
+          },
+          {
+            "title": "在消息中心回看提示与任务事件",
+            "titleEn": "Review Messages and Task Events in the Message Center",
+            "details": [
+              "右下角新增常驻消息中心入口，分别查看编辑器提示和当前工作区的任务事件，即使提示已消失也可回看。",
+              "支持未读筛选、全部标记已读、清空记录及点击事件返回对应任务，并显示系统通知和 Webhook 的发送状态；记录按窗口和工作区权限读取。"
+            ],
+            "detailsEn": [
+              "A persistent message center in the bottom-right corner separates editor messages from task events for the current workspace, so messages can be reviewed after their transient display disappears.",
+              "Filter unread events, mark all as read, clear records, or click an event to return to its task. System notification and webhook delivery states are shown, and history reads respect window and workspace access."
             ]
           },
           {
