@@ -32,7 +32,7 @@ export class NotificationRuntime {
   private initialized = false
   readonly service = new NotificationService({
     settings: () => this.config,
-    changed: (snapshot, toast) => this.changed(snapshot, toast),
+    changed: () => this.changed(),
   })
   constructor(private context: NotificationContext) {}
   async initialize(): Promise<void> {
@@ -149,18 +149,7 @@ export class NotificationRuntime {
     snapshot.records = snapshot.records.filter((record) => this.visible(window, record.event))
     return snapshot
   }
-  private changed(snapshot: NotificationSnapshot, toast?: EditorEvent): void {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (window.isDestroyed()) continue
-      try {
-        window.webContents.send('notifications:update', {
-          snapshot: { ...snapshot, records: snapshot.records.filter((record) => this.visible(window, record.event)) },
-          toast: toast && this.visible(window, toast) ? toast : undefined,
-        })
-      } catch {
-        /* A window can close while a delivery settles. */
-      }
-    }
+  private changed(): void {
     clearTimeout(this.saveTimer)
     this.saveTimer = setTimeout(() => this.persist(), 300)
   }

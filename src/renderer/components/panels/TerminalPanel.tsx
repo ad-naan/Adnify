@@ -21,6 +21,7 @@ import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@shared/i18n'
 import { formatShortcut } from '@services/keybindingService'
 import { discoverProjectTasks, type ProjectFileSnapshot, type ProjectTask } from '@shared/utils/projectTasks'
+import { isExecutionFinished } from '@shared/types/execution'
 
 const TASK_MANIFESTS = new Set([
     'package.json', 'deno.json', 'pyproject.toml', 'pom.xml', 'build.gradle', 'build.gradle.kts',
@@ -179,8 +180,8 @@ const TerminalPanel = memo(function TerminalPanel() {
             setSelectedRoot(newRoot)
 
             // 清理旧工作区的终端（它们的 cwd 已经不在新工作区内了）
-            const oldTerminals = managerState.terminals.filter(t => !workspace?.roots?.includes(t.cwd))
-            oldTerminals.forEach(t => terminalManager.closeTerminal(t.id))
+            // Working-directory changes do not prove a process is disposable.
+            // Existing sessions stay visible until explicitly stopped/closed.
         }
     }, [workspace?.roots?.[0]])
 
@@ -348,7 +349,9 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     const closeTerminal = useCallback((id: string, e?: React.MouseEvent) => {
         e?.stopPropagation()
-        terminalManager.closeTerminal(id)
+        void terminalManager.closeTerminal(id).catch(error => {
+            console.warn('[TerminalPanel] Terminal stop failed:', error)
+        })
         if (managerState.terminals.length <= 2) {
             setTerminalLayout('tabs')
         }
@@ -423,9 +426,10 @@ const TerminalPanel = memo(function TerminalPanel() {
                                     if (commandSession.status === 'queued' || commandSession.status === 'running') {
                                         return <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0" />
                                     }
-                                    if (commandSession.status === 'completed' || commandSession.status === 'detached') {
+                                    if (commandSession.status === 'completed') {
                                         return <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
                                     }
+                                    if (commandSession.status === 'detached') return <Clock3 className="w-3 h-3 text-amber-400 flex-shrink-0" />
                                     if (commandSession.status === 'timed_out') {
                                         return <Clock3 className="w-3 h-3 text-amber-400 flex-shrink-0" />
                                     }
@@ -514,6 +518,21 @@ const TerminalPanel = memo(function TerminalPanel() {
                 </div>
 
                 {/* 移除原来位置错误的 Shell Menu */}
+                {activeId && terminalManager.getManagedJob(activeId) && (() => {
+                    const job = terminalManager.getManagedJob(activeId)!
+                    const zh = language === 'zh'
+                    const labels = zh
+                        ? { queued: '等待执行名额', starting: '正在启动', running: job.mode === 'background' ? '后台运行中' : '执行中', stopping: '正在停止，等待退出确认', completed: '已完成', failed: '执行失败', cancelled: '已停止', expired: '等待已结束，命令未启动', unknown: '状态未确认，仍保留资源' }
+                        : { queued: 'Waiting for capacity', starting: 'Starting', running: job.mode === 'background' ? 'Running in background' : 'Running', stopping: 'Stopping — awaiting process exit', completed: 'Completed', failed: 'Failed', cancelled: 'Stopped', expired: 'Not started: queue wait ended', unknown: 'Outcome unknown; still tracked' }
+                    return <div className="flex items-center gap-3 px-3 py-1 text-xs text-text-muted border-b border-border/50" role="status">
+                        <span>{labels[job.status]}{job.exitCode !== null ? ` · ${zh ? '退出码' : 'Exit code'} ${job.exitCode}` : ''}{job.reason === 'execution_timeout' ? ` · ${zh ? '执行超时' : 'Execution timeout'}` : ''}</span>
+                        {job.truncated && <span>{zh ? '较早日志已截断' : 'Earlier output truncated'}</span>}
+                        {(job.consumers || 0) > 1 && <span>{zh ? `${job.consumers} 个窗口共享，停止会影响所有窗口` : `Shared by ${job.consumers} windows; stopping affects all`}</span>}
+                        {!isExecutionFinished(job.status) && <button className="ml-auto hover:text-text-primary" disabled={job.status === 'stopping'} onClick={() => {
+                            void api.execution.cancel(job.jobId).then(response => { if (response.success) terminalManager.applyExecutionSnapshot(response.job) })
+                        }}>{job.status === 'queued' ? (zh ? '取消等待' : 'Cancel') : (zh ? '停止' : 'Stop')}</button>}
+                    </div>
+                })()}
 
                 {/* 终端内容区域 */}
                 <div className={`flex-1 p-0 min-h-0 relative bg-transparent ${isCollapsed ? 'hidden' : 'block'}`}>

@@ -34,13 +34,11 @@ export interface WebhookSettings extends NotificationFilter {
   bodyTemplate: string
 }
 export interface NotificationSettings {
-  inApp: boolean
   cooldownSeconds: number
   system: NotificationFilter & { enabled: boolean; onlyWhenUnfocused: boolean; sound: boolean }
   webhooks: WebhookSettings[]
 }
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  inApp: true,
   cooldownSeconds: 15,
   system: {
     enabled: true,
@@ -64,7 +62,6 @@ export interface NotificationSnapshot {
   revision: number
   records: NotificationRecord[]
 }
-export type NotificationUpdate = { snapshot: NotificationSnapshot; toast?: EditorEvent }
 export interface NotificationAPI {
   publish: (events: EditorEventInput[]) => Promise<void>
   history: () => Promise<NotificationSnapshot>
@@ -73,8 +70,7 @@ export interface NotificationAPI {
   markRead: (ids: string[]) => Promise<void>
   clear: () => Promise<void>
   activate: (id: string) => Promise<void>
-  test: (channel: 'system' | string) => Promise<{ success: boolean; error?: string }>
-  onUpdate: (callback: (update: NotificationUpdate) => void) => () => void
+  test: (channel: string, options?: { sound: boolean }) => Promise<{ success: boolean; error?: string }>
   onActivate: (callback: (event: EditorEvent) => void) => () => void
 }
 

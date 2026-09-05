@@ -5,7 +5,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { createKeyedLeadingEdgeThrottle } from '@shared/utils/keyedLeadingEdgeThrottle'
-import { BrowserWindow, app, ipcMain } from 'electron'
+import { BrowserWindow, app } from 'electron'
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import * as path from 'path'
@@ -32,6 +32,11 @@ import {
 } from '@shared/security/executionPolicy'
 import { assessWorktreeLaneCommand } from './worktreeLanePolicy'
 import { randomUUID } from 'node:crypto'
+import { ExecutionService } from '../services/execution/ExecutionService'
+import { ExecutionScheduler } from '../services/execution/ExecutionScheduler'
+import { InteractiveSessionRegistry } from '../services/execution/InteractiveSessionRegistry'
+import { resolveDefaultShell } from './pipedShell'
+import type { ExecutionRequest, ExecutionReply } from '@shared/types/execution'
 
 
 interface SecureShellRequest {
@@ -93,6 +98,15 @@ export function updateWhitelist(shellCommands: string[], gitCommands: string[]) 
 
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
+const terminalOwners = new Map<string, number>()
+const terminalReleases = new Map<string, () => void>()
+const terminalCreations = new Map<string, AbortController>()
+const terminalClaims = new Map<string, AbortController>()
+const terminalDeadlines = new Map<string, { leaseId: string; timeoutMs: number; timer?: ReturnType<typeof setTimeout> }>()
+const terminalStops = new Map<string, Promise<boolean>>()
+const interactiveSessions = new InteractiveSessionRegistry()
+let executionService: ExecutionService | undefined
+let executionScheduler = new ExecutionScheduler()
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
 /** PIDs of in-flight shell:runPiped children, so app shutdown can reap them. */
 const pipedShellPids = new Set<number>()
@@ -288,11 +302,6 @@ async function runGitCommand(args: string[], cwd: string): Promise<GitCommandOut
  * 使用 taskkill /F /T 强制终止整个进程树。
  */
 function killPtyReliably(ptyProcess: any): void {
-  try {
-    ptyProcess.removeAllListeners('exit')
-    ptyProcess.removeAllListeners('data')
-  } catch { /* ignore */ }
-
   const pid = ptyProcess.pid
   if (process.platform === 'win32' && pid) {
     // Never block Electron's main loop while Windows tears down ConPTY.
@@ -302,7 +311,7 @@ function killPtyReliably(ptyProcess: any): void {
       { windowsHide: true, timeout: 5000 },
       (error) => {
         if (!error) return
-        try { ptyProcess.kill() } catch { /* ignore */ }
+        logger.security.warn('[Terminal] Process-tree stop was not confirmed:', error.message)
       },
     )
     return
@@ -315,9 +324,11 @@ function killPtyReliably(ptyProcess: any): void {
  * 清理所有终端进程
  */
 export function cleanupTerminals(): void {
-  for (const [id, ptyProcess] of terminals) {
+  executionService?.shutdown()
+  for (const creation of terminalCreations.values()) creation.abort()
+  for (const claim of terminalClaims.values()) claim.abort()
+  for (const ptyProcess of terminals.values()) {
     killPtyReliably(ptyProcess)
-    terminals.delete(id)
   }
   // 清理后台进程
   for (const [pid, child] of backgroundProcesses) {
@@ -670,7 +681,99 @@ export function registerSecureTerminalHandlers(
 
   // ============ Interactive Terminal with node-pty ============
 
-  const MAX_TERMINALS = 10 // 最大终端数量限制
+  const ownerWindows = new Map<number, BrowserWindow>()
+  const trackedWindows = new Set<number>()
+  executionScheduler = new ExecutionScheduler()
+  executionService = new ExecutionService(executionScheduler, (ownerId, snapshot) => {
+    const window = ownerWindows.get(ownerId)
+    if (window && !window.isDestroyed()) window.webContents.send('execution:changed', snapshot)
+  })
+  const executions = executionService
+  const ownerFor = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): number => {
+    const window = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
+    const ownerId = event.sender?.id ?? window?.webContents.id ?? 0
+    if (window) {
+      ownerWindows.set(ownerId, window)
+      if (!trackedWindows.has(ownerId)) {
+        trackedWindows.add(ownerId)
+        window.once?.('closed', () => {
+          executions.closeOwner(ownerId)
+          for (const [id, owner] of terminalOwners) {
+            if (owner !== ownerId) continue
+            terminalCreations.get(id)?.abort()
+            terminalClaims.get(id)?.abort()
+            const process = terminals.get(id)
+            if (process) killPtyReliably(process)
+          }
+          ownerWindows.delete(ownerId)
+        })
+      }
+    }
+    return ownerId
+  }
+
+  safeIpcHandle('terminal:list', event => ({ success: true, sessions: interactiveSessions.list(ownerFor(event)) }))
+  safeIpcHandle('terminal:claim', async (event, { id, background, threadId, timeoutMs }: { id: string; background?: boolean; threadId?: string; timeoutMs?: number }) => {
+    const ownerId = ownerFor(event)
+    const leaseId = interactiveSessions.claim(ownerId, id)
+    const abort = new AbortController()
+    terminalClaims.set(id, abort)
+    try {
+      const release = await executionScheduler.acquire({ ownerId, threadId: threadId || 'default', pool: background ? 'background' : 'command', usesExistingSession: true }, abort.signal)
+      if (abort.signal.aborted) { release(); throw new Error('Terminal claim cancelled') }
+      interactiveSessions.attachPermit(ownerId, id, leaseId, () => {
+        clearTimeout(terminalDeadlines.get(id)?.timer)
+        terminalDeadlines.delete(id)
+        release()
+      })
+      if (!background) terminalDeadlines.set(id, { leaseId,
+        timeoutMs: Number.isFinite(timeoutMs) ? Math.min(86_400_000, Math.max(1, timeoutMs!)) : 120_000 })
+      return { success: true, leaseId }
+    } catch (error) {
+      interactiveSessions.release(ownerId, id, leaseId)
+      throw error
+    } finally { terminalClaims.delete(id) }
+  })
+  safeIpcHandle('terminal:release', (event, { id, leaseId }: { id: string; leaseId: string }) => {
+    interactiveSessions.release(ownerFor(event), id, leaseId)
+    return { success: true }
+  })
+
+  safeIpcHandle('execution:submit', async (event, request: ExecutionRequest): Promise<ExecutionReply> => {
+    const ownerId = ownerFor(event)
+    if (!request || typeof request.command !== 'string' || !request.command.trim() || request.command.length > 128_000
+      || typeof request.requestKey !== 'string' || request.requestKey.length > 512
+      || typeof request.threadId !== 'string' || request.threadId.length > 256
+      || !['command', 'background'].includes(request.mode)
+      || (request.serviceKey !== undefined && (request.mode !== 'background' || typeof request.serviceKey !== 'string' || request.serviceKey.length > 256))
+      || (request.timeoutMs !== undefined && (!Number.isFinite(request.timeoutMs) || request.timeoutMs < 1 || request.timeoutMs > 86_400_000))) {
+      return { success: false, error: 'Invalid execution request' }
+    }
+    const workspace = getWorkspace(event)
+    const cwd = request.cwd || workspace?.roots[0] || process.cwd()
+    const shell = request.shell || resolveDefaultShell()
+    const workspacePath = path.resolve(workspace?.roots[0] || cwd)
+    const spec = { ...request, cwd, shell, workspaceId: process.platform === 'win32' ? workspacePath.toLowerCase() : workspacePath }
+    if (executions.lookup(ownerId, request.requestKey)) {
+      return { success: true, job: executions.submit(ownerId, spec) }
+    }
+    if (!consumeCommandAuthorization(request.authorizationId, request.command, cwd)) {
+      if (request.authorizationId) return { success: false, error: 'Command authorization is expired, reused, or mismatched' }
+      const authorization = await authorizeDecision(OperationType.SHELL_EXECUTE,
+        executionTarget(request.command, cwd), assessShellExecution(request.command, cwd, workspace))
+      if (!authorization.allowed) return { success: false, error: 'Command was not approved' }
+    }
+    return { success: true, job: executions.submit(ownerId, spec) }
+  })
+  safeIpcHandle('execution:list', (event) => ({ success: true, jobs: executions.list(ownerFor(event)), usage: executionScheduler.usage() }))
+  safeIpcHandle('execution:wait', async (event, { jobId, afterRevision = 0, waitMs = 30_000 }) =>
+    ({ success: true, job: await executions.wait(ownerFor(event), jobId, afterRevision, waitMs) }))
+  safeIpcHandle('execution:cancel', (event, { jobId }) => ({ success: true, job: executions.cancel(ownerFor(event), jobId) }))
+  safeIpcHandle('execution:input', (event, { jobId, data }) => {
+    if (typeof data !== 'string' || data.length > 1_000_000) throw new Error('Invalid input')
+    executions.input(ownerFor(event), jobId, data)
+    return { success: true }
+  })
   let pty: any = null
 
   // Try to load node-pty
@@ -709,6 +812,7 @@ export function registerSecureTerminalHandlers(
   class PipeShellSession extends EventEmitter {
     private readonly stdoutUtf8 = new StringDecoder('utf8')
     private readonly stderrUtf8 = new StringDecoder('utf8')
+    get pid(): number | undefined { return this.child.pid }
 
     constructor(private readonly child: ChildProcessWithoutNullStreams) {
       super()
@@ -1033,11 +1137,6 @@ export function registerSecureTerminalHandlers(
 
     kill() {
       if (this.closed) return
-      this.closed = true
-      const tail = this.streamUtf8.end()
-      if (tail.length > 0) {
-        this.emit('data', tail)
-      }
       try {
         this.stream?.end('exit\n')
       } catch { /* Continue cleanup if the remote stream has already closed. */
@@ -1046,7 +1145,8 @@ export function registerSecureTerminalHandlers(
         this.connection?.end()
       } catch { /* Still emit the local exit event if the SSH connection is closed. */
       }
-      this.emit('exit', { exitCode: 0 })
+      // The real channel/connection close event confirms local teardown.
+      // Closing SSH does not prove a remote descendant has stopped.
     }
   }
 
@@ -1095,10 +1195,12 @@ export function registerSecureTerminalHandlers(
       if (text.length === 0) {
         return
       }
+      interactiveSessions.output(id, text)
       ptyPacer.push(id, text)
     })
 
     terminalProcess.on('error', (err: any) => {
+      interactiveSessions.error(id)
       logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
       // 先刷出已缓冲的输出，错误信息才不会跑到它前面
       ptyPacer.flush(id)
@@ -1115,7 +1217,14 @@ export function registerSecureTerminalHandlers(
 
     terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
-      terminals.delete(id)
+      if (terminals.get(id) === terminalProcess) {
+        terminals.delete(id)
+        terminalOwners.delete(id)
+        terminalReleases.get(id)?.()
+        terminalReleases.delete(id)
+        terminalStops.delete(id)
+        interactiveSessions.remove(id)
+      }
       // 解码残留字节并入缓冲，再整体刷出，保证退出前不丢输出且顺序正确
       const tail = ptyUtf8.end()
       if (tail.length > 0) {
@@ -1127,7 +1236,7 @@ export function registerSecureTerminalHandlers(
           id,
           exitCode,
           signal,
-          reason: 'process_exit',
+          reason: terminalProcess instanceof SshShellSession ? 'remote_close' : 'process_exit',
           ...nextMeta(),
         })
       }
@@ -1169,10 +1278,6 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: 'node-pty not available' }
     }
 
-    if (terminals.size >= MAX_TERMINALS && !terminals.has(id)) {
-      return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
-    }
-
     const fallbackCwd = workspace?.roots?.[0] || process.cwd()
     const targetCwd = remote?.host
       ? fallbackCwd
@@ -1186,7 +1291,17 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: 'Terminals can only be created inside the workspace' }
     }
 
+    const ownerId = ownerFor(event)
+    if (typeof id !== 'string' || !id || id.length > 256 || terminalOwners.has(id)) {
+      return { success: false, error: 'Invalid or already allocated terminal ID' }
+    }
+    const creation = new AbortController()
+    terminalOwners.set(id, ownerId)
+    terminalCreations.set(id, creation)
     try {
+      const release = await executionScheduler.acquire({ ownerId, threadId: id, pool: 'session' }, creation.signal)
+      terminalReleases.set(id, release)
+      if (creation.signal.aborted) throw new Error('Terminal creation cancelled')
       const isWindows = process.platform === 'win32'
       const isMac = process.platform === 'darwin'
 
@@ -1246,6 +1361,7 @@ export function registerSecureTerminalHandlers(
       }
 
       let terminalProcess: any
+      interactiveSessions.add(ownerId, { id, cwd: targetCwd, shell: shellPath, isAgent: Boolean(options.isAgent), remoteHost: remote?.host })
       let unixIntegrationRc: ReturnType<typeof createUnixShellIntegrationRc> = null
       const shellKind = getUnixShellKind(shellPath)
       const spawnEnv = () => ({
@@ -1267,6 +1383,7 @@ export function registerSecureTerminalHandlers(
       if (remote?.host) {
         try {
           const session = new SshShellSession({ ...remote, shell })
+          session.on('error', () => { /* connect rejects before the terminal data binding exists */ })
           await session.connect()
           terminalProcess = session
         } catch (err) {
@@ -1324,6 +1441,10 @@ export function registerSecureTerminalHandlers(
       }
 
       bindTerminalProcess(id, terminalProcess, mainWindow)
+      if (creation.signal.aborted) {
+        killPtyReliably(terminalProcess)
+        return { success: false, error: 'Terminal creation cancelled' }
+      }
       if (unixIntegrationRc) {
         // The rc file only needs to survive shell start-up. SFTP and zsh
         // environments may hold a handle briefly, so removal is deliberately
@@ -1349,6 +1470,14 @@ export function registerSecureTerminalHandlers(
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)
       return { success: false, error: toAppError(err).message }
+    } finally {
+      terminalCreations.delete(id)
+      if (!terminals.has(id)) {
+        interactiveSessions.remove(id)
+        terminalReleases.get(id)?.()
+        terminalReleases.delete(id)
+        terminalOwners.delete(id)
+      }
     }
   })
 
@@ -1428,7 +1557,18 @@ export function registerSecureTerminalHandlers(
   /**
    * Write input to terminal
    */
-  safeIpcHandle('terminal:input', async (_, { id, data }: { id: string; data: string }) => {
+  safeIpcHandle('terminal:input', async (event, { id, data, leaseId }: { id: string; data: string; leaseId?: string }) => {
+    if (terminalOwners.get(id) !== ownerFor(event)) throw new Error('Terminal does not belong to this window')
+    if (terminalStops.has(id)) throw new Error('Terminal is stopping')
+    interactiveSessions.input(ownerFor(event), id, leaseId)
+    const deadline = terminalDeadlines.get(id)
+    if (leaseId && deadline?.leaseId === leaseId) {
+      deadline.timer = setTimeout(() => {
+        const terminal = terminals.get(id)
+        if (terminal) { interactiveSessions.stopping(id); killPtyReliably(terminal) }
+      }, deadline.timeoutMs)
+      deadline.timer.unref?.()
+    }
     const ptyProcess = terminals.get(id)
     if (ptyProcess) {
       try {
@@ -1439,9 +1579,12 @@ export function registerSecureTerminalHandlers(
           logger.security.debug(`[Terminal] Ctrl+C sent to terminal ${id}`)
         }
       } catch (err) {
+        interactiveSessions.error(id)
         logger.security.error(`[Terminal] Write error (id: ${id}):`, err)
+        return { success: false, error: 'Terminal write failed; command outcome is unknown' }
       }
     }
+    return { success: Boolean(ptyProcess), error: ptyProcess ? undefined : 'Terminal is unavailable' }
   })
 
   /**
@@ -1534,7 +1677,6 @@ export function registerSecureTerminalHandlers(
     }
   ): Promise<{ success: boolean; output: string; exitCode: number; error?: string }> => {
     // 使用发起请求的窗口，确保多窗口场景下输出推送到正确的窗口
-    const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
     const workspace = getWorkspace(event)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
 
@@ -1552,125 +1694,25 @@ export function registerSecureTerminalHandlers(
       }
     }
 
-    return new Promise((resolve) => {
-      const isWindows = process.platform === 'win32'
-      const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')
-      const shellName = path.basename(shell).toLowerCase()
-      const isPowerShell = isWindows && (
-        shellName === 'powershell.exe' || shellName === 'powershell' ||
-        shellName === 'pwsh.exe' || shellName === 'pwsh'
-      )
-      const isCmd = isWindows && (shellName === 'cmd.exe' || shellName === 'cmd')
-      const utf8Command = isPowerShell
-        ? `$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8; ${command}`
-        : command
-      const shellArgs = isPowerShell
-        ? ['-NoProfile', '-NoLogo', '-Command', utf8Command]
-        : isCmd
-          ? ['/D', '/S', '/C', `chcp 65001 > nul & ${command}`]
-          : ['-c', command]
-
-      logger.security.info(`[Shell] Executing: ${command} in ${workingDir}`)
-
-      const child = spawn(shell, shellArgs, {
-        cwd: workingDir,
-        env: { ...process.env, TERM: 'dumb' },
-        windowsHide: true,
-      })
-
-      // 追踪后台进程，以便应用退出时清理
-      if (child.pid) backgroundProcesses.set(child.pid, child)
-
-      let stdout = ''
-      let stderr = ''
-      let timedOut = false
-
-      // 超时处理
-      const timeoutId = setTimeout(() => {
-        timedOut = true
-        child.kill('SIGTERM')
-        // Windows 上 SIGTERM 可能不够，延迟后强制 kill
-        setTimeout(() => {
-          if (!child.killed) {
-            child.kill('SIGKILL')
-          }
-        }, 1000)
-      }, timeout)
-
-      // 实时推送输出
-      child.stdout?.on('data', (data: Buffer) => {
-        const text = data.toString()
-        stdout += text
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell:output', {
-            command,
-            type: 'stdout',
-            data: text,
-            timestamp: Date.now()
-          })
-        }
-      })
-
-      child.stderr?.on('data', (data: Buffer) => {
-        const text = data.toString()
-        stderr += text
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('shell:output', {
-            command,
-            type: 'stderr',
-            data: text,
-            timestamp: Date.now()
-          })
-        }
-      })
-
-      child.on('close', (code, signal) => {
-        clearTimeout(timeoutId)
-        if (child.pid) backgroundProcesses.delete(child.pid)
-
-        // 清理输出（移除 ANSI 序列）
-        const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
-          // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
-          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-          .replace(/\r\n/g, '\n')
-          .trim()
-
-        logger.security.info(`[Shell] Command finished: exit=${code}, signal=${signal}`)
-
-        if (timedOut) {
-          resolve({
-            success: false,
-            output: cleanOutput || `Command timed out after ${timeout / 1000}s`,
-            exitCode: code ?? 124, // 124 是 timeout 的标准退出码
-            error: `Command timed out after ${timeout / 1000}s`
-          })
-        } else {
-          resolve({
-            success: code === 0,
-            output: cleanOutput,
-            exitCode: code ?? 0,
-          })
-        }
-      })
-
-      child.on('error', (err) => {
-        clearTimeout(timeoutId)
-        if (child.pid) backgroundProcesses.delete(child.pid)
-        logger.security.error(`[Shell] Command error:`, err)
-        resolve({
-          success: false,
-          output: stdout + stderr,
-          exitCode: 1,
-          error: toAppError(err).message
-        })
-      })
+    const ownerId = ownerFor(event)
+    let job = executions.submit(ownerId, {
+      requestKey: `${Date.now()}:${randomUUID()}`, threadId: 'shell-background-api',
+      command, cwd: workingDir, shell: customShell || resolveDefaultShell(), mode: 'command', timeoutMs: timeout,
     })
+    while (!['completed', 'failed', 'cancelled', 'expired', 'unknown'].includes(job.status)) {
+      job = await executions.wait(ownerId, job.jobId, job.revision, 30_000)
+    }
+    return { success: job.status === 'completed' && job.exitCode === 0,
+      output: job.output, exitCode: job.exitCode ?? 1,
+      error: job.reason || (job.status === 'unknown' ? `Job ${job.jobId} outcome is unknown` : undefined) }
+
   })
 
   /**
    * Resize terminal
    */
-  safeIpcHandle('terminal:resize', async (_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+  safeIpcHandle('terminal:resize', async (event, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+    if (terminalOwners.get(id) !== ownerFor(event)) throw new Error('Terminal does not belong to this window')
     const ptyProcess = terminals.get(id)
     if (ptyProcess) {
       try {
@@ -1684,19 +1726,23 @@ export function registerSecureTerminalHandlers(
   /**
    * Kill terminal
    */
-  ipcMain.on('terminal:kill', (_, id?: string) => {
-    if (id) {
-      const ptyProcess = terminals.get(id)
-      if (ptyProcess) {
+  safeIpcHandle('terminal:kill', async (event, id: string) => {
+    if (!id || terminalOwners.get(id) !== ownerFor(event)) return { success: false, error: 'Terminal not found in this window' }
+    terminalCreations.get(id)?.abort()
+    terminalClaims.get(id)?.abort()
+    const ptyProcess = terminals.get(id)
+    if (!ptyProcess) return { success: true }
+    interactiveSessions.stopping(id)
+    let stopped = terminalStops.get(id)
+    if (!stopped) {
+      stopped = new Promise<boolean>(resolve => {
+        const timer = setTimeout(() => resolve(false), 10_000)
+        timer.unref?.()
+        ptyProcess.onExit(() => { clearTimeout(timer); resolve(true) })
         killPtyReliably(ptyProcess)
-        terminals.delete(id)
-      }
-    } else {
-      // Kill all terminals
-      for (const [termId, ptyProcess] of terminals) {
-        killPtyReliably(ptyProcess)
-        terminals.delete(termId)
-      }
+      })
+      terminalStops.set(id, stopped)
     }
+    return await stopped ? { success: true } : { success: false, error: 'Terminal stop is not confirmed; its capacity is still reserved' }
   })
 }

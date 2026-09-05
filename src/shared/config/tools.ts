@@ -473,18 +473,22 @@ Do not use for partial edits; write_file overwrites the whole file, so use edit_
     run_command: {
         name: 'run_command',
         displayName: 'Run Command',
-        description: 'Execute shell command locally or on a configured remote server. Requires user approval. Use cwd parameter to set working directory for local runs. Do NOT use for reading files (use read_file/read_remote_file), searching (use search_files), or editing (use edit_file/write_remote_file).',
+        description: 'Execute shell command locally or on a configured remote server. Requires user approval. Ordinary local commands run in isolated processes with visible logs; use interactive=true when a persistent shell or TTY is needed. Use cwd for the working directory. Do NOT use for reading files, searching, or editing; use the dedicated tools.',
         detailedDescription: `Execute shell commands in workspace.
 - Requires user approval
 - Use cwd parameter instead of cd commands
 - To force a remote target, set server_name or rely on an explicit #server-name# mention in the user message
 - Never assume remote file tools and local file tools are interchangeable
 For long-running servers or watch tasks:
-- Set is_background=true to run in a UI terminal panel
-- The command returns a terminal ID immediately
+- Set is_background=true to start a tracked job with visible logs
+- The command returns a job/terminal ID after process startup; this does not prove server readiness
+- Use service_key to ensure a specific local workspace service exists; matching requests can share it across windows
+- A shared service is stopped when its last attached window closes, or when explicitly stopped
 - Use read_terminal_output to check logs
 - Use send_terminal_input to interact (e.g. typing 'y' or sending Ctrl+C)
-- Use stop_terminal to kill it later`,
+- Use stop_terminal to request stopping it; wait for confirmed exit
+- Never repeat a command whose result is unknown
+Ordinary commands do not inherit temporary shell variables from previous calls. Use interactive=true for a persistent task-scoped shell.`,
         examples: [
             'run_command command="npm install"',
             'run_command command="npm test" cwd="packages/core"',
@@ -513,7 +517,9 @@ For long-running servers or watch tasks:
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
             server_name: { type: 'string', description: 'Optional remote server name from Shell Studio. When set, command must run on that remote server instead of locally.' },
             timeout: { type: 'number', description: 'Timeout seconds (default: 60). Increase for slow commands like installs.', default: 60 },
-            is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
+            is_background: { type: 'boolean', description: 'Run as a tracked background job. Set true for servers/watchers; false explicitly requests a finite command.' },
+            interactive: { type: 'boolean', description: 'Use a persistent interactive shell when a TTY, REPL, or shell environment shared across commands is required. Ordinary commands otherwise run in isolated processes.' },
+            service_key: { type: 'string', description: 'Optional stable identity for a local background service in this workspace. Matching requests can share it across windows; different configuration reports a conflict. Stopping a shared service affects its attached windows. Do not use for ordinary commands.' },
             approval_scope: {
                 type: 'object',
                 description: 'Optional structured suggestion for a persistent low-risk approval rule. This is only a proposal: the app validates it against the actual command and the user must approve it.',

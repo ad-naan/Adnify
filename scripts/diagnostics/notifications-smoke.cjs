@@ -18,7 +18,6 @@ if (typeof electron === 'string') {
       import React, { useEffect } from 'react'; import { createRoot } from 'react-dom/client';
       import SettingsModal from './src/renderer/components/settings/SettingsModal';
       import { NotificationSettings } from './src/renderer/components/settings/tabs/NotificationSettings';
-      import NotificationCenterContent from './src/renderer/components/panels/NotificationCenterContent';
       import { useNotificationBridge } from './src/renderer/notifications/useNotificationBridge';
       import { InlineToastProvider, useInlineToast, setGlobalInlineToast } from './src/renderer/components/common/InlineToast';
       import { EventBus } from './src/renderer/agent/core/EventBus';
@@ -29,7 +28,7 @@ if (typeof electron === 'string') {
         const toasts = useInlineToast();
         useEffect(() => { setGlobalInlineToast(toasts) }, [toasts]);
         useNotificationBridge(true);
-        return <><button onClick={() => EventBus.emit({ type: 'loop:end', reason: 'complete', requestId: 'fixture-run' })}>Publish fixture completion</button><NotificationCenterContent language={language} /></>;
+        return <><button onClick={() => EventBus.emit({ type: 'loop:end', reason: 'complete', requestId: 'fixture-run' })}>Publish fixture completion</button><span id="toast-count">{toasts.toasts.length}</span></>;
       }
       createRoot(document.getElementById('root')).render(query.has('center') ? <InlineToastProvider><Center /></InlineToastProvider> : query.has('modal') ? <SettingsModal /> : <NotificationSettings language={language} />);
     `, loader: 'tsx', resolveDir: root },
@@ -49,7 +48,10 @@ if (typeof electron === 'string') {
     process.exitCode = result.status ?? 1
   })().catch(error => { console.error(error.stack || error.message); process.exitCode = 1 })
 } else {
-  const { app, BrowserWindow, ipcMain, safeStorage } = electron
+  const { app, BrowserWindow, ipcMain, safeStorage, Notification } = electron
+  let nativeTests = 0
+  const nativeShow = Notification.prototype.show
+  Notification.prototype.show = function () { nativeTests++; return nativeShow.call(this) }
   const output = process.env.ADNIFY_NOTIFICATIONS_SMOKE
   app.setPath('userData', path.join(output, 'profile'))
   app.on('window-all-closed', () => {})
@@ -111,14 +113,35 @@ if (typeof electron === 'string') {
     const restored = await first.webContents.executeJavaScript('window.electronAPI.notifications.history()')
     assert.equal(restored.records.length, 1)
     assert.equal(restored.records[0].deliveries.loopback.state, 'delivered')
+    // Reproduce an unfinished destination, save it disabled, then leave invalid JSON in its draft.
+    await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(button => button.textContent.includes('添加 Webhook')).click()")
+    await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(button => button.textContent === '保存通知设置').click()")
+    await waitUntil(async () => (await first.webContents.executeJavaScript('window.electronAPI.notifications.settings()')).webhooks.length === 2)
+    const beforeTest = fs.readFileSync(path.join(output, 'profile/notifications.json'), 'utf8')
+    await first.webContents.executeJavaScript(`(async () => {
+      const input = [...document.querySelectorAll('textarea')].filter(input => input.getAttribute('aria-label') === '请求头（JSON）').at(-1);
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, '{unfinished');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      [...document.querySelectorAll('button')].find(button => button.textContent === '测试系统通知').click();
+    })()`)
+    await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('已调用系统通知服务'))
+    assert.equal(nativeTests, 1)
+    assert.equal(fs.readFileSync(path.join(output, 'profile/notifications.json'), 'utf8'), beforeTest)
+    assert.equal(received.length, 1)
+    await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].filter(button => button.textContent.includes('保存并发送测试消息')).at(-1).click()")
+    await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('请填写接收软件提供的 Webhook 地址'))
+    // Attribute equality avoids depending on a generated React ID.
+    if ((await first.webContents.executeJavaScript("document.querySelectorAll('input[type=password]').length")) > 1) {
+      await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].filter(button => button.getAttribute('aria-label') === '移除 Webhook').at(-1).click()")
+    }
+    console.log('PASS: disabled blank destinations save; native test ignores invalid Webhook drafts and does not save them')
     await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(button => button.textContent.includes('保存并发送测试消息')).click()")
     await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('测试消息已发送'))
     assert.equal(received.length, 2)
     console.log('Checking invalid IPC input (expected rejection below)')
     const rejected = await first.webContents.executeJavaScript("window.electronAPI.notifications.publish([{ type: 'test', title: 'bad', message: '', level: 'info', windowId: 999 }]).then(() => false, () => true)")
     assert.equal(rejected, true)
-    const systemResult = await first.webContents.executeJavaScript("window.electronAPI.notifications.test('system')")
-    console.log(`Native notification result: ${JSON.stringify(systemResult)}`)
     await first.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     fs.writeFileSync(path.join(output, 'notifications-zh.png'), (await first.webContents.capturePage()).toPNG())
     await second.loadFile(path.join(output, 'ui.html'), { query: { language: 'en' } })
@@ -132,6 +155,17 @@ if (typeof electron === 'string') {
     await waitUntil(async () => (await first.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).map(input => input.value)")).includes('Local receiver'))
     await first.webContents.executeJavaScript("[...document.querySelectorAll('nav button')].find(button => button.textContent.includes('通知与外部推送')).scrollIntoView({block:'center'}); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
     fs.writeFileSync(path.join(output, 'settings-categories.png'), (await first.webContents.capturePage()).toPNG())
+    await first.webContents.executeJavaScript(`(async () => {
+      [...document.querySelectorAll('summary')].find(item => item.textContent.trim() === '事件筛选').click();
+      [...document.querySelectorAll('button')].find(button => button.textContent === '仅任务结果').click();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    })()`)
+    const eventList = await first.webContents.executeJavaScript('document.body.innerText')
+    assert(eventList.includes('Agent 任务已完成')); assert(eventList.includes('有操作等待你的确认'))
+    assert(!eventList.includes('显示应用内提醒'))
+    fs.writeFileSync(path.join(output, 'event-picker.png'), (await first.webContents.capturePage()).toPNG())
+    await first.webContents.executeJavaScript("[...document.querySelectorAll('summary')].find(item => item.textContent.trim() === '事件筛选').click()")
+
     await first.webContents.executeJavaScript(`(async () => {
       const input = document.querySelector('input[type="number"]');
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '27');
@@ -168,18 +202,12 @@ if (typeof electron === 'string') {
     for (const [index, expected] of ['GitHub', '配置', '性能诊断', '任务栏', '更新日志', '网络与服务'].entries()) assert(panels[index].includes(expected), `Unexpected panel ${index}: ${panels[index]}`)
     console.log('PASS: actual settings modal categories, page contents and search routing')
     await first.loadFile(path.join(output, 'ui.html'), { query: { center: '1' } })
-    await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('Completed'))
+    await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('Publish fixture completion'))
     await first.webContents.executeJavaScript("[...document.querySelectorAll('button')].find(button => button.textContent === 'Publish fixture completion').click()")
-    await waitUntil(async () => (await first.webContents.executeJavaScript('document.body.innerText')).includes('Agent 任务已完成'))
     await waitUntil(() => received.length === 3)
-    fs.writeFileSync(path.join(output, 'notification-center.png'), (await first.webContents.capturePage()).toPNG())
-    await first.webContents.executeJavaScript("document.querySelector('button[aria-label=全部标为已读]').click()")
-    await waitUntil(async () => (await first.webContents.executeJavaScript('window.electronAPI.notifications.history()')).records.every(record => record.read))
-    await second.webContents.executeJavaScript("window.electronAPI.notifications.publish([{type:'fixture.warning', title:'Other workspace', message:'', level:'warning', attention:true}])")
-    await first.webContents.executeJavaScript("document.querySelector('button[aria-label=清空记录]').click()")
-    await waitUntil(async () => (await first.webContents.executeJavaScript('window.electronAPI.notifications.history()')).records.length === 0)
-    assert.equal((await second.webContents.executeJavaScript('window.electronAPI.notifications.history()')).records.length, 1)
-    console.log('PASS: Agent event bridge, notification center, read/clear actions and cross-workspace isolation')
+    assert.equal(await first.webContents.executeJavaScript("document.querySelector('#toast-count').textContent"), '0')
+    assert(!(await first.webContents.executeJavaScript('document.body.innerText')).includes('消息记录'))
+    console.log('PASS: Agent events reach Webhook without creating any in-editor notification card or history panel')
     assert.deepEqual(rendererErrors, [])
     await cleanupNotificationHandlers()
     windows.forEach(window => window.destroy())

@@ -2,12 +2,12 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { Bell, Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Switch } from '../../ui'
 import { api } from '../../../services/electronAPI'
+import { NotificationEventFilter } from './NotificationEventFilter'
+import { prepareNotificationSettings } from '../../../notifications/settingsDraft'
 import { t, type Language } from '@shared/i18n'
 import {
   DEFAULT_WEBHOOK_BODY,
-  NOTIFICATION_LEVELS,
   type NotificationSettings as Settings,
-  type NotificationFilter,
   type WebhookSettings,
 } from '@shared/types/notifications'
 
@@ -28,6 +28,8 @@ export const NotificationSettings = forwardRef<
   const [headers, setHeaders] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
+  const [systemStatus, setSystemStatus] = useState('')
+  const [systemFailed, setSystemFailed] = useState(false)
   const [failed, setFailed] = useState(false)
   const [baseline, setBaseline] = useState('')
   const dirty = !!settings && draftSnapshot(settings, headers) !== baseline
@@ -65,12 +67,36 @@ export const NotificationSettings = forwardRef<
   const run = async (channel?: string) => {
     if (!settings || busy) return false
     setBusy(true)
+    if (channel === 'system') {
+      setSystemStatus('')
+      setSystemFailed(false)
+      try {
+        // Test the OS directly; unrelated drafts must never block this action.
+        const result = await api.notifications.test('system', { sound: settings.system.sound })
+        setSystemFailed(!result.success)
+        setSystemStatus(t(result.success ? 'notifications.systemAccepted' : 'notifications.systemTestFailed', language))
+        return result.success
+      } catch {
+        setSystemFailed(true)
+        setSystemStatus(t('notifications.systemTestFailed', language))
+        return false
+      } finally {
+        setBusy(false)
+      }
+    }
     setStatus('')
     setFailed(false)
     try {
-      const next = {
-        ...settings,
-        webhooks: settings.webhooks.map((hook) => ({ ...hook, headers: JSON.parse(headers[hook.id] || '{}') })),
+      let next: Settings
+      try {
+        const target = settings.webhooks.find((hook) => hook.id === channel)
+        if (target && !target.url.trim())
+          throw new Error(t('notifications.urlRequired', language, { name: target.name || 'Webhook' }))
+        next = prepareNotificationSettings(settings, headers, language)
+      } catch (error) {
+        setFailed(true)
+        setStatus((error as Error).message)
+        return false
       }
       const saved = await api.notifications.saveSettings(next)
       setSettings(saved)
@@ -90,41 +116,6 @@ export const NotificationSettings = forwardRef<
     }
   }
   useImperativeHandle(ref, () => ({ save: () => run() }))
-  const filter = (value: NotificationFilter, update: (patch: Partial<NotificationFilter>) => void) => (
-    <div className="space-y-3">
-      <label className="block text-xs text-text-secondary">
-        {t('notifications.events', language)}
-        <Input
-          className="mt-2 font-mono text-xs"
-          value={value.events.join(', ')}
-          onChange={(event) => update({ events: event.target.value.split(',').map((item) => item.trim()) })}
-        />
-      </label>
-      <p className="text-xs text-text-muted">{t('notifications.eventsHint', language)}</p>
-      <div className="flex flex-wrap gap-4">
-        {NOTIFICATION_LEVELS.map((level) => (
-          <label key={level} className="flex items-center gap-2 text-xs text-text-secondary">
-            <input
-              type="checkbox"
-              checked={value.levels.includes(level)}
-              onChange={(event) =>
-                update({
-                  levels: event.target.checked
-                    ? [...value.levels, level]
-                    : value.levels.filter((item) => item !== level),
-                })
-              }
-            />
-            {t(`notifications.level.${level}`, language)}
-          </label>
-        ))}
-      </div>
-      <label className="flex items-center justify-between gap-4 text-xs text-text-secondary">
-        {t('notifications.passive', language)}
-        <Switch checked={value.includePassive} onChange={(event) => update({ includePassive: event.target.checked })} />
-      </label>
-    </div>
-  )
   return (
     <section className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
       {!onDirtyChange && (
@@ -140,13 +131,7 @@ export const NotificationSettings = forwardRef<
       )}
       {settings && (
         <fieldset disabled={busy} className="space-y-5 disabled:opacity-60">
-          <label className="flex items-center justify-between text-xs text-text-secondary">
-            {t('notifications.inApp', language)}
-            <Switch
-              checked={settings.inApp}
-              onChange={(event) => setSettings({ ...settings, inApp: event.target.checked })}
-            />
-          </label>
+          <p className="text-xs text-text-muted">{t('notifications.setupHelp', language)}</p>
           <label className="flex items-center justify-between gap-4 text-xs text-text-secondary">
             {t('notifications.cooldown', language)}
             <span className="w-24 shrink-0">
@@ -193,14 +178,24 @@ export const NotificationSettings = forwardRef<
                 {t('notifications.filters', language)}
               </summary>
               <div className="mt-3">
-                {filter(settings.system, (patch) =>
-                  setSettings({ ...settings, system: { ...settings.system, ...patch } }),
-                )}
+                <NotificationEventFilter
+                  language={language}
+                  value={settings.system}
+                  onChange={(patch) => setSettings({ ...settings, system: { ...settings.system, ...patch } })}
+                />
               </div>
             </details>
+            {!settings.system.enabled && (
+              <p className="text-xs text-status-warning">{t('notifications.systemDisabled', language)}</p>
+            )}
             <Button size="sm" variant="secondary" onClick={() => void run('system')}>
               {t('notifications.testSystem', language)}
             </Button>
+            {systemStatus && (
+              <p role="status" className={`text-xs ${systemFailed ? 'text-status-error' : 'text-text-secondary'}`}>
+                {systemStatus}
+              </p>
+            )}
           </div>
           <div className="border-t border-border/50 pt-4 space-y-4">
             <div className="flex items-center justify-between">
@@ -235,6 +230,7 @@ export const NotificationSettings = forwardRef<
                 {t('notifications.addWebhook', language)}
               </Button>
             </div>
+            <p className="text-xs text-text-secondary leading-relaxed">{t('notifications.webhookSetup', language)}</p>
             <p className="text-xs text-text-muted leading-relaxed">{t('notifications.webhookHint', language)}</p>
             {settings.webhooks.map((hook) => (
               <div key={hook.id} className="rounded-lg border border-border/60 p-4 space-y-3">
@@ -258,15 +254,22 @@ export const NotificationSettings = forwardRef<
                     <Trash2 className="w-4 h-4 text-text-muted" />
                   </button>
                 </div>
-                <Input
-                  aria-label="Webhook URL"
-                  type="password"
-                  autoComplete="off"
-                  value={hook.url}
-                  placeholder="https://…"
-                  onChange={(event) => updateHook(hook.id, { url: event.target.value })}
+                <label className="block text-xs text-text-secondary">
+                  {t('notifications.webhookUrl', language)}
+                  <Input
+                    aria-label="Webhook URL"
+                    type="password"
+                    autoComplete="off"
+                    value={hook.url}
+                    placeholder="https://…"
+                    onChange={(event) => updateHook(hook.id, { url: event.target.value })}
+                  />
+                </label>
+                <NotificationEventFilter
+                  language={language}
+                  value={hook}
+                  onChange={(patch) => updateHook(hook.id, patch)}
                 />
-                {filter(hook, (patch) => updateHook(hook.id, patch))}
                 <details>
                   <summary className="text-xs text-text-muted cursor-pointer">
                     {t('notifications.headers', language)}

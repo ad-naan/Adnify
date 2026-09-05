@@ -72,7 +72,7 @@ describe('editor event routing', () => {
     expect(deliver).toHaveBeenCalledTimes(1)
     expect(service.snapshot().records).toHaveLength(1)
     expect(service.snapshot().records[0].deliveries[hook.id].state).toBe('delivered')
-    expect(changed.mock.calls.filter((call) => call[1])).toHaveLength(1)
+    expect(service.snapshot().records[0].deliveries).not.toHaveProperty('inApp')
     service.stop()
   })
 
@@ -159,6 +159,34 @@ describe('editor event routing', () => {
 })
 
 describe('webhook transport and configuration', () => {
+  it('keeps an empty disabled destination without blocking saves and removes the retired in-app option', () => {
+    const input = { ...defaultNotificationSettings(), inApp: true, webhooks: [{ ...hook, url: '', enabled: false }] }
+    const saved = notificationSettingsSchema.parse(input)
+    expect(saved).not.toHaveProperty('inApp')
+    expect(saved.webhooks[0].url).toBe('')
+    expect(
+      notificationSettingsSchema.safeParse({ ...input, webhooks: [{ ...hook, url: '', enabled: true }] }).success,
+    ).toBe(false)
+  })
+
+  it('tests system delivery independently of saved filters without enabling or saving the channel', async () => {
+    const settings = defaultNotificationSettings()
+    settings.system.enabled = false
+    settings.system.events = ['index.completed']
+    settings.webhooks = [{ ...hook, enabled: false, url: '' }]
+    const before = structuredClone(settings),
+      deliver = vi.fn(async () => 'delivered' as const)
+    const service = new NotificationService({ settings: () => settings, changed: () => {} })
+    service.registerChannel({ id: 'system', accepts: () => false, deliver })
+    expect(await service.test('system', event, true)).toMatchObject({ success: true })
+    expect(deliver.mock.calls[0]).toEqual([
+      event,
+      expect.objectContaining({ system: expect.objectContaining({ sound: true, onlyWhenUnfocused: false }) }),
+      expect.any(AbortSignal),
+    ])
+    expect(settings).toEqual(before)
+    service.stop()
+  })
   it('substitutes JSON string values safely and excludes workspace/thread data', () => {
     const result = JSON.parse(
       renderWebhookBody('{"text":"{{title}}: {{message}}","nested":["{{type}}",true,2]}', {

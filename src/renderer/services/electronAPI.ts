@@ -195,14 +195,26 @@ function createGroupedAPI() {
     // 终端
     terminal: {
       create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => raw.createTerminal(options),
-      write: (id: string, data: string) => raw.writeTerminal(id, data),
+      write: (id: string, data: string, leaseId?: string) => raw.writeTerminal(id, data, leaseId),
+      list: () => raw.listTerminals(),
+      claim: (id: string, background?: boolean, threadId?: string, timeoutMs?: number) => raw.claimTerminal(id, background, threadId, timeoutMs),
+      release: (id: string, leaseId: string) => raw.releaseTerminal(id, leaseId),
       openExternal: (url: string) => raw.terminalOpenExternal(url),
       resize: (id: string, cols: number, rows: number) => raw.resizeTerminal(id, cols, rows),
-      kill: (id?: string) => raw.killTerminal(id),
+      kill: (id: string) => raw.killTerminal(id),
       getShells: () => raw.getAvailableShells(),
       onData: (callback: Parameters<typeof raw.onTerminalData>[0]) => raw.onTerminalData(callback),
       onExit: (callback: Parameters<typeof raw.onTerminalExit>[0]) => raw.onTerminalExit(callback),
       onError: (callback: Parameters<typeof raw.onTerminalError>[0]) => raw.onTerminalError(callback),
+    },
+
+    execution: {
+      submit: (request: import('@shared/types/execution').ExecutionRequest) => raw.executionSubmit(request),
+      list: () => raw.executionList(),
+      wait: (jobId: string, afterRevision: number, waitMs?: number) => raw.executionWait(jobId, afterRevision, waitMs),
+      cancel: (jobId: string) => raw.executionCancel(jobId),
+      input: (jobId: string, data: string) => raw.executionInput(jobId, data),
+      onChanged: (callback: Parameters<typeof raw.onExecutionChanged>[0]) => raw.onExecutionChanged(callback),
     },
 
     // 远程 Shell / SFTP

@@ -31,6 +31,8 @@ import {
 
 // ===== 类型定义 =====
 
+import { isExecutionFinished, type ExecutionSnapshot } from '@shared/types/execution'
+
 export interface TerminalInstance {
   id: string;
   name: string;
@@ -39,6 +41,7 @@ export interface TerminalInstance {
   createdAt: number;
   /** 是否为 Agent 专属终端 */
   isAgent?: boolean;
+  managedJob?: boolean;
   /** 远程 SSH 连接信息 */
   remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string };
   /** 远程主机地址（用于显示） */
@@ -298,7 +301,12 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
 export { parseShellIntegrationPayload, SHELL_INTEGRATION_OSC_ID } from "@/renderer/services/terminalShellIntegration";
 
 class TerminalManagerClass {
-  private static readonly MAX_IDLE_AGENT_TERMINALS = 2
+  private managedJobs = new Map<string, ExecutionSnapshot>()
+  private hiddenJobs = new Set<string>()
+  private closingJobs = new Set<string>()
+  private unknownTerminals = new Set<string>()
+  private reservedTerminals = new Set<string>()
+  private agentLeases = new Map<string, string>()
   private state = {
     terminals: [] as TerminalInstance[],
     activeId: null as string | null,
@@ -306,7 +314,6 @@ class TerminalManagerClass {
 
   /** Agent 专属终端 ID（跨 tool call 复用） */
   private agentTerminalId: string | null = null;
-  private agentTerminalCreating: Promise<string> | null = null;
   private agentRemoteTerminalIds = new Map<string, string>();
   private agentRemoteTerminalCreating = new Map<string, Promise<string>>();
 
@@ -357,6 +364,7 @@ class TerminalManagerClass {
     try {
       instance.fitAddon.fit()
       const dims = instance.fitAddon.proposeDimensions?.()
+      if (this.managedJobs.has(id)) return
       if (dims && dims.cols > 0 && dims.rows > 0) {
         api.terminal.resize(id, dims.cols, dims.rows)
       }
@@ -372,6 +380,14 @@ class TerminalManagerClass {
   private emitShellIntegration(id: string, payload: string): boolean {
     const parsed = parseShellIntegrationPayload(payload)
     if (!parsed) return false
+    if (parsed.phase === 'command-end') {
+      this.unknownTerminals.delete(id)
+      const detached = this.currentCommandSessions.get(id)
+      if (detached?.status === 'detached') this.finalizeCommandSession(id, {
+        ...detached, status: parsed.exitCode === 0 ? 'completed' : 'failed',
+        endedAt: Date.now(), exitCode: parsed.exitCode ?? null, sentinelMatched: true,
+      })
+    }
 
     const instance = this.xtermInstances.get(id)
     if (instance && parsed.phase === 'prompt') instance.shellIntegrationReady = true
@@ -432,6 +448,25 @@ class TerminalManagerClass {
   }
 
   private setupIpcListeners() {
+    const onExecutionChanged = api.execution?.onChanged(job => this.applyExecutionSnapshot(job))
+    void api.execution?.list().then(result => {
+      for (const job of result.jobs || []) this.applyExecutionSnapshot(job)
+    }).catch(error => logger.system.warn('[TerminalManager] Failed to restore executions:', error))
+    void api.terminal.list?.().then(result => {
+      for (const session of result.sessions || []) {
+        if (this.hasTerminal(session.id)) continue
+        this.state.terminals.push({ id: session.id, name: session.isAgent ? 'Agent' : 'Terminal',
+          cwd: session.cwd, shell: session.shell, isAgent: session.isAgent,
+          remoteHost: session.remoteHost, createdAt: Date.now() })
+        this.ptyReady.set(session.id, session.state !== 'exited')
+        if (session.state !== 'ready' || session.userControlled) this.unknownTerminals.add(session.id)
+        this.outputBuffers.delete(session.id)
+        this.appendToBuffer(session.id, session.output)
+        this.ensureXtermInstance(session.id)
+        this.state.activeId ||= session.id
+      }
+      this.notify()
+    }).catch(error => logger.system.warn('[TerminalManager] Failed to restore terminals:', error))
       const onData = api.terminal.onData(
         (event: TerminalDataEvent) => {
       const { id, data } = event;
@@ -519,6 +554,9 @@ class TerminalManagerClass {
 
         // 清理 PTY 状态
         this.ptyReady.delete(id);
+        this.reservedTerminals.delete(id)
+        this.agentLeases.delete(id)
+        this.removeAgentTerminalReference(id)
         this.shellIntegrationRawParsers.delete(id);
       },
     );
@@ -545,11 +583,73 @@ class TerminalManagerClass {
     );
 
     this.ipcCleanup = () => {
+      onExecutionChanged?.()
       onData();
       onExit();
       onError?.();
     };
   }
+
+  applyExecutionSnapshot(job: ExecutionSnapshot): void {
+    const previous = this.managedJobs.get(job.jobId)
+    if (previous && previous.revision >= job.revision) return
+    this.managedJobs.set(job.jobId, job)
+    if (this.hiddenJobs.has(job.jobId)) {
+      this.managedJobs.set(job.jobId, { ...job, output: '' })
+      return
+    }
+    if (job.status === 'unknown') this.closingJobs.delete(job.jobId)
+    if (isExecutionFinished(job.status) && this.closingJobs.delete(job.jobId)) {
+      this.removeTerminalView(job.jobId)
+      return
+    }
+    let terminal = this.state.terminals.find(item => item.id === job.jobId)
+    if (!terminal) {
+      terminal = { id: job.jobId, name: job.command.replace(/\s+/g, ' ').slice(0, 48),
+        cwd: job.cwd, shell: job.shell, createdAt: job.submittedAt, isAgent: true, managedJob: true }
+      this.state.terminals.push(terminal)
+      this.state.activeId ||= job.jobId
+    }
+    const xterm = this.ensureXtermInstance(job.jobId)
+    const oldOutput = previous?.output || ''
+    if (job.output !== oldOutput) {
+      if (job.output.startsWith(oldOutput)) {
+        const added = job.output.slice(oldOutput.length)
+        xterm?.terminal.write(added.replace(/\r?\n/g, '\r\n'))
+        this.appendToBuffer(job.jobId, added)
+        this.dataListeners.forEach(listener => listener(job.jobId, added))
+      } else {
+        xterm?.terminal.clear()
+        xterm?.terminal.write(job.output.replace(/\r?\n/g, '\r\n'))
+        this.outputBuffers.delete(job.jobId)
+        this.appendToBuffer(job.jobId, job.output)
+      }
+    }
+    const finished = isExecutionFinished(job.status)
+    const status: TerminalCommandStatus = job.status === 'expired' ? 'failed'
+      : job.status === 'unknown' ? 'detached'
+      : job.status === 'starting' || job.status === 'stopping' ? 'running' : job.status
+    const session: TerminalCommandSession = {
+      commandSessionId: job.jobId, terminalId: job.jobId, command: job.command, cwd: job.cwd,
+      startedAt: job.startedAt || job.submittedAt, endedAt: job.endedAt, status,
+      exitCode: job.exitCode, timedOut: job.reason === 'execution_timeout',
+      output: job.output, partialOutput: job.output, sentinelMatched: finished && job.exitCode !== null,
+      isBackground: job.mode === 'background', source: 'agent',
+    }
+    if (finished) {
+      this.currentCommandSessions.delete(job.jobId)
+      this.lastCommandSessions.set(job.jobId, session)
+    } else this.currentCommandSessions.set(job.jobId, session)
+    // Completed views are a bounded history, not persistent shells.
+    const history = this.state.terminals.filter(item => item.managedJob
+      && isExecutionFinished(this.managedJobs.get(item.id)?.status || 'running'))
+    for (const old of history.slice(0, Math.max(0, history.length - 64))) {
+      if (old.id !== this.state.activeId) this.removeTerminalView(old.id)
+    }
+    this.notify()
+  }
+
+  getManagedJob(id: string): ExecutionSnapshot | undefined { return this.managedJobs.get(id) }
 
   /**
    * 追加数据到输出缓冲区
@@ -884,7 +984,7 @@ class TerminalManagerClass {
 
     // 处理终端输入
     terminal.onData((data) => {
-      api.terminal.write(id, data);
+      this.writeToTerminal(id, data);
     });
 
     const mod = (e: KeyboardEvent) => isMac ? e.metaKey : e.ctrlKey;
@@ -1042,7 +1142,7 @@ class TerminalManagerClass {
 
     // 处理终端输入
     terminal.onData((data) => {
-      api.terminal.write(id, data);
+      this.writeToTerminal(id, data);
     });
     // 处理粘贴文本
     const handlePasteText = (text: string) => {
@@ -1159,7 +1259,26 @@ class TerminalManagerClass {
     this.resizeTerminalIfReady(id, instance);
   }
 
-  closeTerminal(id: string) {
+  async closeTerminal(id: string): Promise<void> {
+    const job = this.managedJobs.get(id)
+    if (job) {
+      if (!isExecutionFinished(job.status)) {
+        this.closingJobs.add(id)
+        const response = await api.execution.cancel(id)
+        if (!response.success) throw new Error(response.error)
+        this.applyExecutionSnapshot(response.job)
+        // Keep a visible stopping/unknown process until the backend confirms its exit.
+        if (!isExecutionFinished(response.job.status)) return
+      }
+      this.removeTerminalView(id)
+      return
+    }
+    const stopped = await api.terminal.kill(id)
+    if (stopped && !stopped.success) throw new Error(stopped.error || 'Terminal stop is not confirmed')
+    this.removeTerminalView(id)
+  }
+
+  private removeTerminalView(id: string) {
     const activeExecution = this.activeExecutions.get(id)
     if (activeExecution) {
       activeExecution.finalize('user_closed_terminal', {
@@ -1192,7 +1311,14 @@ class TerminalManagerClass {
     this.shellIntegrationRawParsers.delete(id);
     this.terminalCreateErrors.delete(id);
     this.clearCommandState(id)
-    api.terminal.kill(id);
+    const job = this.managedJobs.get(id)
+    if (job) {
+      this.hiddenJobs.add(id)
+      this.managedJobs.set(id, { ...job, output: '' })
+    }
+    this.unknownTerminals.delete(id)
+    this.reservedTerminals.delete(id)
+    this.agentLeases.delete(id)
 
     const index = this.state.terminals.findIndex((t) => t.id === id);
     if (index !== -1) {
@@ -1224,7 +1350,16 @@ class TerminalManagerClass {
   // ===== 工具方法 =====
 
   writeToTerminal(id: string, data: string) {
-    api.terminal.write(id, data);
+    const request = this.managedJobs.has(id) ? api.execution.input(id, data) : api.terminal.write(id, data)
+    void request?.catch(error => logger.system.warn('[TerminalManager] Input failed:', error))
+  }
+
+  private submitAgentInput(id: string, data: string): Promise<void> {
+    const leaseId = this.agentLeases.get(id)
+    const request = leaseId ? api.terminal.write(id, data, leaseId) : api.terminal.write(id, data)
+    return Promise.resolve(request).then(result => {
+      if (result && !result.success) throw new Error(result.error || 'Terminal input failed')
+    })
   }
 
   pasteToTerminal(id: string, data: string) {
@@ -1233,12 +1368,13 @@ class TerminalManagerClass {
 
     // Match the working keyboard shortcut: send clipboard text directly to the
     // PTY. xterm.paste() is not guaranteed to emit onData in every Electron build.
-    api.terminal.write(id, data);
+    this.writeToTerminal(id, data);
     terminal?.focus();
   }
 
   /** Start a long-running Agent command in the existing interactive shell. */
   executeDetachedCommand(termId: string, command: string, cwd?: string): void {
+    this.reservedTerminals.delete(termId)
     const terminal = this.state.terminals.find((item) => item.id === termId)
     const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
     const isPowerShell = shellFamily === 'powershell'
@@ -1247,7 +1383,10 @@ class TerminalManagerClass {
         ? `Push-Location '${escapePowerShellSingleQuoted(cwd)}'; ${command}`
         : `cd '${escapePosixSingleQuoted(cwd)}' && ${command}`)
       : command
-    this.writeToTerminal(termId, isPowerShell ? `${runnable}\r` : `${runnable}\n`)
+    void this.submitAgentInput(termId, isPowerShell ? `${runnable}\r` : `${runnable}\n`).catch(error => {
+      this.unknownTerminals.add(termId)
+      logger.system.warn('[TerminalManager] Background input result is unknown:', error)
+    })
   }
 
   getOutputBuffer(id: string): string[] {
@@ -1306,7 +1445,8 @@ class TerminalManagerClass {
 
   private isReusableAgentTerminal(terminalId: string): boolean {
     const exists = this.state.terminals.find(t => t.id === terminalId)
-    if (!exists) return false
+    if (!exists || exists.managedJob || !this.isTerminalReady(terminalId)
+      || this.unknownTerminals.has(terminalId) || this.reservedTerminals.has(terminalId)) return false
 
     const commandInfo = this.getTerminalCommandState(terminalId)
     const occupiedByDetachedWork =
@@ -1331,181 +1471,56 @@ class TerminalManagerClass {
     }
   }
 
-  /**
-   * Reclaim terminal capacity before asking the main process for another
-   * Agent PTY. Creating first and cleaning up afterwards can transiently hit
-   * the main-process ceiling and surface "Maximum number of terminals".
-   */
-  private reclaimAgentTerminalCapacity(): boolean {
-    const maxTerminals = 10
-    if (this.state.terminals.length < maxTerminals) return true
-
-    const reservedAgentTerminalIds = new Set([
-      this.agentTerminalId,
-      ...this.agentRemoteTerminalIds.values(),
-    ].filter((id): id is string => Boolean(id)))
-
-    const reclaimable = this.state.terminals
-      .filter(terminal => terminal.isAgent)
-      .filter(terminal => !reservedAgentTerminalIds.has(terminal.id))
-      .filter(terminal => !this.activeExecutions.has(terminal.id))
-      .filter(terminal => {
-        const commandInfo = this.getTerminalCommandState(terminal.id)
-        const currentStatus = commandInfo.current?.status
-        const lastStatus = commandInfo.last?.status
-        return currentStatus !== 'queued'
-          && currentStatus !== 'running'
-          && currentStatus !== 'detached'
-          && lastStatus !== 'detached'
-      })
-      .sort((a, b) => a.createdAt - b.createdAt)
-
-    while (this.state.terminals.length >= maxTerminals) {
-      const terminal = reclaimable.shift()
-      if (!terminal || !this.hasTerminal(terminal.id)) return false
-      this.closeTerminal(terminal.id)
-    }
-    return true
-  }
-
-  /**
-   * 获取或创建 Agent 专属终端。
-   * Agent 终端跨 tool call 复用，避免每次 run_command 产生孤立 tab。
-   */
   async getOrCreateAgentTerminalLease(cwd: string, options?: {
+    background?: boolean
+    timeoutMs?: number
     shell?: string
     remote?: TerminalInstance['remote']
     agentTerminalKey?: string
     name?: string
   }): Promise<AgentTerminalLease> {
-    if (options?.remote) {
-      const key = options.agentTerminalKey || `${options.remote.username || 'root'}@${options.remote.host}:${options.remote.port || 22}`
-      const existingId = this.agentRemoteTerminalIds.get(key)
-      if (existingId) {
-        if (this.isReusableAgentTerminal(existingId)) {
-          return { terminalId: existingId, reused: true }
-        }
-        this.agentRemoteTerminalIds.delete(key)
+    const shell = options?.shell || (options?.remote ? undefined : (await shellRegistryService.load()).defaultShell)
+    const key = JSON.stringify([options?.agentTerminalKey || 'default', cwd, shell,
+      options?.remote?.host, options?.remote?.port, options?.remote?.username])
+    const reserve = async (terminalId: string, reused: boolean): Promise<AgentTerminalLease> => {
+      if (!this.isReusableAgentTerminal(terminalId)) throw new Error('Terminal is already leased or unavailable')
+      this.reservedTerminals.add(terminalId)
+      try {
+        const response = await api.terminal.claim?.(terminalId, options?.background, options?.agentTerminalKey, options?.timeoutMs)
+        if (response && (!response.success || !response.leaseId)) throw new Error(response.error || 'Terminal lease was rejected')
+        if (response?.leaseId) this.agentLeases.set(terminalId, response.leaseId)
+      } catch (error) {
+        this.reservedTerminals.delete(terminalId)
+        throw error
       }
-
-      const pendingCreation = this.agentRemoteTerminalCreating.get(key)
-      if (pendingCreation) {
-        const terminalId = await pendingCreation
-        return { terminalId, reused: false }
-      }
-
-      if (!this.reclaimAgentTerminalCapacity()) {
-        throw new Error('Terminal capacity is exhausted. Stop unused background terminals or close an idle terminal, then retry.')
-      }
-
-      const creating = this.createTerminal({
-        name: options.name || 'Agent',
-        cwd,
-        shell: options.shell,
-        isAgent: true,
-        remote: options.remote,
-      }).then(id => {
-        if (!this.isTerminalReady(id)) {
-          const error = this.getTerminalCreateError(id) || 'Failed to create remote terminal session'
-          this.removeAgentTerminalReference(id)
-          if (this.hasTerminal(id)) {
-            this.closeTerminal(id)
-          }
-          throw new Error(error)
-        }
-        this.agentRemoteTerminalIds.set(key, id)
-        this.cleanupIdleAgentTerminals()
-        this.agentRemoteTerminalCreating.delete(key)
-        return id
-      }).catch(err => {
-        this.agentRemoteTerminalCreating.delete(key)
-        throw err
-      })
-
-      this.agentRemoteTerminalCreating.set(key, creating)
-      const terminalId = await creating
-      return { terminalId, reused: false }
+      return { terminalId, reused }
     }
-
-    const resolvedShell = options?.shell || (await shellRegistryService.load()).defaultShell
-
-    // 检查现有 agent 终端是否仍然存活
-    if (this.agentTerminalId) {
-      const existing = this.state.terminals.find(t => t.id === this.agentTerminalId)
-      const shellMismatch = Boolean(
-        resolvedShell && (!existing?.shell || existing.shell !== resolvedShell)
-      )
-
-      if (this.isReusableAgentTerminal(this.agentTerminalId) && !shellMismatch) {
-        return { terminalId: this.agentTerminalId, reused: true }
-      } else {
-        this.agentTerminalId = null
-      }
+    const existing = this.agentRemoteTerminalIds.get(key)
+    if (existing && this.isReusableAgentTerminal(existing)) return reserve(existing, true)
+    const pending = this.agentRemoteTerminalCreating.get(key)
+    if (pending) {
+      const id = await pending
+      if (this.isReusableAgentTerminal(id)) return reserve(id, true)
+      // Another caller owns the creation result. It must never receive our input too.
+      throw new Error('Terminal is already leased; wait for the current command to finish')
     }
-
-    // 并发锁：防止快速连续的 run_command 创建多个 Agent 终端
-    if (this.agentTerminalCreating) {
-      const terminalId = await this.agentTerminalCreating
-      return { terminalId, reused: false }
-    }
-
-    if (!this.reclaimAgentTerminalCapacity()) {
-      throw new Error('Terminal capacity is exhausted. Stop unused background terminals or close an idle terminal, then retry.')
-    }
-
-    const staleAgentTerminals = [...this.state.terminals].filter(terminal => {
-      if (!terminal.isAgent) return false
-      const commandInfo = this.getTerminalCommandState(terminal.id)
-      return commandInfo.current?.terminationReason === 'shell_integration_missing' ||
-        commandInfo.last?.terminationReason === 'shell_integration_missing'
-    })
-    const closeStaleAgentTerminals = (createdTerminalId: string) => {
-      for (const terminal of staleAgentTerminals) {
-        if (!this.hasTerminal(terminal.id)) continue
-        if (this.xtermInstances.get(terminal.id)?.shellIntegrationReady) continue
-        this.closeTerminal(terminal.id)
-      }
-
-      if (this.state.terminals.length >= 10) {
-        const closableAgent = this.state.terminals.find(item =>
-          item.isAgent &&
-          item.id !== createdTerminalId &&
-          !this.activeExecutions.has(item.id) &&
-          this.getTerminalCommandState(item.id).current?.status !== 'running'
-        )
-        if (closableAgent) this.closeTerminal(closableAgent.id)
-      }
-    }
-
-    this.agentTerminalCreating = this.createTerminal({
-      name: options?.name || this.getNextAgentTerminalName(),
-      cwd,
-      shell: resolvedShell,
-      isAgent: true,
-    }).then(id => {
+    const creation = this.createTerminal({ name: options?.name || 'Agent', cwd, shell,
+      isAgent: true, remote: options?.remote }).then(id => {
       if (!this.isTerminalReady(id)) {
-        const error = this.getTerminalCreateError(id) || 'Failed to create terminal session'
-        this.removeAgentTerminalReference(id)
-        if (this.hasTerminal(id)) {
-          this.closeTerminal(id)
-        }
+        const error = this.getTerminalCreateError(id) || 'Failed to create terminal'
+        this.removeTerminalView(id)
         throw new Error(error)
       }
-      this.agentTerminalId = id
-      closeStaleAgentTerminals(id)
-      this.cleanupIdleAgentTerminals()
-      this.agentTerminalCreating = null
+      this.agentRemoteTerminalIds.set(key, id)
       return id
-    }).catch(err => {
-      this.agentTerminalCreating = null
-      throw err
     })
-
-    const terminalId = await this.agentTerminalCreating
-    return { terminalId, reused: false }
+    this.agentRemoteTerminalCreating.set(key, creation)
+    try { return reserve(await creation, false) }
+    finally { this.agentRemoteTerminalCreating.delete(key) }
   }
 
   async getOrCreateAgentTerminal(cwd: string, options?: {
+    background?: boolean
     shell?: string
     remote?: TerminalInstance['remote']
     agentTerminalKey?: string
@@ -1526,44 +1541,13 @@ class TerminalManagerClass {
     }
 
     this.removeAgentTerminalReference(terminalId)
+    this.reservedTerminals.delete(terminalId)
   }
 
-  private getNextAgentTerminalName(): string {
-    const agentTerminals = this.state.terminals.filter(t => t.isAgent)
-    if (agentTerminals.length === 0) return 'Agent'
-    return `Agent ${agentTerminals.length + 1}`
-  }
-
-  private cleanupIdleAgentTerminals(): void {
-    const reservedAgentTerminalIds = new Set<string>([
-      this.agentTerminalId,
-      ...this.agentRemoteTerminalIds.values(),
-    ].filter((id): id is string => Boolean(id)))
-
-    const idleAgentTerminals = this.state.terminals
-      .filter(terminal => terminal.isAgent)
-      .filter(terminal => !reservedAgentTerminalIds.has(terminal.id))
-      .filter(terminal => terminal.id !== this.state.activeId)
-      .filter((terminal) => {
-        const commandInfo = this.getTerminalCommandState(terminal.id)
-        const currentStatus = commandInfo.current?.status
-        const lastStatus = commandInfo.last?.status
-        const isOccupied = currentStatus === 'queued'
-          || currentStatus === 'running'
-          || currentStatus === 'detached'
-          || lastStatus === 'detached'
-        return !isOccupied
-      })
-      .sort((a, b) => a.createdAt - b.createdAt)
-
-    const terminalsToClose = Math.max(
-      0,
-      idleAgentTerminals.length - TerminalManagerClass.MAX_IDLE_AGENT_TERMINALS,
-    )
-
-    idleAgentTerminals.slice(0, terminalsToClose).forEach((terminal) => {
-      this.closeTerminal(terminal.id)
-    })
+  async releaseUnsubmittedLease(terminalId: string): Promise<void> {
+    const leaseId = this.agentLeases.get(terminalId)
+    if (leaseId) await api.terminal.release(terminalId, leaseId)
+    this.reservedTerminals.delete(terminalId)
   }
 
   recordDetachedCommand(
@@ -1579,7 +1563,6 @@ class TerminalManagerClass {
       command,
       cwd,
       startedAt,
-      endedAt: startedAt,
       status: 'detached',
       exitCode: null,
       timedOut: false,
@@ -1591,7 +1574,7 @@ class TerminalManagerClass {
       source,
     }
 
-    this.lastCommandSessions.set(termId, session)
+    this.currentCommandSessions.set(termId, session)
     this.notify()
     return cloneCommandSession(session)!
   }
@@ -1602,7 +1585,15 @@ class TerminalManagerClass {
    *
    * @param cwd 可选工作目录。若提供，用 Push-Location/popd（PS）或子 shell（Unix）临时切换目录。
    */
-  executeCommandWithOutput(termId: string, command: string, timeoutMs: number, cwd?: string): Promise<CommandResult> {
+  executeCommandWithOutput(termId: string, command: string, timeoutMs: number, cwd?: string, signal?: AbortSignal): Promise<CommandResult> {
+    if (this.activeExecutions.has(termId) || this.unknownTerminals.has(termId)) {
+      return Promise.reject(new Error('Terminal is busy or its previous command has not been confirmed finished'))
+    }
+    this.reservedTerminals.delete(termId)
+    if (signal?.aborted) {
+      void this.closeTerminal(termId).catch(error => logger.system.warn('[TerminalManager] Cancel stop failed:', error))
+      return Promise.reject(new Error('Command cancelled before submission'))
+    }
     const commandSessionId = crypto.randomUUID()
     const startedAt = Date.now()
     const terminal = this.state.terminals.find(item => item.id === termId)
@@ -1716,6 +1707,7 @@ class TerminalManagerClass {
         unsubShellIntegration()
         clearTimeout(timer)
         clearTimeout(handshakeTimer)
+        signal?.removeEventListener('abort', abort)
         this.activeExecutions.delete(termId)
 
         const partialOutput = trimRetainedText(
@@ -1765,6 +1757,7 @@ class TerminalManagerClass {
       }
 
       const timer = setTimeout(() => {
+        this.unknownTerminals.add(termId)
         settle('timeout', {
           finalStatus: 'timed_out',
           timedOut: true,
@@ -1772,6 +1765,14 @@ class TerminalManagerClass {
           output: getVisibleOutput(),
         })
       }, timeoutMs)
+
+      const abort = () => {
+        this.unknownTerminals.add(termId)
+        void this.closeTerminal(termId).catch(error => {
+          settle('terminal_error', { finalStatus: 'failed', output: `Cancellation could not be confirmed: ${String(error)}` })
+        })
+      }
+      signal?.addEventListener('abort', abort, { once: true })
 
       const handshakeTimer = setTimeout(() => {
         const xterm = getXterm()
@@ -1882,7 +1883,10 @@ class TerminalManagerClass {
           status: 'running',
         }))
         commandSubmitted = true
-        this.writeToTerminal(termId, input)
+        void this.submitAgentInput(termId, input).catch(error => {
+          this.unknownTerminals.add(termId)
+          settle('terminal_error', { finalStatus: 'failed', output: String(error), exitCode: null })
+        })
       }
 
       submitWhenReady()
@@ -1902,11 +1906,10 @@ class TerminalManagerClass {
           finalStatus: 'cancelled',
         })
       }
-      this.closeTerminal(terminal.id);
+      void this.closeTerminal(terminal.id).catch(error => logger.system.warn('[TerminalManager] Cleanup stop failed:', error));
     }
 
     this.agentTerminalId = null
-    this.agentTerminalCreating = null
     this.agentRemoteTerminalIds.clear()
     this.agentRemoteTerminalCreating.clear()
     this.currentCommandSessions.clear()

@@ -3,12 +3,10 @@ import { api } from '../services/electronAPI'
 import { EventBus } from '../agent/core/EventBus'
 import { useAgentStore } from '../agent/store/AgentStore'
 import { useStore } from '../store'
-import { toast } from '../components/common/ToastProvider'
 import { t } from '@shared/i18n'
 import type { EditorEventInput } from '@shared/types/notifications'
 import { editorEvents } from './events'
 import { summarizeAgentEvent } from './agentEvents'
-import { acceptNotificationSnapshot, useNotifications } from './store'
 
 export function useNotificationBridge(enabled: boolean): void {
   useEffect(() => {
@@ -16,7 +14,6 @@ export function useNotificationBridge(enabled: boolean): void {
     let disposed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let approvalTimer: ReturnType<typeof setTimeout> | undefined
-    let workspaceRevision = 0
     const queue: EditorEventInput[] = []
     const passive = new Map<string, EditorEventInput>()
     const flush = () => {
@@ -28,17 +25,7 @@ export function useNotificationBridge(enabled: boolean): void {
       if (batch.length) void api.notifications.publish(batch).catch(() => {})
       if (queue.length || passive.size) timer = setTimeout(flush, 500)
     }
-    useNotifications.setState({ revision: -1, records: [] })
     const pendingThreads = new Set<string>()
-    const loadHistory = () => {
-      const revision = ++workspaceRevision
-      void api.notifications
-        .history()
-        .then((snapshot) => {
-          if (!disposed && revision === workspaceRevision) acceptNotificationSnapshot(snapshot)
-        })
-        .catch(() => {})
-    }
     const checkApprovals = () => {
       approvalTimer = undefined
       const state = useAgentStore.getState()
@@ -78,8 +65,6 @@ export function useNotificationBridge(enabled: boolean): void {
         if (state.workspace !== previous.workspace) {
           passive.clear()
           queue.length = 0
-          useNotifications.setState({ revision: -1, records: [] })
-          loadHistory()
           editorEvents.publish({
             type: 'editor.workspace.changed',
             title: t('notifications.workspaceChanged', state.language),
@@ -102,28 +87,6 @@ export function useNotificationBridge(enabled: boolean): void {
             level: 'info',
           })
       }),
-      api.notifications.onUpdate((update) => {
-        acceptNotificationSnapshot(update.snapshot)
-        if (update.toast)
-          toast.card({
-            type: update.toast.level,
-            title: update.toast.title,
-            message: update.toast.message,
-            duration: 5000,
-            source: 'notification-center',
-            dedupeKey: update.toast.id,
-            record: false,
-            actions: [
-              {
-                id: 'open',
-                label: t('notifications.open', useStore.getState().language),
-                onClick: () => {
-                  void api.notifications.activate(update.toast!.id).catch(() => {})
-                },
-              },
-            ],
-          })
-      }),
       api.notifications.onActivate((event) => {
         if (event.threadId && useAgentStore.getState().threads[event.threadId]) {
           useAgentStore.getState().switchThread(event.threadId)
@@ -131,7 +94,6 @@ export function useNotificationBridge(enabled: boolean): void {
         }
       }),
     ]
-    loadHistory()
     return () => {
       disposed = true
       clearTimeout(timer)

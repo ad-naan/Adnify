@@ -16,8 +16,11 @@ describe('commandRuntime', () => {
   })
 
   it('detects long-running commands and explicit background requests', () => {
-    expect(isLongRunningCommand('npm run dev', false)).toBe(true)
-    expect(isLongRunningCommand('vite', false)).toBe(true)
+    expect(isLongRunningCommand('npm run dev')).toBe(true)
+    expect(isLongRunningCommand('vite')).toBe(true)
+    expect(isLongRunningCommand('npm run dev', false)).toBe(false)
+    expect(isLongRunningCommand('vite build')).toBe(false)
+    expect(isLongRunningCommand('echo vite')).toBe(false)
     expect(isLongRunningCommand('npm test', true)).toBe(true)
     expect(isLongRunningCommand('npm test', false)).toBe(false)
   })

@@ -14,7 +14,6 @@ import {
   Maximize2,
   MessageSquare,
   Bug,
-  Bell,
   Volume2,
   Search,
   RefreshCw,
@@ -28,8 +27,6 @@ import { indexWorkerService, type IndexProgress } from '@services/indexWorkerSer
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
-import NotificationCenterContent from '../panels/NotificationCenterContent'
-import { useNotifications } from '../../notifications/store'
 import { useInlineToast } from '../common/InlineToast'
 import { useHasElevatedToastLayer } from '../common/toastLayerStore'
 import {
@@ -183,7 +180,6 @@ export default function StatusBar() {
   }, [language, refreshGitState, switchingBranch, workspacePath])
 
   const { toasts, visibleIds } = useInlineToast()
-  const notificationCount = useNotifications(state => state.records.filter(record => !record.read).length)
   const latestVisibleToastId = [...visibleIds].reverse().find(id => {
     const toast = toasts.find(item => item.id === id)
     return toast?.variant === 'inline'
@@ -588,53 +584,24 @@ export default function StatusBar() {
           </button>
         </div>
 
-        <div className="flex items-center h-full pr-1">
-          <BottomBarPopover
-            icon={
-              <div className={`group relative flex items-center h-6 rounded-md transition-all ease-out duration-500 overflow-hidden ${activeToast && !shouldEject ? 'bg-transparent px-1 max-w-[320px]' : 'justify-center w-6 hover:bg-white/5'}`}>
-                <AnimatePresence mode="wait">
-                  {activeToast && !shouldEject ? (
-                    <motion.div
-                      layoutId="adnify-dynamic-island"
-                      key={activeToast.id}
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: 'auto' }}
-                      exit={{ opacity: 0, width: 0 }}
-                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                      className="flex items-center gap-1.5 whitespace-nowrap pl-1"
-                    >
-                      <Volume2 className={`w-3.5 h-3.5 animate-pulse shrink-0 ${
-                        activeToast.type === 'success' ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)]' :
-                          activeToast.type === 'error' ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.6)]' :
-                            activeToast.type === 'warning' ? 'text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]' :
-                              'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]'
-                      }`} />
-                      <span className="text-[10.5px] text-text-primary font-medium truncate max-w-[260px]">
-                        {activeToast.message}
-                      </span>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="bell"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      className="relative flex items-center justify-center w-4 h-4 transition-colors"
-                    >
-                      <Bell className={`w-3 h-3 ${notificationCount > 0 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
-                      {notificationCount > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-400 shadow-[0_0_8px_currentColor] rounded-full" />
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            }
-            width={360}
-            height={420}
-          >
-            <NotificationCenterContent language={language} />
-          </BottomBarPopover>
+        <div className="flex items-center h-full pr-1" role="status">
+          <AnimatePresence mode="wait">
+            {activeToast && !shouldEject && (
+              <motion.div
+                layoutId="adnify-dynamic-island"
+                key={activeToast.id}
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                className="flex items-center gap-1.5 whitespace-nowrap px-1 max-w-[320px]"
+              >
+                <Volume2 className="w-3.5 h-3.5 shrink-0 text-text-muted" />
+                <span className="text-[10.5px] text-text-primary font-medium truncate max-w-[260px]">
+                  {activeToast.message}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

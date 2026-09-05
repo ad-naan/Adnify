@@ -36,6 +36,7 @@ import { composerService } from '../services/composerService'
 import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
 import { buildFileChangeDescriptor } from '../utils/fileChangeUtils'
 import { isLongRunningCommand } from './commandRuntime'
+import { runManagedCommand } from './managedCommand'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import { toolRegistry } from './registry'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
@@ -360,98 +361,6 @@ function getWritePreviewFlags(oldContent: string | null, newContent: string | nu
     }
 }
 
-function getPathSeparator(basePath: string): string {
-    return basePath.includes('\\') ? '\\' : '/'
-}
-
-function joinPath(basePath: string, ...parts: string[]): string {
-    const sep = getPathSeparator(basePath)
-    const trimmedBase = basePath.replace(/[\\/]+$/, '')
-    const trimmedParts = parts.map(part => part.replace(/^[\\/]+|[\\/]+$/g, ''))
-    return [trimmedBase, ...trimmedParts].join(sep)
-}
-
-type InlineScriptRuntime = 'python' | 'node' | 'powershell' | 'sh'
-
-interface InlineScriptCommand {
-    runtime: InlineScriptRuntime
-    executable: string
-    script: string
-    extension: string
-    args: string[]
-}
-
-function unwrapInlineScript(script: string): string {
-    const trimmed = script.trim()
-    if (!trimmed) return trimmed
-
-    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-        const quote = trimmed[0]
-        const inner = trimmed.slice(1, -1)
-        if (quote === '"') {
-            return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-        }
-        return inner.replace(/''/g, "'")
-    }
-
-    return trimmed
-}
-
-function parseInlineScriptCommand(command: string): InlineScriptCommand | null {
-    const patterns: Array<{
-        regex: RegExp
-        runtime: InlineScriptRuntime
-        extension: string
-        executable?: (raw: string) => string
-        args: (tempFile: string, executable: string) => string[]
-    }> = [
-        {
-            regex: /^\s*(python(?:\d+(?:\.\d+)*)?|python3|py(?:\s+-\d+(?:\.\d+)*)?)\s+-c\s+([\s\S]+?)\s*$/i,
-            runtime: 'python',
-            extension: '.py',
-            executable: raw => raw.trim().toLowerCase().startsWith('py') ? 'python' : raw.trim(),
-            args: tempFile => [tempFile],
-        },
-        {
-            regex: /^\s*(node(?:\.exe)?)\s+-e\s+([\s\S]+?)\s*$/i,
-            runtime: 'node',
-            extension: '.js',
-            args: tempFile => [tempFile],
-        },
-        {
-            regex: /^\s*(powershell(?:\.exe)?|pwsh(?:\.exe)?)\s+-(?:Command|c)\s+([\s\S]+?)\s*$/i,
-            runtime: 'powershell',
-            extension: '.ps1',
-            args: (tempFile, executable) => executable.toLowerCase().startsWith('powershell')
-                ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tempFile]
-                : ['-NoProfile', '-File', tempFile],
-        },
-        {
-            regex: /^\s*(bash|sh)\s+-c\s+([\s\S]+?)\s*$/i,
-            runtime: 'sh',
-            extension: '.sh',
-            args: tempFile => [tempFile],
-        },
-    ]
-
-    for (const pattern of patterns) {
-        const match = command.match(pattern.regex)
-        if (!match) continue
-
-        const rawExecutable = match[1].trim()
-        const executable = pattern.executable ? pattern.executable(rawExecutable) : rawExecutable
-        return {
-            runtime: pattern.runtime,
-            executable,
-            script: unwrapInlineScript(match[2]),
-            extension: pattern.extension,
-            args: pattern.args('__TEMP_FILE__', executable),
-        }
-    }
-
-    return null
-}
-
 function escapeShellSingleQuotes(value: string): string {
     return value.replace(/'/g, `'\\''`)
 }
@@ -667,148 +576,6 @@ async function buildRemoteTrustMeta(
     }
 
     return {}
-}
-
-/** Matches the PTY path's own output budget so both transports report the same volume. */
-const MAX_PIPED_OUTPUT_CHARS = 120_000
-
-/**
- * Terminal outcomes that mean "the shell never told us what happened".
- *
- * These are transport failures, not command failures: the command may well have
- * run and printed its output, but without OSC 633 boundaries the PTY path cannot
- * read a result, so it reports failure with a null exit code. Re-running through
- * pipes is the only way to get a trustworthy answer.
- */
-const FALLBACK_TERMINATION_REASONS = new Set([
-    'shell_integration_missing',
-    'sentinel_missing_prompt',
-    'terminal_error',
-    'terminal_exit',
-    'user_closed_terminal',
-])
-
-/**
- * Re-run a command through pipes and shape it like a normal tool result.
- *
- * Returns null when the piped transport itself could not start, so the caller can
- * keep the original PTY diagnostics rather than replacing them with a worse
- * message.
- */
-async function runCommandViaPipes(
-    command: string,
-    cwd: string | undefined,
-    timeout: number,
-    reason: string,
-    authorizationId?: string,
-): Promise<{ result: ToolExecutionResult } | null> {
-    let piped: Awaited<ReturnType<typeof api.shell.runPiped>>
-    try {
-        piped = await api.shell.runPiped({
-            command,
-            cwd,
-            timeout,
-            maxOutputChars: MAX_PIPED_OUTPUT_CHARS,
-            authorizationId,
-        })
-    } catch (error) {
-        logger.agent.warn('[run_command] Piped fallback failed to start:', error)
-        return null
-    }
-
-    if (piped.error && piped.exitCode === null && !piped.stdout && !piped.stderr) {
-        logger.agent.warn(`[run_command] Piped fallback rejected: ${piped.error}`)
-        return null
-    }
-
-    const combined = [piped.stdout, piped.stderr].filter(Boolean).join('\n').trim()
-    let resultText = combined
-
-    if (piped.timedOut) {
-        resultText = combined
-            ? `[Timed out after ${timeout / 1000}s]\n${combined}`
-            : `Command timed out after ${timeout / 1000}s`
-    } else if (!resultText) {
-        resultText = piped.exitCode === 0
-            ? 'Command executed successfully (no output)'
-            : `Command failed${piped.exitCode !== null ? ` (exit code ${piped.exitCode})` : ''} (no output)`
-    }
-
-    return {
-        result: {
-            success: piped.success,
-            result: resultText,
-            error: piped.success ? undefined : (piped.error || resultText),
-            meta: {
-                command,
-                cwd,
-                exitCode: piped.exitCode,
-                signal: piped.signal,
-                timedOut: piped.timedOut,
-                truncated: piped.truncated,
-                durationMs: piped.durationMs,
-                executionMode: 'piped-fallback',
-                fallbackReason: reason,
-            },
-        },
-    }
-}
-
-async function runInlineScriptViaTempFile(
-    command: string,
-    ctx: ToolExecutionContext,
-    timeout: number
-): Promise<ToolExecutionResult | null> {
-    const parsed = parseInlineScriptCommand(command)
-    if (!parsed) return null
-
-    const baseDir = ctx.workspacePath || await api.settings.getUserDataPath()
-    const tempDir = joinPath(baseDir, '.adnify', 'agent-temp')
-    const tempFile = joinPath(
-        tempDir,
-        `inline-${parsed.runtime}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${parsed.extension}`
-    )
-
-    try {
-        await api.file.ensureDir(tempDir)
-        const writeOk = await api.file.write(tempFile, parsed.script)
-        if (!writeOk) {
-            return {
-                success: false,
-                result: `Error: Failed to prepare temporary ${parsed.runtime} script at ${tempFile}`,
-                error: `Failed to prepare temporary ${parsed.runtime} script`,
-            }
-        }
-
-        const execResult = await api.shell.executeSecure({
-            command: parsed.executable,
-            args: parsed.args.map(arg => arg === '__TEMP_FILE__' ? tempFile : arg),
-            cwd: ctx.workspacePath || undefined,
-            timeout,
-        })
-
-        const output = (execResult.output || execResult.errorOutput || '').trim()
-        const resultText = output || (execResult.success ? 'Command executed successfully (no output)' : `Command failed${execResult.exitCode != null ? ` (exit code ${execResult.exitCode})` : ''}`)
-
-        return {
-            success: !!execResult.success,
-            result: resultText,
-            error: execResult.success ? undefined : (execResult.error || resultText),
-            meta: {
-                command,
-                cwd: ctx.workspacePath || undefined,
-                exitCode: execResult.exitCode,
-                executionMode: `inline-${parsed.runtime}-temp-file`,
-                tempFile,
-            }
-        }
-    } finally {
-        try {
-            await api.file.delete(tempFile, ctx.securityApproval)
-        } catch {
-            // Best-effort cleanup for temp scripts.
-        }
-    }
 }
 
 async function guardedWriteFile(opts: {
@@ -2266,15 +2033,20 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 commandAuthorizationId = authorization.authorizationId
             }
 
-            if (!remoteLink && !isLongRunningProcess) {
-                const directExecutionResult = await runInlineScriptViaTempFile(command, ctx, timeout)
-                if (directExecutionResult) {
-                    directExecutionResult.meta = {
-                        ...(directExecutionResult.meta || {}),
-                        ...routeMeta,
-                    }
-                    return directExecutionResult
-                }
+            if (!remoteLink && !args.interactive && !isLongRunningProcess) {
+                useStore.getState().setTerminalVisible(true)
+                const result = await runManagedCommand({ command, cwd: resolvedCwd || ctx.workspacePath || undefined,
+                    mode: 'command', timeoutMs: timeout, authorizationId: commandAuthorizationId }, ctx)
+                result.meta = { ...result.meta, ...routeMeta }
+                return result
+            }
+            if (!remoteLink && !args.interactive) {
+                useStore.getState().setTerminalVisible(true)
+                const result = await runManagedCommand({ command, cwd: resolvedCwd || ctx.workspacePath || undefined,
+                    mode: 'background', authorizationId: commandAuthorizationId,
+                    serviceKey: typeof args.service_key === 'string' ? args.service_key : undefined }, ctx)
+                result.meta = { ...result.meta, ...routeMeta }
+                return result
             }
 
             // 先唤出面板，再创建/获取终端，避免竞态：
@@ -2287,10 +2059,12 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const { terminalId: termId, reused } = await terminalManager.getOrCreateAgentTerminalLease(
                 terminalAnchorCwd,
                 remoteLink ? {
+                    background: isLongRunningProcess,
+                    timeoutMs: timeout,
                     remote: remoteLink.remote,
-                    agentTerminalKey: target.server?.serverLinkId,
+                    agentTerminalKey: `${ctx.threadId || 'default'}:${target.server?.serverLinkId}`,
                     name: `Agent · ${target.server?.serverName || remoteLink.name}`,
-                } : undefined,
+                } : { agentTerminalKey: ctx.threadId || 'default', background: isLongRunningProcess, timeoutMs: timeout },
             )
             const trustMeta = remoteLink
                 ? await buildRemoteTrustMeta(remoteLink.remote, undefined, { preferKnownStatus: reused })
@@ -2357,36 +2131,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 remoteLink ? remoteCommand : command,
                 timeout,
                 remoteLink ? undefined : (resolvedCwd || undefined),
+                ctx.abortSignal,
             )
+            await terminalManager.releaseUnsubmittedLease(termId)
 
-            // The PTY could not frame this command, so its "failure" says nothing
-            // about the command itself. Re-run through pipes, where stdout and the
-            // exit code come straight from the process. Remote commands are left
-            // alone: pipes here would run them on the wrong machine.
-            if (!remoteLink
-                && !commandResult.sentinelMatched
-                && commandResult.terminationReason
-                && FALLBACK_TERMINATION_REASONS.has(commandResult.terminationReason)) {
-                logger.agent.info(
-                    `[run_command] Shell integration unusable (${commandResult.terminationReason}); retrying through pipes`,
-                )
-                const fallback = await runCommandViaPipes(
-                    command,
-                    resolvedCwd || ctx.workspacePath || undefined,
-                    timeout,
-                    commandResult.terminationReason,
-                    commandAuthorizationId,
-                )
-                if (fallback) {
-                    fallback.result.meta = {
-                        ...(fallback.result.meta || {}),
-                        ...routeMeta,
-                        terminalId: termId,
-                    }
-                    return fallback.result
-                }
-            }
-
+            // A command that was submitted must never be replayed after losing its result.
             const displayOutput = (commandResult.output || commandResult.partialOutput || '').trim()
             let resultText = displayOutput
 
@@ -2457,6 +2206,14 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         try {
             const terminalManager = await getTerminalManager()
+            const job = terminalManager.getManagedJob(terminalId)
+            if (job) {
+                const response = await api.execution.wait(terminalId, 0, 0)
+                if (!response.success) throw new Error(response.error)
+                terminalManager.applyExecutionSnapshot(response.job)
+                return { success: true, result: `Job/Terminal ID: ${terminalId}\nStatus: ${response.job.status}${response.job.reason ? ` (${response.job.reason})` : ''}\nExit code: ${response.job.exitCode ?? 'unknown'}\n${response.job.truncated ? '[Earlier output truncated]\n' : ''}${response.job.output.split('\n').slice(-linesCount).join('\n')}`,
+                    meta: { terminalId, jobId: terminalId, finalStatus: response.job.status, exitCode: response.job.exitCode } }
+            }
             const lines = terminalManager.getOutputBuffer(terminalId)
 
             if (!lines || lines.length === 0) {
@@ -2502,7 +2259,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            terminalManager.writeToTerminal(terminalId, dataToSend)
+            if (terminalManager.getManagedJob(terminalId)) {
+                const response = await api.execution.input(terminalId, dataToSend)
+                if (!response.success) throw new Error(response.error)
+            } else await api.terminal.write(terminalId, dataToSend)
 
             return {
                 success: true,
@@ -2520,10 +2280,18 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         try {
             const terminalManager = await getTerminalManager()
-            terminalManager.closeTerminal(terminalId)
+            if (terminalManager.getManagedJob(terminalId)) {
+                const response = await api.execution.cancel(terminalId)
+                if (!response.success) throw new Error(response.error)
+                terminalManager.applyExecutionSnapshot(response.job)
+                return { success: true, result: `Job ${terminalId}: ${response.job.status}. ${response.job.status === 'stopping' ? 'Stop requested; exit is not yet confirmed. Check its status with read_terminal_output.' : ''}`,
+                    meta: { terminalId, finalStatus: response.job.status } }
+            }
+            const remote = terminalManager.getState().terminals.find(terminal => terminal.id === terminalId)?.remoteHost
+            await terminalManager.closeTerminal(terminalId)
             return {
                 success: true,
-                result: `Terminal ${terminalId} stopped and closed successfully.`,
+                result: remote ? `SSH terminal ${terminalId} closed. Remote process termination is not confirmed; do not assume its command was stopped.` : `Terminal ${terminalId} stopped and closed successfully.`,
                 meta: { terminalId }
             }
         } catch (error) {
@@ -4136,7 +3904,7 @@ export const toolExecutors = Object.fromEntries(
             try {
                 // SubAgentManager owns task cancellation and its five-minute lifecycle timeout.
                 // Applying the generic tool timeout here would terminate healthy sub-agents early.
-                if (name === 'task') return await executor(args, ctx)
+                if (name === 'task' || name === 'run_command') return await executor(args, ctx)
                 return await Promise.race([
                     executor(args, ctx),
                     new Promise<ToolExecutionResult>((_, reject) => {

@@ -33,15 +33,8 @@ export function useAppShutdownState(): void {
         /* ignore — modules may already be unloaded */
       }
 
-      try {
-        void import('@renderer/services/TerminalManager')
-          .then(({ terminalManager }) => terminalManager.cleanup())
-          .catch(() => {
-            /* ignore */
-          })
-      } catch {
-        /* ignore */
-      }
+      // Process ownership lives in main. A renderer refresh only detaches the view;
+      // actual window closure is observed by the execution service.
     }
 
     const unsubscribeShutdown = api.app.onShutdownRequested(async ({ requestId }) => {

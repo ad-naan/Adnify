@@ -517,10 +517,19 @@ export interface ElectronAPI {
 
   // Terminal
   createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => Promise<{ success: boolean; error?: string }>
-  writeTerminal: (id: string, data: string) => Promise<void>
+  writeTerminal: (id: string, data: string, leaseId?: string) => Promise<{ success: boolean; error?: string }>
+  listTerminals: () => Promise<{ success: boolean; sessions?: import('@shared/types/execution').InteractiveSessionSnapshot[]; error?: string }>
+  claimTerminal: (id: string, background?: boolean, threadId?: string, timeoutMs?: number) => Promise<{ success: boolean; leaseId?: string; error?: string }>
+  releaseTerminal: (id: string, leaseId: string) => Promise<{ success: boolean; error?: string }>
   terminalOpenExternal: (url: string) => Promise<boolean>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
-  killTerminal: (id?: string) => void
+  killTerminal: (id: string) => Promise<{ success: boolean; error?: string }>
+  executionSubmit: (request: import('@shared/types/execution').ExecutionRequest) => Promise<import('@shared/types/execution').ExecutionReply>
+  executionList: () => Promise<{ success: boolean; jobs?: import('@shared/types/execution').ExecutionSnapshot[]; usage?: import('@shared/types/execution').ExecutionUsage; error?: string }>
+  executionWait: (jobId: string, afterRevision: number, waitMs?: number) => Promise<import('@shared/types/execution').ExecutionReply>
+  executionCancel: (jobId: string) => Promise<import('@shared/types/execution').ExecutionReply>
+  executionInput: (jobId: string, data: string) => Promise<{ success: boolean; error?: string }>
+  onExecutionChanged: (callback: (job: import('@shared/types/execution').ExecutionSnapshot) => void) => () => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
   onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => () => void
   onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) => () => void

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExecutionSnapshot } from '@shared/types/execution'
 
 const createMock = vi.fn()
 const writeMock = vi.fn()
 const resizeMock = vi.fn()
 const killMock = vi.fn()
+const executionCancelMock = vi.fn()
 const settingsGetMock = vi.fn()
 const settingsSetMock = vi.fn()
 const openExternalMock = vi.fn()
@@ -14,6 +16,11 @@ let exitHandler: ((event: { id: string; exitCode: number; signal?: number; seq: 
 
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
+    execution: {
+      list: vi.fn(async () => ({ success: true, jobs: [] })),
+      onChanged: vi.fn(() => () => undefined),
+      cancel: executionCancelMock,
+    },
     terminal: {
       create: createMock,
       write: writeMock,
@@ -149,6 +156,7 @@ describe('TerminalManager shell integration', () => {
     writeMock.mockReset()
     resizeMock.mockReset()
     killMock.mockReset()
+    executionCancelMock.mockReset()
     openExternalMock.mockReset()
     openExternalMock.mockResolvedValue(true)
     webLinkHandlers.length = 0
@@ -488,7 +496,7 @@ describe('TerminalManager shell integration', () => {
     }
   })
 
-  it('closes stale integration-failed agent terminals before creating a replacement', async () => {
+  it('preserves integration-failed sessions until their termination is explicitly requested', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
@@ -510,13 +518,14 @@ describe('TerminalManager shell integration', () => {
       })
 
       expect(termId).not.toBe(staleId)
-      expect(terminalManager.hasTerminal(staleId)).toBe(false)
+      expect(terminalManager.hasTerminal(staleId)).toBe(true)
+      expect(killMock).not.toHaveBeenCalled()
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('reclaims an idle agent terminal before hitting the main-process terminal ceiling', async () => {
+  it('does not impose a renderer-local ten-tab ceiling or kill existing sessions', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
@@ -535,10 +544,44 @@ describe('TerminalManager shell integration', () => {
       })
 
       expect(terminalManager.hasTerminal(agentTerminalId)).toBe(true)
-      expect(terminalManager.getState().terminals).toHaveLength(10)
-      expect(terminalManager.hasTerminal(userTerminalIds[0])).toBe(false)
+      expect(terminalManager.getState().terminals).toHaveLength(11)
+      expect(terminalManager.hasTerminal(userTerminalIds[0])).toBe(true)
+      expect(killMock).not.toHaveBeenCalled()
     } finally {
       terminalManager.cleanup()
     }
+  })
+
+  it('retains completed job logs without allocating an interactive terminal', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    const job: ExecutionSnapshot = { jobId: 'job', requestKey: '0:job', threadId: 'thread',
+      command: 'echo hello', cwd: 'C:\\workspace', shell: 'powershell.exe', mode: 'command',
+      status: 'running', submittedAt: 1, startedAt: 2, exitCode: null, output: 'hello\n', truncated: false, revision: 1 }
+    try {
+      terminalManager.applyExecutionSnapshot(job)
+      terminalManager.applyExecutionSnapshot({ ...job, status: 'completed', exitCode: 0, endedAt: 3, revision: 2 })
+      expect(createMock).not.toHaveBeenCalled()
+      expect(terminalManager.getState().commandInfoByTerminal.job.last?.status).toBe('completed')
+      expect(terminalManager.getOutputPreview('job')).toContain('hello')
+      await terminalManager.closeTerminal('job')
+      expect(killMock).not.toHaveBeenCalled()
+      expect(terminalManager.getManagedJob('job')?.status).toBe('completed')
+    } finally { terminalManager.cleanup() }
+  })
+
+  it('keeps a running job visible until a requested stop is confirmed', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    const job: ExecutionSnapshot = { jobId: 'job', requestKey: '0:job', threadId: 'thread',
+      command: 'server', cwd: 'C:\\workspace', shell: 'powershell.exe', mode: 'background',
+      status: 'running', submittedAt: 1, exitCode: null, output: '', truncated: false, revision: 1 }
+    try {
+      terminalManager.applyExecutionSnapshot(job)
+      executionCancelMock.mockResolvedValue({ success: true, job: { ...job, status: 'stopping', revision: 2 } })
+      await terminalManager.closeTerminal('job')
+      expect(terminalManager.hasTerminal('job')).toBe(true)
+      terminalManager.applyExecutionSnapshot({ ...job, status: 'cancelled', endedAt: 3, revision: 3 })
+      expect(terminalManager.hasTerminal('job')).toBe(false)
+      expect(killMock).not.toHaveBeenCalled()
+    } finally { terminalManager.cleanup() }
   })
 })

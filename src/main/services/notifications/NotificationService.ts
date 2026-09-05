@@ -27,7 +27,7 @@ export class NotificationService {
   constructor(
     private options: {
       settings: () => NotificationSettings
-      changed: (snapshot: NotificationSnapshot, toast?: EditorEvent) => void
+      changed: (snapshot: NotificationSnapshot) => void
     },
   ) {}
   registerChannel(channel: NotificationChannel): () => void {
@@ -40,24 +40,20 @@ export class NotificationService {
     return structuredClone({ revision: this.revision, records: this.records })
   }
   restore(records: NotificationRecord[]): void {
-    this.records = records
-      .slice(0, 200)
-      .map((record) => ({
-        ...record,
-        deliveries: Object.fromEntries(
-          Object.entries(record.deliveries).map(([id, status]) => [
-            id,
-            status.state === 'pending'
-              ? { state: 'failed' as const, error: 'Interrupted by application exit' }
-              : status,
-          ]),
-        ),
-      }))
+    this.records = records.slice(0, 200).map((record) => ({
+      ...record,
+      deliveries: Object.fromEntries(
+        Object.entries(record.deliveries).map(([id, status]) => [
+          id,
+          status.state === 'pending' ? { state: 'failed' as const, error: 'Interrupted by application exit' } : status,
+        ]),
+      ),
+    }))
     this.changed()
   }
-  private changed(toast?: EditorEvent): void {
+  private changed(): void {
     this.revision++
-    this.options.changed(this.snapshot(), toast)
+    this.options.changed(this.snapshot())
   }
   publish(input: EditorEventInput, context: { windowId?: number; workspace?: string } = {}): void {
     if (this.stopped) return
@@ -77,11 +73,10 @@ export class NotificationService {
     this.recent.set(signature, event.timestamp)
     while (this.recent.size > 1000) this.recent.delete(this.recent.keys().next().value!)
     const record: NotificationRecord = { event, read: false, deliveries: {} }
-    if (settings.inApp && event.attention) record.deliveries.inApp = { state: 'delivered' }
     for (const channel of channels) record.deliveries[channel.id] = { state: 'pending' }
     this.records.unshift(record)
     this.records.length = Math.min(this.records.length, 200)
-    this.changed(settings.inApp && event.attention && !event.presented ? event : undefined)
+    this.changed()
     for (const channel of channels) {
       if (this.queue.length + this.active >= 64) {
         record.deliveries[channel.id] = { state: 'failed', error: 'Notification queue is full' }
@@ -140,7 +135,7 @@ export class NotificationService {
       this.controllers.delete(controller)
     }
   }
-  async test(channelId: string, event: EditorEvent): Promise<{ success: boolean; error?: string }> {
+  async test(channelId: string, event: EditorEvent, sound?: boolean): Promise<{ success: boolean; error?: string }> {
     const channel = this.channels.get(channelId)
     if (!channel || this.stopped || this.active >= 2) return { success: false, error: 'Channel unavailable or busy' }
     this.active++
@@ -149,7 +144,12 @@ export class NotificationService {
       const result = await this.deliver(
         channel,
         event,
-        channelId === 'system' ? { ...settings, system: { ...settings.system, onlyWhenUnfocused: false } } : settings,
+        channelId === 'system'
+          ? {
+              ...settings,
+              system: { ...settings.system, onlyWhenUnfocused: false, sound: sound ?? settings.system.sound },
+            }
+          : settings,
       )
       return {
         success: result.state === 'delivered',

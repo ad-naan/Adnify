@@ -13,7 +13,7 @@ const filter = {
         .regex(/^(?:\*|[a-zA-Z][a-zA-Z0-9_.:-]*(?:\.\*)?)$/),
     )
     .min(1)
-    .max(30),
+    .max(64),
   levels: z
     .array(z.enum(['info', 'success', 'warning', 'error']))
     .min(1)
@@ -22,7 +22,8 @@ const filter = {
 }
 export const notificationSettingsSchema = z
   .object({
-    inApp: z.boolean(),
+    // Accept and discard the retired in-editor alert setting from older profiles.
+    inApp: z.boolean().optional(),
     cooldownSeconds: z.number().int().min(0).max(3600),
     system: z.object({ ...filter, enabled: z.boolean(), onlyWhenUnfocused: z.boolean(), sound: z.boolean() }).strict(),
     webhooks: z
@@ -33,7 +34,7 @@ export const notificationSettingsSchema = z
             id: z.string().regex(/^[a-zA-Z0-9-]{1,80}$/),
             name: z.string().min(1).max(80),
             enabled: z.boolean(),
-            url: z.string().min(1).max(4096),
+            url: z.string().trim().max(4096),
             headers: z.record(z.string().max(8000)).refine((value) => Object.keys(value).length <= 20),
             bodyTemplate: z.string().min(1).max(16000),
           })
@@ -47,6 +48,7 @@ export const notificationSettingsSchema = z
       ctx.addIssue({ code: 'custom', message: 'Duplicate webhook IDs' })
     for (const hook of settings.webhooks) {
       if (['system', 'inApp'].includes(hook.id)) ctx.addIssue({ code: 'custom', message: 'Reserved channel ID' })
+      if (!hook.enabled && !hook.url) continue
       try {
         validateWebhook(hook)
       } catch {
@@ -54,6 +56,7 @@ export const notificationSettingsSchema = z
       }
     }
   })
+  .transform(({ inApp: _legacy, ...settings }) => settings)
 export const editorEventSchema = z
   .object({
     type: z

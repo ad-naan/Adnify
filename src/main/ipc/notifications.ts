@@ -6,6 +6,7 @@ import { NotificationRuntime, type NotificationContext } from '../services/notif
 import { editorEventSchema } from '../services/notifications/config'
 import type { EditorEvent } from '@shared/types/notifications'
 import { logger } from '@shared/utils/Logger'
+import { asLanguage, t } from '@shared/i18n'
 
 let runtime: NotificationRuntime | undefined
 let ready: Promise<void> | undefined
@@ -53,17 +54,21 @@ export function registerNotificationHandlers(context: NotificationContext): void
     if (record) runtime!.activate(record.event)
   })
   handle('test', (window, raw) => {
-    const channel = z.string().max(80).parse(raw)
+    const request = z
+      .union([z.string().max(80), z.object({ channel: z.literal('system'), sound: z.boolean() }).strict()])
+      .parse(raw)
+    const channel = typeof request === 'string' ? request : request.channel
+    const language = asLanguage(context.getLanguage?.())
     const event: EditorEvent = {
       id: randomUUID(),
       type: 'notification.test',
       title: 'Adnify',
-      message: 'Notification channel test',
+      message: t('notifications.testBody', language),
       level: 'info',
       timestamp: Date.now(),
       windowId: window.id,
     }
-    return runtime!.service.test(channel, event)
+    return runtime!.service.test(channel, event, typeof request === 'string' ? undefined : request.sound)
   })
 }
 export async function cleanupNotificationHandlers(): Promise<void> {

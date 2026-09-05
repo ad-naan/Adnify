@@ -14,7 +14,7 @@ import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, Pr
 import type { FileMutationResult } from '@shared/types/fileMutation'
 import type { DiagnosticsCaptureOptions, DiagnosticsCaptureResult } from '@shared/types/diagnostics'
 import type { BackgroundTaskActivity, BackgroundConnectionState } from '@shared/types/backgroundTasks'
-import type { NotificationAPI, NotificationUpdate, EditorEvent } from '@shared/types/notifications'
+import type { NotificationAPI, EditorEvent } from '@shared/types/notifications'
 import type { RendererStreamChunk } from '@shared/types/llm'
 import type { Language } from '@shared/i18n'
 import { forEachStreamChunk, type StreamBatchEnvelope } from '@shared/utils/llmStreamBatch'
@@ -679,12 +679,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     markRead: ids => invokeNotification('markRead', ids),
     clear: () => invokeNotification('clear'),
     activate: id => invokeNotification('activate', id),
-    test: channel => invokeNotification('test', channel),
-    onUpdate: callback => {
-      const listener = (_: IpcRendererEvent, update: NotificationUpdate) => callback(update)
-      ipcRenderer.on('notifications:update', listener)
-      return () => ipcRenderer.removeListener('notifications:update', listener)
-    },
+    test: (channel, options) => invokeNotification('test', options && channel === 'system' ? { channel, sound: options.sound } : channel),
     onActivate: callback => {
       const listener = (_: IpcRendererEvent, event: EditorEvent) => callback(event)
       ipcRenderer.on('notifications:activate', listener)
@@ -746,7 +741,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) =>
     ipcRenderer.invoke('terminal:interactive', options),
-  writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
+  writeTerminal: (id: string, data: string, leaseId?: string) => ipcRenderer.invoke('terminal:input', { id, data, leaseId }),
+  listTerminals: () => ipcRenderer.invoke('terminal:list'),
+  claimTerminal: (id: string, background?: boolean, threadId?: string, timeoutMs?: number) => ipcRenderer.invoke('terminal:claim', { id, background, threadId, timeoutMs }),
+  releaseTerminal: (id: string, leaseId: string) => ipcRenderer.invoke('terminal:release', { id, leaseId }),
   terminalOpenExternal: (url: string) => ipcRenderer.invoke('terminal:openExternal', url),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
     ipcRenderer.invoke('shell:executeBackground', params),
@@ -759,7 +757,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   resizeTerminal: (id: string, cols: number, rows: number) =>
     ipcRenderer.invoke('terminal:resize', { id, cols, rows }),
-  killTerminal: (id?: string) => ipcRenderer.send('terminal:kill', id),
+  killTerminal: (id: string) => ipcRenderer.invoke('terminal:kill', id),
+  executionSubmit: (request: import('@shared/types/execution').ExecutionRequest) => ipcRenderer.invoke('execution:submit', request),
+  executionList: () => ipcRenderer.invoke('execution:list'),
+  executionWait: (jobId: string, afterRevision: number, waitMs = 30_000) => ipcRenderer.invoke('execution:wait', { jobId, afterRevision, waitMs }),
+  executionCancel: (jobId: string) => ipcRenderer.invoke('execution:cancel', { jobId }),
+  executionInput: (jobId: string, data: string) => ipcRenderer.invoke('execution:input', { jobId, data }),
+  onExecutionChanged: (callback: (job: import('@shared/types/execution').ExecutionSnapshot) => void) => {
+    const handler = (_: IpcRendererEvent, job: import('@shared/types/execution').ExecutionSnapshot) => callback(job)
+    ipcRenderer.on('execution:changed', handler)
+    return () => ipcRenderer.removeListener('execution:changed', handler)
+  },
   getAvailableShells: () => ipcRenderer.invoke('shell:getAvailableShells'),
   onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => {
     const handler = (_: IpcRendererEvent, event: { id: string; data: string; seq: number; occurredAt: number }) => callback(event)
