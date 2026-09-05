@@ -150,6 +150,7 @@ function createGroupedAPI() {
       resetWhitelist: () => raw.resetWhitelist(),
       getUserDataPath: () => raw.getUserDataPath(),
       getRecentLogs: () => raw.getRecentLogs(),
+      captureDiagnostics: (options: Parameters<typeof raw.captureDiagnostics>[0]) => raw.captureDiagnostics(options),
       deepCleanCache: () => raw.deepCleanCache(),
       onChanged: (callback: Parameters<typeof raw.onSettingsChanged>[0]) => raw.onSettingsChanged(callback),
     },

@@ -19,6 +19,7 @@ import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
 import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 import type { ProxyConfig } from '@shared/config/types'
+import { DiagnosticsSettings } from './DiagnosticsSettings'
 
 interface SystemSettingsProps {
     language: Language
@@ -547,6 +548,7 @@ export function SystemSettings({
                             </div>
                         )}
                     </div>
+                    <DiagnosticsSettings language={language} />
                 </div>
             </section>
 

@@ -12,6 +12,7 @@ import type {
 import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 import type { FileMutationResult } from '@shared/types/fileMutation'
+import type { DiagnosticsCaptureOptions, DiagnosticsCaptureResult } from '@shared/types/diagnostics'
 import type { RendererStreamChunk } from '@shared/types/llm'
 import type { Language } from '@shared/i18n'
 import { forEachStreamChunk, type StreamBatchEnvelope } from '@shared/utils/llmStreamBatch'
@@ -660,6 +661,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetWhitelist: () => ipcRenderer.invoke('settings:resetWhitelist'),
   getUserDataPath: () => ipcRenderer.invoke('settings:getUserDataPath'),
   getRecentLogs: () => ipcRenderer.invoke('settings:getRecentLogs'),
+  captureDiagnostics: (options: DiagnosticsCaptureOptions): Promise<DiagnosticsCaptureResult> => ipcRenderer.invoke('diagnostics:capture', options),
   deepCleanCache: () => ipcRenderer.invoke('cache:deepClean'),
 
   sendMessage: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:sendMessage', params),

@@ -26,6 +26,7 @@ import { registerSessionStorageHandlers } from './sessionStorage'
 import { registerFormatterHandlers } from './formatter'
 import { registerSystemPrivilegeHandlers } from './systemPrivilege'
 import { registerAssetHandlers, cleanupAssetHandlers } from './assets'
+import { registerDiagnosticsHandlers } from './diagnostics'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -63,6 +64,7 @@ export function registerAllHandlers(context: IPCContext) {
   // 窗口控制
   registerWindowHandlers(createWindow)
   registerSystemPrivilegeHandlers(getMainWindow)
+  registerDiagnosticsHandlers(context)
 
   // 文件操作（安全版）
   registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) =>

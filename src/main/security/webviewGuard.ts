@@ -15,6 +15,7 @@ import type { BrowserWindow, WebContents, WebPreferences } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { previewBrowserService } from '../services/previewBrowserService'
+import { processDiagnostics } from '../services/diagnostics/ProcessDiagnostics'
 
 /** about:blank 是 webview 未设置 src 时的初始地址，必须放行否则挂载即被拒。 */
 function isAllowedGuestUrl(url: string): boolean {
@@ -29,6 +30,8 @@ function hardenGuestPreferences(preferences: WebPreferences): void {
   preferences.sandbox = true
   preferences.webSecurity = true
   preferences.allowRunningInsecureContent = false
+  // 页面导航或 dev server 刷新时保留编辑器/聊天焦点，用户点击预览后仍可正常输入。
+  preferences.focusOnNavigation = false
   preferences.experimentalFeatures = false
   preferences.enableBlinkFeatures = undefined
   // guest 不需要任何 preload —— 它加载的是用户自己的页面，不该拿到 IPC 桥。
@@ -67,8 +70,14 @@ function guardGuestNavigation(guest: WebContents): void {
     callback(false)
   })
 
+  guest.on('did-finish-load', () => processDiagnostics.sample())
   guest.on('render-process-gone', (_event, details) => {
-    logger.ui.warn('[Preview] Guest render process gone', { reason: details.reason })
+    logger.ui.warn('[Preview] Guest render process gone', {
+      webContentsId: guest.id,
+      reason: details.reason,
+      exitCode: details.exitCode,
+      processes: processDiagnostics.describeFailure(guest.id),
+    })
   })
 }
 

@@ -42,6 +42,7 @@ import type {
 } from '@shared/types/sessionPersistence'
 
 import type { PreviewProbeResult } from '@shared/types/preview'
+import type { DiagnosticsCaptureOptions, DiagnosticsCaptureResult } from '@shared/types/diagnostics'
 import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 
 // 从 @shared/types/llm 重新导出
@@ -434,6 +435,7 @@ export interface ElectronAPI {
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   getUserDataPath: () => Promise<string>
   getRecentLogs: () => Promise<string>
+  captureDiagnostics: (options: DiagnosticsCaptureOptions) => Promise<DiagnosticsCaptureResult>
   deepCleanCache: () => Promise<{ success: boolean; error?: string }>
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>

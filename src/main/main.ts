@@ -26,6 +26,8 @@ import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from '
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
 import { ProviderCredentialStore } from './services/credentials/ProviderCredentialStore'
 import { createFileLogWriter } from './services/fileLogWriter'
+import { processDiagnostics } from './services/diagnostics/ProcessDiagnostics'
+import { applicationDiagnostics } from './services/diagnostics/ApplicationDiagnostics'
 import {
   shutdownWindowController,
   type ShutdownWindowPresentation,
@@ -322,6 +324,7 @@ function describeProcessMemory(): Record<string, string | number> {
 
 
 function registerWindowDiagnostics(win: BrowserWindow): void {
+  win.webContents.on('did-finish-load', () => processDiagnostics.sample())
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     logger.system.error('[Window] did-fail-load', {
       windowId: win.id,
@@ -337,8 +340,9 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
       windowId: win.id,
       reason: details.reason,
       exitCode: details.exitCode,
-      // oom / killed 是内存耗尽的直接证据
+      // Only 'oom' explicitly identifies OOM; 'killed' can have other causes.
       memory: describeProcessMemory(),
+      processes: processDiagnostics.describeFailure(win.webContents.id),
     })
   })
 
@@ -347,6 +351,7 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
     logger.system.error('[Window] unresponsive', {
       windowId: win.id,
       memory: describeProcessMemory(),
+      processes: processDiagnostics.describeFailure(win.webContents.id),
     })
   })
 
@@ -671,6 +676,8 @@ async function performGlobalCleanup() {
   cleanupStarted = true
 
   logger.system.info('[Main] Starting global cleanup...')
+  processDiagnostics.stop()
+  void applicationDiagnostics.stop()
   try {
     // 1. 清理 IPC 处理器（包括终端）
     ipcModule?.cleanupAllHandlers()
@@ -865,7 +872,7 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 })
 
 // 子进程（GPU / utility / renderer）意外退出。
-// reason 为 'oom' 或 exitCode 非零时，配合 memory 字段可确认内存耗尽。
+// Nonzero exit codes are not proof of OOM; retain the preceding process sample.
 app.on('child-process-gone', (_event, details) => {
   logger.system.error('[Main] child-process-gone', {
     type: details.type,
@@ -874,6 +881,7 @@ app.on('child-process-gone', (_event, details) => {
     serviceName: details.serviceName,
     name: details.name,
     memory: describeProcessMemory(),
+    processes: processDiagnostics.describeFailure(),
   })
 })
 
@@ -913,6 +921,7 @@ app.whenReady().then(async () => {
 
   // 1. 初始化 Store（必须在模块加载前完成）
   await initStores()
+  processDiagnostics.start()
 
   // Apply initial proxy settings if configured
   const appSettings = configStore.get('app-settings') as any
@@ -1082,6 +1091,11 @@ app.on('before-quit', async (e) => {
 })
 
 app.on('activate', () => { if (windows.size === 0) createWindow() })
+
+app.on('will-quit', () => {
+  processDiagnostics.stop()
+  void applicationDiagnostics.stop()
+})
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault()

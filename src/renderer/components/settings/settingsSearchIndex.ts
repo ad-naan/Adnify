@@ -114,6 +114,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'system.cache', tab: 'system', labelKey: 'settingsSearch.systemCache', keywords: ['cache', '缓存', 'clear', '清除', 'clean', '清理', 'deep', '深度'] },
   { id: 'system.resetAll', tab: 'system', labelKey: 'settingsSearch.systemResetAll', keywords: ['reset', '重置', 'factory', '出厂', 'restore', '恢复', 'default', '默认'] },
   { id: 'system.logging', tab: 'system', labelKey: 'settingsSearch.systemLogging', keywords: ['log', '日志', 'file', '文件', 'export', '导出', 'debug', '调试'] },
+  { id: 'system.diagnostics', tab: 'system', labelKey: 'systemSettings.diagnosticsTitle', keywords: ['diagnostics', '诊断', 'memory', '内存', 'performance', '性能', 'trace', '卡顿', 'gpu'] },
   { id: 'system.backup', tab: 'system', labelKey: 'settingsSearch.systemBackup', keywords: ['backup', '备份', 'export', '导出', 'import', '导入', 'restore', '恢复'] },
   { id: 'system.changelog', tab: 'system', labelKey: 'settingsSearch.systemChangelog', keywords: ['version', 'release', 'changelog', '版本', '更新', '日志'] },
 ]
