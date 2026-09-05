@@ -1324,6 +1324,18 @@ export const en = {
 
   // Browser preview tab
   'preview.tab.back': 'Back',
+  'preview.device.label': 'Preview device',
+  'preview.device.desktop': 'Desktop',
+  'preview.device.phone': 'Phone',
+  'preview.device.tablet': 'Tablet',
+  'preview.device.rotate': 'Rotate device',
+  'preview.device.fit': 'Fit {percent}%',
+  'preview.device.failed': 'Device preview could not be applied. Close preview DevTools and retry.',
+  'preview.session.workspace': 'Project session',
+  'preview.session.window': 'Temporary window session',
+  'preview.session.hint': 'Each project keeps its own cookies and site data. Previews without a project use temporary storage for this window.',
+  'preview.session.preparing': 'Preparing preview session…',
+  'preview.session.failed': 'Could not prepare the project preview session.',
   'preview.tab.forward': 'Forward',
   'preview.tab.reload': 'Reload',
   'preview.tab.stop': 'Stop loading',

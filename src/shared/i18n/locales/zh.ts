@@ -1325,6 +1325,18 @@ export const zh = {
 
   // 预览标签页
   'preview.tab.back': '后退',
+  'preview.device.label': '预览设备',
+  'preview.device.desktop': '桌面',
+  'preview.device.phone': '手机',
+  'preview.device.tablet': '平板',
+  'preview.device.rotate': '切换横竖屏',
+  'preview.device.fit': '适应面板 {percent}%',
+  'preview.device.failed': '设备预览未能生效，请关闭预览开发者工具后重试。',
+  'preview.session.workspace': '项目独立会话',
+  'preview.session.window': '窗口临时会话',
+  'preview.session.hint': '每个项目独立保存 Cookie 和网站数据。未关联项目的预览使用当前窗口的临时存储。',
+  'preview.session.preparing': '正在准备预览会话…',
+  'preview.session.failed': '无法准备项目预览会话。',
   'preview.tab.forward': '前进',
   'preview.tab.reload': '刷新',
   'preview.tab.stop': '停止加载',

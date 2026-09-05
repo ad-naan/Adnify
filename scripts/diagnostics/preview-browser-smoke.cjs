@@ -9,7 +9,7 @@ if (typeof electron === 'string') {
   const root = path.resolve(__dirname, '../..')
   const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'adnify-browser-smoke-'))
   const bundle = path.join(directory, 'service.cjs')
-  require('esbuild').buildSync({ stdin: { contents: "export { previewBrowserService } from './src/main/services/previewBrowserService'; export { registerWebviewGuards } from './src/main/security/webviewGuard';", resolveDir: root },
+  require('esbuild').buildSync({ stdin: { contents: "export { previewBrowserService } from './src/main/services/previewBrowserService'; export { registerWebviewGuards } from './src/main/security/webviewGuard'; export { previewPartitionService } from './src/main/services/previewPartitionService';", resolveDir: root },
     outfile: bundle, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], tsconfig: path.join(root, 'tsconfig.main.json') })
   const env = { ...process.env, ADNIFY_BROWSER_SMOKE_BUNDLE: bundle }
   delete env.ELECTRON_RUN_AS_NODE
@@ -22,10 +22,10 @@ if (typeof electron === 'string') {
 
 const { app, BrowserWindow } = electron
 app.on('window-all-closed', () => {})
-const { previewBrowserService: service, registerWebviewGuards } = require(process.env.ADNIFY_BROWSER_SMOKE_BUNDLE)
+const { previewBrowserService: service, registerWebviewGuards, previewPartitionService } = require(process.env.ADNIFY_BROWSER_SMOKE_BUNDLE)
 app.commandLine.appendSwitch('host-resolver-rules', 'MAP preview-smoke.test 127.0.0.1')
 const { createServer } = require('node:http')
-let window, server
+let window, server, partition
 const timeout = setTimeout(() => { console.error('Smoke test timed out'); app.exit(1) }, 35000)
 
 app.whenReady().then(async () => {
@@ -33,9 +33,9 @@ app.whenReady().then(async () => {
     res.setHeader('Content-Type', 'text/html')
     if (req.url === '/missing') { res.writeHead(404); return res.end('missing') }
     if (req.url === '/host') return res.end(require('react-dom/server').renderToStaticMarkup(require('react').createElement('webview', {
-      allowpopups: '', src: `http://preview-smoke.test:${server.address().port}/page`, style: { display: 'flex', width: 800, height: 600 },
+      allowpopups: '', partition, src: `http://preview-smoke.test:${server.address().port}/page`, style: { display: 'flex', width: 800, height: 600 },
     })))
-    res.end(`<!doctype html><title>Browser fixture</title><style>#save{color:rgb(12,34,56);padding:12px} body{height:1800px}</style>
+    res.end(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Browser fixture</title><style>#save{color:rgb(12,34,56);padding:12px} body{height:1800px}</style>
       <input id="name"><button id="save">Save</button><div id="result">waiting</div><button id="disabled" disabled>Disabled</button><a id="next" href="/next" target="_blank">Next page</a>
       <script>
       document.querySelector('#name').addEventListener('input', e => document.querySelector('#result').textContent = e.target.value);
@@ -48,7 +48,8 @@ app.whenReady().then(async () => {
   // A mapped but invisible window gives Chromium a compositor/input surface.
   window.showInactive()
   registerWebviewGuards(window)
-  await window.webContents.session.setProxy({ mode: 'direct' })
+  partition = previewPartitionService.prepare(window.webContents, []).partition
+  await electron.session.fromPartition(partition).setProxy({ mode: 'direct' })
   const ready = new Promise(resolve => window.webContents.once('did-attach-webview', (_event, guest) => {
     guest.once('did-finish-load', () => resolve(guest))
   }))
@@ -88,6 +89,26 @@ app.whenReady().then(async () => {
   assert(diagnostics.records.some(r => r.message.includes('fixture-console')))
   assert(diagnostics.records.some(r => r.message.includes('fixture-exception')))
   assert(diagnostics.records.some(r => r.kind === 'http-error' && r.status === 404))
+  const metrics = () => guest.executeJavaScript('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,touch:navigator.maxTouchPoints,value:document.querySelector("#name").value})')
+  await service.configureDevice(owner, { targetId: guest.id, device: 'phone', orientation: 'portrait', scale: 0.5 })
+  let device = await metrics()
+  assert.equal(device.width, 390)
+  assert.equal(device.height, 844)
+  assert.equal(device.dpr, 3)
+  assert.equal(device.touch, 5)
+  assert.equal(device.value, value)
+  await service.configureDevice(owner, { targetId: guest.id, device: 'tablet', orientation: 'landscape', scale: 0.4 })
+  device = await metrics()
+  assert.equal(device.width, 1180)
+  assert.equal(device.height, 820)
+  assert.equal(device.dpr, 2)
+  await service.configureDevice(owner, { targetId: guest.id, device: 'desktop', orientation: 'portrait', scale: 1 })
+  device = await metrics()
+  assert.equal(device.width, 800)
+  assert.equal(device.height, 600)
+  assert.equal(device.touch, 0)
+  assert.equal(device.value, value)
+  console.log('PASS: native phone/tablet viewports, DPR, touch, rotation and desktop restoration preserve page state')
   await assert.rejects(service.act(owner + 1000, { action: 'click', target_id: guest.id, selector: '#save' }), /another window/)
   await assert.rejects(service.act(owner, { action: 'navigate', url: 'file:///etc/passwd' }), /HTTP\(S\)/)
   await service.act(owner, { action: 'reload' })

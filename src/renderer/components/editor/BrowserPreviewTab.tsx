@@ -34,6 +34,8 @@ import { t, type Language } from '@shared/i18n'
 import { previewSessionService } from '@/renderer/preview/previewSessionService'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
 import { loadPreviewSettings, updatePreviewSettings } from '@/renderer/preview/previewSettings'
+import { usePreviewEnvironment } from '@/renderer/preview/usePreviewEnvironment'
+import { PreviewDeviceToolbar } from './PreviewDeviceToolbar'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type {
@@ -47,14 +49,6 @@ import type {
 interface BrowserPreviewTabProps {
   file: OpenFile
 }
-
-/**
- * guest 会话分区。
- *
- * 用独立的 persist: 分区，让预览的 cookie / localStorage 与主窗口彻底隔开，
- * 同时在重启后保留登录态 —— 本地后台管理页面常常需要登录才能看。
- */
-const PREVIEW_PARTITION = 'persist:adnify-preview'
 
 // React's webview typings only accept boolean, but its DOM serializer drops
 // unknown boolean attributes. Supply Electron's native attribute as a string.
@@ -184,6 +178,9 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
   }, [workspaceRootsKey])
 
   const workspaceRoot = preview?.workspaceRoot || workspace?.roots?.[0]
+  const environment = usePreviewEnvironment(sessionId, workspaceRoot, webviewRef, zoomLevel)
+  const environmentRef = useRef(environment)
+  environmentRef.current = environment
   const scopedCandidates = useMemo(
     () => devServerDiscoveryService.getCandidatesForWorkspace(workspaceRoot).slice(0, 6),
     [discoveryState, workspaceRoot],
@@ -231,7 +228,8 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
       guestReadyRef.current = true
 
       // zoom 必须在 dom-ready 之后设置。
-      callGuest((guest) => guest.setZoomLevel(zoomLevelRef.current))
+      callGuest((guest) => guest.setZoomLevel(environmentRef.current.device === 'desktop' ? zoomLevelRef.current : 0))
+      environmentRef.current.onDomReady()
 
       // dom-ready 之前积压的导航在这里补发。
       const pending = pendingUrlRef.current
@@ -289,6 +287,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
 
     const handleDestroyed = () => {
       guestReadyRef.current = false
+      environmentRef.current.onDestroyed()
     }
 
     element.addEventListener('did-start-loading', handleStartLoading)
@@ -317,7 +316,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
       element.removeEventListener('render-process-gone', handleDestroyed)
       guestReadyRef.current = false
     }
-  }, [callGuest, sessionId, syncNavigationState])
+  }, [callGuest, sessionId, syncNavigationState, environment.partition])
 
   /** session.url 变了且不是 guest 自己跳过去的 —— 主动导航。 */
   useEffect(() => {
@@ -472,7 +471,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
           {t('preview.tab.open', language)}
         </Button>
 
-        <div className="flex items-center">
+        <div className={`items-center ${environment.device === 'desktop' ? 'flex' : 'hidden'}`}>
           <Button
             variant="ghost"
             size="icon"
@@ -536,6 +535,15 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
         </Button>
       </div>
 
+      <PreviewDeviceToolbar language={language} device={environment.device} orientation={environment.orientation}
+        size={environment.size} scale={environment.scale} workspaceScoped={!!workspaceRoot}
+        onChange={environment.changeDevice} onRotate={environment.rotate} />
+
+      {environment.deviceFailed && <div role="alert" className="flex items-center gap-2 px-3 py-1.5 text-xs text-status-error border-b border-border/40">
+        {t('preview.device.failed', language)}
+        <button className="underline" onClick={environment.retryDevice}>{t('preview.tab.retry', language)}</button>
+      </div>}
+
       {addressError && (
         <div className="px-3 py-1.5 border-b border-status-error/30 bg-status-error/10 text-[11px] text-status-error shrink-0">
           {addressError}
@@ -568,7 +576,7 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 relative">
+      <div ref={environment.viewportRef} className={`flex-1 min-h-0 relative flex items-center justify-center overflow-auto ${environment.size ? 'bg-surface/30' : ''}`}>
         {!mountRef.current.url ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6 text-text-muted">
             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-surface/35">
@@ -576,6 +584,13 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
             </div>
             <p className="text-sm font-medium text-text-primary">{t('preview.tab.emptyTitle', language)}</p>
             <p className="text-xs mt-2 max-w-md leading-relaxed">{t('preview.tab.emptyHint', language)}</p>
+          </div>
+        ) : !environment.partition ? (
+          <div role="status" className="p-6 text-center text-xs text-text-muted">
+            {t(environment.partitionFailed ? 'preview.session.failed' : 'preview.session.preparing', language)}
+            {environment.partitionFailed && <Button variant="secondary" size="sm" className="mt-3" onClick={environment.retryPartition}>
+              {t('preview.tab.retry', language)}
+            </Button>}
           </div>
         ) : (
           <>
@@ -586,11 +601,13 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
             */}
             <webview
               {...PREVIEW_WEBVIEW_ATTRIBUTES}
-              key={mountRef.current.sessionId || 'preview'}
+              key={`${mountRef.current.sessionId}:${environment.partition}`}
               ref={webviewRef}
               src={mountRef.current.url}
-              partition={PREVIEW_PARTITION}
-              className="w-full h-full border-0 bg-white"
+              partition={environment.partition}
+              className={`border-0 bg-white shrink-0 ${environment.size ? 'ring-1 ring-border/60 shadow-lg' : ''}`}
+              style={{ display: 'flex', width: environment.size ? environment.size.width * environment.scale : '100%',
+                height: environment.size ? environment.size.height * environment.scale : '100%' }}
             />
 
             {isLoading && (

@@ -16,6 +16,7 @@ import { logger } from '@shared/utils/Logger'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { previewBrowserService } from '../services/previewBrowserService'
 import { processDiagnostics } from '../services/diagnostics/ProcessDiagnostics'
+import { previewPartitionService } from '../services/previewPartitionService'
 
 /** about:blank 是 webview 未设置 src 时的初始地址，必须放行否则挂载即被拒。 */
 function isAllowedGuestUrl(url: string): boolean {
@@ -69,6 +70,7 @@ function guardGuestNavigation(guest: WebContents): void {
     logger.security.warn('[Preview] Guest permission request denied', { permission })
     callback(false)
   })
+  guest.session.setPermissionCheckHandler(() => false)
 
   guest.on('did-finish-load', () => processDiagnostics.sample())
   guest.on('render-process-gone', (_event, details) => {
@@ -87,6 +89,16 @@ function guardGuestNavigation(guest: WebContents): void {
 export function registerWebviewGuards(win: BrowserWindow): void {
   win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const src = typeof params.src === 'string' ? params.src : ''
+
+    if (!previewPartitionService.isAllowed(win.webContents.id, params.partition)) {
+      logger.security.warn('[Preview] Blocked webview attach with unprepared session')
+      event.preventDefault()
+      return
+    }
+    // The approved attribute is authoritative, including if webpreferences
+    // supplied a different session or partition.
+    delete webPreferences.session
+    webPreferences.partition = params.partition
 
     if (!isAllowedGuestUrl(src)) {
       logger.security.warn('[Preview] Blocked webview attach with unsupported src', { src })

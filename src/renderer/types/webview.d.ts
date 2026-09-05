@@ -10,6 +10,7 @@ export interface PreviewWebviewElement extends HTMLElement {
   src: string
   loadURL: (url: string) => Promise<void>
   getURL: () => string
+  getWebContentsId: () => number
   getTitle: () => string
   reload: () => void
   reloadIgnoringCache: () => void

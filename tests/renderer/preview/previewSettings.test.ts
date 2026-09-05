@@ -47,6 +47,13 @@ describe('previewSettings', () => {
     expect(updatePreviewSettings({ zoomLevel: -99 }).zoomLevel).toBe(-5)
   })
 
+  it('restores device preferences and defaults older or invalid settings', () => {
+    expect(normalizePreviewSettings({ zoomLevel: 1 })).toMatchObject({ device: 'desktop', orientation: 'portrait', zoomLevel: 1 })
+    expect(normalizePreviewSettings({ device: 'unknown', orientation: 12 })).toMatchObject({ device: 'desktop', orientation: 'portrait' })
+    expect(updatePreviewSettings({ device: 'tablet', orientation: 'landscape' })).toMatchObject({ device: 'tablet', orientation: 'landscape' })
+    expect(loadPreviewSettings()).toMatchObject({ device: 'tablet', orientation: 'landscape' })
+  })
+
   it('caps the dismissed list so it cannot grow without bound', () => {
     for (let port = 3000; port < 3080; port++) {
       dismissOrigin(`http://127.0.0.1:${port}`)

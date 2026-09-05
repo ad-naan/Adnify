@@ -268,6 +268,8 @@ function createGroupedAPI() {
 
     // 本地预览
     preview: {
+      prepareSession: (workspaceRoot?: string) => raw.previewPrepareSession(workspaceRoot),
+      configureDevice: (request: Parameters<typeof raw.previewConfigureDevice>[0]) => raw.previewConfigureDevice(request),
       inspect: (request: Parameters<typeof raw.previewInspect>[0]) => raw.previewInspect(request),
       act: (request: Parameters<typeof raw.previewAct>[0]) => raw.previewAct(request),
       probe: (url: string, timeout?: number) => raw.previewProbe(url, timeout),

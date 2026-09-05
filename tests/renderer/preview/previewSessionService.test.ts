@@ -51,6 +51,26 @@ describe('PreviewSessionService', () => {
     expect(second.reloadToken).toBe(0)
   })
 
+  it('keeps identical URLs separate across projects through navigation and disposal', () => {
+    const url = 'http://localhost:5173'
+    const first = service.openUrl(url, { workspaceRoot: 'C:/Projects/One' })
+    const second = service.openUrl(url, { workspaceRoot: 'C:/Projects/Two' })
+    expect(first.id).not.toBe(second.id)
+    expect(service.openUrl(url, { workspaceRoot: 'c:\\projects\\one\\' }).id).toBe(first.id)
+    service.syncNavigated(first.id, `${url}/next`)
+    expect(service.openUrl(url, { workspaceRoot: 'C:/Projects/Two' }).id).toBe(second.id)
+    expect(service.openUrl(`${url}/next`, { workspaceRoot: 'C:/Projects/One' }).id).toBe(first.id)
+    service.disposeSession(first.id)
+    expect(service.openUrl(url, { workspaceRoot: 'C:/Projects/Two' }).id).toBe(second.id)
+  })
+
+  it('restores project identity when rebuilding the URL index', () => {
+    service.restoreSession({ sessionId: 'one', url: 'http://localhost:5173', title: 'One', source: 'manual', workspaceRoot: '/one' })
+    service.restoreSession({ sessionId: 'two', url: 'http://localhost:5173', title: 'Two', source: 'manual', workspaceRoot: '/two' })
+    expect(service.openUrl('http://localhost:5173', { workspaceRoot: '/one' }).id).toBe('one')
+    expect(service.openUrl('http://localhost:5173', { workspaceRoot: '/two' }).id).toBe('two')
+  })
+
   it('prunes sessions whose tabs are gone', () => {
     const kept = service.openUrl('http://127.0.0.1:5173')
     service.openUrl('http://127.0.0.1:3000')

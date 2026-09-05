@@ -1,5 +1,6 @@
 import { createPersistentPreference } from '@/renderer/settings/persistentPreference'
 import { USER_PREFERENCE_KEYS } from '@/renderer/settings/preferenceKeys'
+import type { PreviewDevice, PreviewOrientation } from '@shared/preview/device'
 
 export interface PreviewSettings {
   /** Whether opening a workspace with a local dev server should prompt automatically. */
@@ -8,12 +9,16 @@ export interface PreviewSettings {
   dismissedOrigins: string[]
   /** Guest-page zoom level relative to its original size. */
   zoomLevel: number
+  device: PreviewDevice
+  orientation: PreviewOrientation
 }
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   autoPrompt: false,
   dismissedOrigins: [],
   zoomLevel: 0,
+  device: 'desktop',
+  orientation: 'portrait',
 }
 
 const MAX_DISMISSED_ORIGINS = 50
@@ -31,6 +36,8 @@ export function normalizePreviewSettings(value: unknown): PreviewSettings {
       ? parsed.autoPrompt
       : DEFAULT_PREVIEW_SETTINGS.autoPrompt,
     dismissedOrigins,
+    device: parsed.device === 'phone' || parsed.device === 'tablet' ? parsed.device : 'desktop',
+    orientation: parsed.orientation === 'landscape' ? 'landscape' : 'portrait',
     zoomLevel: typeof parsed.zoomLevel === 'number' && Number.isFinite(parsed.zoomLevel)
       ? Math.min(Math.max(parsed.zoomLevel, -5), 5)
       : DEFAULT_PREVIEW_SETTINGS.zoomLevel,

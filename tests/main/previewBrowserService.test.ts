@@ -14,6 +14,7 @@ function contents(id: number, url = 'http://localhost:5173/') {
   return Object.assign(new EventEmitter(), {
     id, debugger: debuggerApi, getURL: vi.fn(() => url), getTitle: () => 'Preview',
     isDestroyed: vi.fn(() => false), isLoading: () => false, loadURL: vi.fn(async () => {}),
+    enableDeviceEmulation: vi.fn(), disableDeviceEmulation: vi.fn(), setZoomLevel: vi.fn(),
   })
 }
 
@@ -25,6 +26,41 @@ function setup() {
 }
 
 describe('preview browser boundary', () => {
+  it('applies rotated device metrics and restores desktop without navigating the page', async () => {
+    const { service, guest } = setup()
+    await service.configureDevice(1, { targetId: 10, device: 'phone', orientation: 'landscape', scale: 0.5 })
+    expect(guest.enableDeviceEmulation).toHaveBeenCalledWith(expect.objectContaining({
+      viewSize: { width: 844, height: 390 }, deviceScaleFactor: 3, scale: 0.5,
+    }))
+    expect(guest.debugger.sendCommand).toHaveBeenCalledWith('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+    await service.configureDevice(1, { targetId: 10, device: 'desktop', orientation: 'portrait', scale: 1 })
+    expect(guest.disableDeviceEmulation).toHaveBeenCalledOnce()
+    expect(guest.loadURL).not.toHaveBeenCalled()
+  })
+
+  it('rejects cross-window device changes and invalid dimensions', async () => {
+    const { service, guest } = setup()
+    await expect(service.configureDevice(2, { targetId: 10, device: 'phone', orientation: 'portrait', scale: 1 })).rejects.toThrow('another window')
+    await expect(service.configureDevice(1, { targetId: 10, device: 'phone', orientation: 'portrait', scale: Infinity })).rejects.toThrow()
+    expect(guest.enableDeviceEmulation).not.toHaveBeenCalled()
+  })
+
+  it('keeps rapid device updates ordered and releases the queue after a failure', async () => {
+    const { service, guest } = setup()
+    let finish!: (value: unknown) => void
+    guest.debugger.sendCommand.mockImplementationOnce(() => new Promise(resolve => { finish = resolve as typeof finish }))
+    const first = service.configureDevice(1, { targetId: 10, device: 'phone', orientation: 'portrait', scale: 0.5 })
+    await vi.waitFor(() => expect(guest.enableDeviceEmulation).toHaveBeenCalledOnce())
+    const second = service.configureDevice(1, { targetId: 10, device: 'desktop', orientation: 'portrait', scale: 1 })
+    expect(guest.disableDeviceEmulation).not.toHaveBeenCalled()
+    finish({})
+    await Promise.all([first, second])
+    expect(guest.disableDeviceEmulation).toHaveBeenCalledOnce()
+    guest.debugger.sendCommand.mockRejectedValueOnce(new Error('detached'))
+    await expect(service.configureDevice(1, { targetId: 10, device: 'phone', orientation: 'portrait', scale: 1 })).rejects.toThrow('detached')
+    await service.configureDevice(1, { targetId: 10, device: 'desktop', orientation: 'portrait', scale: 1 })
+    expect(guest.disableDeviceEmulation).toHaveBeenCalledTimes(2)
+  })
   it('isolates targets by owning window and rejects guessing another guest ID', async () => {
     const { service, guest } = setup()
     expect(service.list(2)).toEqual([])

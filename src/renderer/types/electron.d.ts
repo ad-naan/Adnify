@@ -666,6 +666,8 @@ export interface ElectronAPI {
 
   // 本地预览
   previewProbe: (url: string, timeout?: number) => Promise<PreviewProbeResult>
+  previewPrepareSession: (workspaceRoot?: string) => Promise<import('@shared/preview/device').PreviewPartitionResult>
+  previewConfigureDevice: (request: import('@shared/preview/device').PreviewDeviceRequest) => Promise<{ success: boolean; error?: string }>
   previewInspect: (request: import('@shared/preview/browserAutomation').BrowserInspectRequest) => Promise<import('@shared/preview/browserAutomation').BrowserResponse>
   previewAct: (request: import('@shared/preview/browserAutomation').BrowserActionRequest) => Promise<import('@shared/preview/browserAutomation').BrowserResponse>
   previewOpenExternal: (url: string) => Promise<boolean>

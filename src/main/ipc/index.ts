@@ -115,7 +115,7 @@ export function registerAllHandlers(context: IPCContext) {
   registerHttpHandlers()
 
   // 本地预览服务探活
-  registerPreviewHandlers()
+  registerPreviewHandlers(context.getWindowWorkspace)
 
   // MCP 服务
   registerMcpHandlers(getMainWindow)

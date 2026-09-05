@@ -44,6 +44,7 @@ package-lock.json
 /CC-Source
 /tmp
 /.tmp/performance-smoke/
+/.tmp/preview-environment-smoke/
 
 .pnpm-store/
 

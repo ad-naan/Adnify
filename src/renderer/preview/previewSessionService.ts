@@ -3,6 +3,9 @@ import type { OpenPreviewMetadata, PreviewServerCandidate, PreviewSession, Previ
 import { buildPreviewDocumentPath, parsePreviewDocumentPath } from '@shared/types/preview'
 import { formatPreviewOriginLabel, parseLocalPreviewOrigin } from '@shared/preview/discovery'
 import { devServerDiscoveryService } from './devServerDiscoveryService'
+import { previewWorkspaceKey } from '@shared/preview/device'
+
+const sessionUrlKey = (url: string, root?: string) => JSON.stringify([previewWorkspaceKey(root), url])
 
 interface PreviewSessionState {
   sessions: PreviewSession[]
@@ -22,7 +25,7 @@ function createSessionTitle(candidate: PreviewServerCandidate | null, url: strin
 export class PreviewSessionService {
   private readonly listeners = new Set<PreviewSessionListener>()
   private readonly sessions = new Map<string, PreviewSession>()
-  /** url -> sessionId，用于"同一地址复用已有标签"。 */
+  /** Project + URL: identical localhost addresses in different projects stay separate. */
   private readonly sessionByUrl = new Map<string, string>()
   private state: PreviewSessionState = { sessions: [] }
 
@@ -77,7 +80,9 @@ export class PreviewSessionService {
       activate?: boolean
     } = {},
   ): PreviewSession {
-    const existingSessionId = this.sessionByUrl.get(url)
+    const workspaceRoot = options.workspaceRoot ?? useStore.getState().workspace?.roots?.[0]
+    const key = sessionUrlKey(url, workspaceRoot)
+    const existingSessionId = this.sessionByUrl.get(key)
     if (existingSessionId) {
       const existingSession = this.sessions.get(existingSessionId)
       if (existingSession) {
@@ -92,7 +97,7 @@ export class PreviewSessionService {
         return existingSession
       }
       // 索引指向了已销毁的会话，清掉再新建。
-      this.sessionByUrl.delete(url)
+      this.sessionByUrl.delete(key)
     }
 
     const session: PreviewSession = {
@@ -104,14 +109,14 @@ export class PreviewSessionService {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       reloadToken: 0,
-      workspaceRoot: options.workspaceRoot,
+      workspaceRoot,
       candidateId: options.candidateId,
       canGoBack: false,
       canGoForward: false,
     }
 
     this.sessions.set(session.id, session)
-    this.sessionByUrl.set(session.url, session.id)
+    this.sessionByUrl.set(key, session.id)
     this.rebuildState()
     this.emit()
 
@@ -142,14 +147,14 @@ export class PreviewSessionService {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       reloadToken: 0,
-      workspaceRoot: preview.workspaceRoot,
+      workspaceRoot: preview.workspaceRoot ?? useStore.getState().workspace?.roots?.[0],
       candidateId: preview.candidateId,
       canGoBack: false,
       canGoForward: false,
     }
 
     this.sessions.set(session.id, session)
-    this.sessionByUrl.set(session.url, session.id)
+    this.sessionByUrl.set(sessionUrlKey(session.url, session.workspaceRoot), session.id)
     this.rebuildState()
     this.emit()
   }
@@ -167,8 +172,9 @@ export class PreviewSessionService {
     }
 
     this.sessions.delete(sessionId)
-    if (this.sessionByUrl.get(session.url) === sessionId) {
-      this.sessionByUrl.delete(session.url)
+    const key = sessionUrlKey(session.url, session.workspaceRoot)
+    if (this.sessionByUrl.get(key) === sessionId) {
+      this.sessionByUrl.delete(key)
     }
     this.rebuildState()
     this.emit()
@@ -320,10 +326,11 @@ export class PreviewSessionService {
 
   private remapUrl(session: PreviewSession, nextUrl: string): void {
     if (session.url === nextUrl) return
-    if (this.sessionByUrl.get(session.url) === session.id) {
-      this.sessionByUrl.delete(session.url)
+    const previousKey = sessionUrlKey(session.url, session.workspaceRoot)
+    if (this.sessionByUrl.get(previousKey) === session.id) {
+      this.sessionByUrl.delete(previousKey)
     }
-    this.sessionByUrl.set(nextUrl, session.id)
+    this.sessionByUrl.set(sessionUrlKey(nextUrl, session.workspaceRoot), session.id)
   }
 
   private rebuildState(): void {

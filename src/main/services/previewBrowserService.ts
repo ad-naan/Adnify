@@ -2,6 +2,7 @@ import type { WebContents } from 'electron'
 import { browserActionSchema, browserInspectSchema, type BrowserTarget } from '@shared/preview/browserAutomation'
 import { domScript, stylesScript, elementActionScript } from '@shared/preview/browserScripts'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
+import { getPreviewDeviceSize, previewDeviceSchema } from '@shared/preview/device'
 
 interface Diagnostic {
   timestamp: number
@@ -19,6 +20,7 @@ interface TargetEntry {
   monitoringError?: string
   connecting?: Promise<void>
   busy: boolean
+  deviceUpdate?: Promise<void>
 }
 
 const MAX_RECORDS = 200
@@ -89,6 +91,32 @@ export class PreviewBrowserService {
     return [...this.targets.values()].filter(e => e.ownerId === ownerId && !e.guest.isDestroyed()).map(({ guest }) => ({
       id: guest.id, url: guest.getURL(), title: guest.getTitle(), loading: guest.isLoading(),
     }))
+  }
+
+  async configureDevice(ownerId: number, input: unknown): Promise<void> {
+    const request = previewDeviceSchema.parse(input)
+    const entry = this.resolve(ownerId, request.targetId)
+    // Resize and orientation changes can arrive while a CDP command is pending.
+    // Preserve their order so an older mobile request cannot overwrite desktop.
+    const update = (entry.deviceUpdate ?? Promise.resolve()).catch(() => {}).then(async () => {
+      this.resolve(ownerId, request.targetId)
+      await this.connect(entry)
+      const size = getPreviewDeviceSize(request.device, request.orientation)
+      if (size) {
+        entry.guest.setZoomLevel(0)
+        entry.guest.enableDeviceEmulation({
+          screenPosition: 'mobile', screenSize: { width: size.width, height: size.height },
+          viewPosition: { x: 0, y: 0 },
+          viewSize: { width: size.width, height: size.height },
+          deviceScaleFactor: size.deviceScaleFactor, scale: request.scale,
+        })
+      } else {
+        entry.guest.disableDeviceEmulation()
+      }
+      await bounded(entry.guest.debugger.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: !!size, maxTouchPoints: size ? 5 : 1 }))
+    })
+    entry.deviceUpdate = update
+    try { await update } finally { if (entry.deviceUpdate === update) entry.deviceUpdate = undefined }
   }
 
   private resolve(ownerId: number, targetId?: number): TargetEntry {

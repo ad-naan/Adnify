@@ -862,6 +862,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 本地预览探活（只允许本机地址，不经过第三方抓取服务）
   previewProbe: (url: string, timeout?: number) => ipcRenderer.invoke('preview:probe', url, timeout),
+  previewPrepareSession: (workspaceRoot?: string) => ipcRenderer.invoke('preview:prepareSession', { workspaceRoot }),
+  previewConfigureDevice: (request: import('@shared/preview/device').PreviewDeviceRequest) => ipcRenderer.invoke('preview:configureDevice', request),
   previewInspect: (request: import('@shared/preview/browserAutomation').BrowserInspectRequest) => ipcRenderer.invoke('preview:inspect', request),
   previewAct: (request: import('@shared/preview/browserAutomation').BrowserActionRequest) => ipcRenderer.invoke('preview:act', request),
   previewOpenExternal: (url: string) => ipcRenderer.invoke('preview:openExternal', url),

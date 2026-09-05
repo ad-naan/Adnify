@@ -8,10 +8,12 @@
 
 import { logger } from '@shared/utils/Logger'
 import { isBrowserPreviewUrl, isLocalPreviewUrl, parseLocalPreviewOrigin } from '@shared/preview/discovery'
-import { shell } from 'electron'
+import { BrowserWindow, shell, type IpcMainInvokeEvent } from 'electron'
+import { z } from 'zod'
 import type { PreviewProbeResult } from '@shared/types/preview'
 import { safeIpcHandle } from './safeHandle'
 import { previewBrowserService } from '../services/previewBrowserService'
+import { previewPartitionService } from '../services/previewPartitionService'
 
 /** 只需要够读到 <title>。dev server 首屏 HTML 通常几 KB。 */
 const MAX_PROBE_BYTES = 64 * 1024
@@ -130,7 +132,24 @@ export async function probeLocalPreview(url: string, timeout?: number): Promise<
   return second.ok ? second : first
 }
 
-export function registerPreviewHandlers(): void {
+export function registerPreviewHandlers(getWindowWorkspace?: (webContentsId: number) => string[] | null): void {
+  const requireOwner = (event: IpcMainInvokeEvent) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    if (!owner || owner.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Preview configuration requires the application main frame')
+    }
+    return owner
+  }
+  safeIpcHandle('preview:prepareSession', (event, request: unknown) => {
+    requireOwner(event)
+    const { workspaceRoot } = z.object({ workspaceRoot: z.string().min(1).max(4096).optional() }).strict().parse(request)
+    return { success: true as const, ...previewPartitionService.prepare(event.sender, getWindowWorkspace?.(event.sender.id) || [], workspaceRoot) }
+  })
+  safeIpcHandle('preview:configureDevice', async (event, request: unknown) => {
+    requireOwner(event)
+    await previewBrowserService.configureDevice(event.sender.id, request)
+    return { success: true as const }
+  })
   safeIpcHandle('preview:inspect', async (event, request: unknown) => ({
     success: true as const, data: await previewBrowserService.inspect(event.sender.id, request),
   }), 'ipc')
