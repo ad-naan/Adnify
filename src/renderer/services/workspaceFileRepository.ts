@@ -6,6 +6,8 @@ import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
 import type { EditorDocumentKind } from '@shared/types/editorDocument'
+import type { WorkbenchLayout } from '@renderer/components/layout/workbenchLayout'
+import type { SidePanel } from '@renderer/store/slices/layoutSlice'
 
 export const ADNIFY_DIR_NAME = '.adnify'
 
@@ -35,6 +37,10 @@ export interface WorkspaceStateData {
     chatWidth: number
     terminalVisible: boolean
     terminalLayout: 'tabs' | 'split'
+    workbench?: WorkbenchLayout
+    editorVisible?: boolean
+    chatVisible?: boolean
+    activeSidePanel?: SidePanel
   }
 }
 

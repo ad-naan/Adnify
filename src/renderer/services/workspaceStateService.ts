@@ -167,7 +167,7 @@ function normalizePersistedOpenFiles(
 }
 
 export async function saveWorkspaceState(): Promise<void> {
-  const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout } = useStore.getState()
+  const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout, workbenchLayout, editorVisible, chatVisible, activeSidePanel } = useStore.getState()
   const persistedOpenFiles = openFiles
     .map(toPersistedOpenFile)
     .filter((file): file is WorkspaceStateData['openFiles'][number] => file !== null)
@@ -184,6 +184,10 @@ export async function saveWorkspaceState(): Promise<void> {
       chatWidth,
       terminalVisible: false,
       terminalLayout,
+      workbench: workbenchLayout,
+      editorVisible,
+      chatVisible,
+      activeSidePanel,
     },
   }
 
@@ -205,6 +209,7 @@ export async function restoreWorkspaceState(): Promise<void> {
 
   const state = await workspaceStateRepository.get()
   if (!state.openFiles.length && !state.layout) {
+    applyWorkspaceLayout(undefined)
     logger.system.info('[WorkspaceState] No saved state')
     return
   }
@@ -245,8 +250,22 @@ export async function restoreWorkspaceState(): Promise<void> {
     setTerminalVisible(state.layout.terminalVisible)
     setTerminalLayout(state.layout.terminalLayout)
   }
+  applyWorkspaceLayout(state.layout)
 
   logger.system.info('[WorkspaceState] Restored successfully')
+}
+
+function applyWorkspaceLayout(layout: WorkspaceStateData['layout']): void {
+  useStore.getState().restoreWorkbenchLayout(layout?.workbench, layout)
+  const savedSidePanel = layout?.activeSidePanel
+  const activeSidePanel = savedSidePanel === null ? null : ['explorer', 'search', 'git', 'problems', 'outline', 'history', 'extensions', 'emotion', 'shell'].includes(savedSidePanel || '') ? savedSidePanel! : 'explorer'
+  const chatVisible = layout?.chatVisible !== false
+  useStore.setState({ activeSidePanel, chatVisible, editorVisible: layout?.editorVisible !== false || (!chatVisible && (!activeSidePanel || activeSidePanel === 'shell')) })
+}
+
+export async function restoreWorkspaceLayout(): Promise<void> {
+  const state = await workspaceStateRepository.get()
+  applyWorkspaceLayout(state.layout)
 }
 
 let saveTimeout: NodeJS.Timeout | null = null
@@ -272,6 +291,10 @@ export function initWorkspaceStateSync(): () => void {
         state.chatWidth !== prevState.chatWidth ||
         state.terminalVisible !== prevState.terminalVisible ||
         state.terminalLayout !== prevState.terminalLayout
+        || state.workbenchLayout !== prevState.workbenchLayout
+        || state.editorVisible !== prevState.editorVisible
+        || state.chatVisible !== prevState.chatVisible
+        || state.activeSidePanel !== prevState.activeSidePanel
       ) {
         scheduleStateSave()
       }

@@ -1,13 +1,11 @@
 import { api } from '@/renderer/services/electronAPI'
-import { Minus, Square, X, Search, HelpCircle } from 'lucide-react'
+import { Minus, Square, X, Search } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '../common/Logo'
 import WorkspaceDropdown from './WorkspaceDropdown'
-import UpdateIndicator from './UpdateIndicator'
 import { MascotIP } from '../mascot/MascotIP'
-import SkinPanel from './SkinPanel'
-import AdministratorModeTitleBadge from './AdministratorModeTitleBadge'
+import TitleBarActions from './TitleBarActions'
 import { t } from '@shared/i18n'
 
 // 检测是否为 Mac 平台
@@ -77,20 +75,7 @@ export default function TitleBar() {
       {/* Right - Window Controls & Actions */}
       <div className="flex items-center justify-end h-full pr-2 gap-1">
         <div className="no-drag flex items-center gap-1 h-full mr-2">
-          <SkinPanel />
-          <AdministratorModeTitleBadge />
-
-          {/* Update Indicator */}
-          <UpdateIndicator />
-
-          {/* About Button (Hidden on Mac if needed, or kept for consistency) */}
-          <button
-            onClick={() => setShowAbout(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-text-primary/[0.05] transition-all"
-            title="About"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </button>
+          <TitleBarActions />
 
           <div className="w-[1px] h-4 bg-border/50 mx-1"></div>
 

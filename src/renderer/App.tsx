@@ -1,17 +1,16 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react'
 import { useStore } from './store'
-import { useWindowTitle, useAppInit, useOpenFilesFromSystem, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscovery, useVersionNotice } from './hooks'
+import { useWindowTitle, useAppInit, useOpenFilesFromSystem, useGlobalShortcuts, useFileWatcher, useAppShutdownState, usePreviewDiscovery, useVersionNotice } from './hooks'
 import TitleBar from './components/layout/TitleBar'
 import ActivityBar from './components/layout/ActivityBar'
 import StatusBar from './components/layout/StatusBar'
 import { ToastProvider, useToast, setGlobalToast } from './components/common/ToastProvider'
 import { GlobalConfirmDialog } from './components/common/ConfirmDialog'
-import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
 import GlobalToastContainer from './components/common/GlobalToastContainer'
 import { ThemeManager } from './components/editor/ThemeManager'
-import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
-import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
+import { FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
+import WorkspaceWorkbench from './components/layout/WorkspaceWorkbench'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import SystemPrivilegeCoordinator from './components/system/SystemPrivilegeCoordinator'
 import { useBackgroundTasks } from './backgroundTasks/useBackgroundTasks'
@@ -19,14 +18,6 @@ import { useNotificationBridge } from './notifications/useNotificationBridge'
 import { DecorativeAnimationScope } from './components/common/DecorativeAnimationScope'
 
 startupMetrics.mark('app-module-loaded')
-
-const Editor = lazy(() => import('./components/editor/Editor'))
-const Sidebar = lazy(() => import('./components/sidebar/Sidebar'))
-const ChatPanel = lazy(() => import('./components/agent/ChatPanel'))
-const ShellStudio = lazy(() => import('./shell/components/ShellStudio'))
-
-const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))
-const DebugPanel = lazy(() => import('./components/panels/DebugPanel'))
 
 const OnboardingWizard = lazy(() => import('./components/dialogs/OnboardingWizard'))
 const SettingsModal = lazy(() => import('./components/settings/SettingsModal'))
@@ -53,11 +44,6 @@ function AppContent() {
 
   const workspace = useStore((state) => state.workspace)
   const showSettings = useStore((state) => state.showSettings)
-  const activeSidePanel = useStore((state) => state.activeSidePanel)
-  const sidebarWidth = useStore((state) => state.sidebarWidth)
-  const setSidebarWidth = useStore((state) => state.setSidebarWidth)
-  const chatWidth = useStore((state) => state.chatWidth)
-  const setChatWidth = useStore((state) => state.setChatWidth)
   const showQuickOpen = useStore((state) => state.showQuickOpen)
   const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
   const showAbout = useStore((state) => state.showAbout)
@@ -68,9 +54,6 @@ function AppContent() {
   const showAvatarDialog = useStore((state) => state.showAvatarDialog)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
-  const terminalVisible = useStore((state) => state.terminalVisible)
-  const debugVisible = useStore((state) => state.debugVisible)
-  const chatVisible = useStore((state) => state.chatVisible)
   const editorConfig = useStore((state) => state.editorConfig)
 
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
@@ -82,7 +65,6 @@ function AppContent() {
   }, [])
 
   const hasWorkspace = useMemo(() => Boolean(workspace && workspace.roots.length > 0), [workspace])
-  const isShellStudioActive = activeSidePanel === 'shell'
   const layoutDensityClass = editorConfig.layoutDensity === 'compact'
     ? 'layout-density-compact'
     : editorConfig.layoutDensity === 'expanded'
@@ -107,12 +89,6 @@ function AppContent() {
     },
   })
 
-  const sidebarRef = useRef<HTMLDivElement>(null)
-  const chatRef = useRef<HTMLDivElement>(null)
-
-  const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth, sidebarRef)
-  const { startResize: startChatResize } = useChatResize(setChatWidth, chatRef)
-
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
 
@@ -129,73 +105,7 @@ function AppContent() {
             <div className="flex-1 flex overflow-hidden">
               <ActivityBar />
 
-              {activeSidePanel && !isShellStudioActive && (
-                <div ref={sidebarRef} style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex-shrink-0 relative min-w-[220px]">
-                  <ErrorBoundary>
-                    <Suspense fallback={<PanelSkeleton />}>
-                      <Sidebar />
-                    </Suspense>
-                  </ErrorBoundary>
-                  <div
-                    className="absolute top-0 right-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 translate-x-[2px]"
-                    onMouseDown={startSidebarResize}
-                  />
-                </div>
-              )}
-
-              <div className="flex-1 flex min-w-0 bg-background relative">
-                <EmotionAmbientGlow />
-
-                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                  {isShellStudioActive ? (
-                    <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-                      <ErrorBoundary>
-                        <Suspense fallback={<EditorSkeleton />}>
-                          <ShellStudio />
-                        </Suspense>
-                      </ErrorBoundary>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-                        <ErrorBoundary>
-                          <Suspense fallback={<EditorSkeleton />}>
-                            <Editor />
-                          </Suspense>
-                        </ErrorBoundary>
-                      </div>
-                      {terminalVisible && (
-                        <ErrorBoundary>
-                          <Suspense fallback={null}>
-                            <TerminalPanel />
-                          </Suspense>
-                        </ErrorBoundary>
-                      )}
-                      {debugVisible && (
-                        <ErrorBoundary>
-                          <Suspense fallback={null}>
-                            <DebugPanel />
-                          </Suspense>
-                        </ErrorBoundary>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {chatVisible && (
-                  <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border/30 shadow-[-1px_0_15px_rgba(0,0,0,0.03)] z-20 bg-background">
-                    <div
-                      className="absolute top-0 left-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 -translate-x-[2px]"
-                      onMouseDown={startChatResize}
-                    />
-                    <ErrorBoundary>
-                      <Suspense fallback={<ChatSkeleton />}>
-                        <ChatPanel />
-                      </Suspense>
-                    </ErrorBoundary>
-                  </div>
-                )}
-              </div>
+              <WorkspaceWorkbench />
             </div>
 
             <StatusBar />

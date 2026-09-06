@@ -5,6 +5,7 @@
 
 import { lazy, Suspense } from 'react'
 import { useStore } from '@store'
+import type { SidePanel } from '@store'
 
 const ExplorerView = lazy(() =>
     import('./panels/ExplorerView').then(module => ({ default: module.ExplorerView }))
@@ -39,8 +40,9 @@ function PanelFallback() {
     )
 }
 
-export default function Sidebar() {
-    const activeSidePanel = useStore(s => s.activeSidePanel)
+export default function Sidebar({ panel }: { panel?: SidePanel }) {
+    const selectedPanel = useStore(s => s.activeSidePanel)
+    const activeSidePanel = panel ?? selectedPanel
 
     if (!activeSidePanel) return null
 

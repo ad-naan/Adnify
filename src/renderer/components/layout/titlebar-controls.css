@@ -1,0 +1,60 @@
+.titlebar-utilities {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 34px;
+}
+.titlebar-action-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgb(var(--border) / .35);
+  border-radius: 10px;
+  background: rgb(var(--text-primary) / .025);
+}
+.titlebar-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgb(var(--text-muted));
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.titlebar-action > svg { width: 16px; height: 16px; stroke-width: 1.75; }
+.titlebar-action:hover { background: rgb(var(--text-primary) / .055); color: rgb(var(--text-primary)); }
+.titlebar-action[aria-expanded=true] { background: rgb(var(--accent) / .09); color: rgb(var(--accent)); }
+.titlebar-action:focus-visible { outline: 2px solid rgb(var(--accent) / .6); outline-offset: 2px; }
+.titlebar-status-dot {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  box-shadow: 0 0 0 2px rgb(var(--background));
+}
+.titlebar-status-dot[data-status=error] { background: rgb(var(--status-warning)); }
+.titlebar-admin {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 5px;
+  color: rgb(var(--text-secondary));
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+.titlebar-admin > svg { width: 14px; height: 14px; stroke-width: 1.75; color: rgb(var(--status-warning)); }
+@media (prefers-reduced-motion: reduce) { .titlebar-action { transition: none; } }

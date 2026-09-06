@@ -1,0 +1,16 @@
+.dock-workbench { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: rgb(var(--background)); }
+.dock-panel, .dock-terminal { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: rgb(var(--background)); }
+.dock-panel-content { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.dock-divider { position: absolute; padding: 0; border: 0; background: rgb(var(--border) / .3); touch-action: none; z-index: 25; cursor: col-resize; }
+.dock-divider[aria-orientation=horizontal] { cursor: row-resize; }
+.dock-divider:hover, .dock-divider:focus-visible { background: rgb(var(--accent) / .55); }
+.dock-interaction-shield { position: absolute; inset: 0; z-index: 40; cursor: col-resize; user-select: none; }
+.dock-resize-preview { position: absolute; z-index: 42; pointer-events: none; background: rgb(var(--accent)); }
+.dock-terminal { container-type: inline-size; }
+.terminal-more-actions { display: none; }
+.terminal-toolbar-actions { display: flex; align-items: center; gap: 4px; height: 100%; }
+@container (max-width: 540px) {
+  .dock-terminal .terminal-more-actions { display: inline-flex; }
+  .dock-terminal .terminal-toolbar-actions { display: none; position: absolute; right: 8px; bottom: calc(100% + 5px); height: auto; max-width: calc(100% - 16px); flex-wrap: wrap; padding: 7px; background: rgb(var(--surface)); border: 1px solid rgb(var(--border)); border-radius: 9px; box-shadow: 0 5px 18px rgb(0 0 0 / .12); }
+  .dock-terminal .terminal-toolbar-actions[data-open] { display: flex; }
+}

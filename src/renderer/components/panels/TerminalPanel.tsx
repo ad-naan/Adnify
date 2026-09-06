@@ -9,7 +9,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from 'react'
-import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2, AlertTriangle, Clock3, CheckCircle2 } from 'lucide-react'
+import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2, AlertTriangle, Clock3, CheckCircle2, Ellipsis } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
@@ -30,7 +30,13 @@ const TASK_MANIFESTS = new Set([
     'composer.json', 'pubspec.yaml', 'makefile', 'justfile',
 ])
 
-const TerminalPanel = memo(function TerminalPanel() {
+interface TerminalPanelProps {
+    docked?: boolean
+    layoutVisible?: boolean
+    onCollapsedChange?: (collapsed: boolean) => void
+}
+
+const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisible = true, onCollapsedChange }: TerminalPanelProps) {
     const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language, nodePackageManager } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language, nodePackageManager: s.editorConfig.terminal.nodePackageManager })))
     const setMode = useModeStore(s => s.setMode)
     // 从 AgentStore 获取 setInputPrompt
@@ -38,7 +44,13 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     // UI 状态
     const [isCollapsed, setIsCollapsed] = useState(false)
+    const panelRef = useRef<HTMLDivElement>(null)
+    useEffect(() => { onCollapsedChange?.(isCollapsed) }, [isCollapsed, onCollapsedChange])
     const [showExecutionManager, setShowExecutionManager] = useState(false)
+    const [showToolbarMenu, setShowToolbarMenu] = useState(false)
+    const toolbarMenuRef = useRef<HTMLDivElement>(null)
+    const toolbarButtonRef = useRef<HTMLButtonElement>(null)
+    useClickOutside(() => setShowToolbarMenu(false), showToolbarMenu, [toolbarMenuRef, toolbarButtonRef])
     useEffect(() => {
         const open = () => { setTerminalVisible(true); setShowExecutionManager(true) }
         const cleanup = api.execution.onManagerRequested?.(() => {
@@ -138,7 +150,7 @@ const TerminalPanel = memo(function TerminalPanel() {
             // 终端是否在当前 UI 状态下应该可见：
             // 1. 如果是 Split 视图，所有存在的容器都可见
             // 2. 如果是 Tabs 视图，只有当前 activeId 可见
-            const shouldBeVisible = terminalVisible && !isCollapsed
+            const shouldBeVisible = terminalVisible && layoutVisible && !isCollapsed
                 && (isSplitView || terminal.id === managerState.activeId)
 
             if (container && shouldBeVisible && !mountedTerminals.current.has(terminal.id)) {
@@ -158,8 +170,8 @@ const TerminalPanel = memo(function TerminalPanel() {
             }
         }
 
-        if (terminalVisible && !isCollapsed) refitVisibleTerminals()
-    }, [managerState.terminals, managerState.activeId, terminalVisible, isCollapsed, isSplitView, refitVisibleTerminals])
+        if (terminalVisible && layoutVisible && !isCollapsed) refitVisibleTerminals()
+    }, [managerState.terminals, managerState.activeId, terminalVisible, layoutVisible, isCollapsed, isSplitView, refitVisibleTerminals])
 
     useEffect(() => {
         return () => {
@@ -232,6 +244,20 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [selectedRoot, nodePackageManager])
 
     // ===== 窗口大小调整 =====
+
+    useEffect(() => {
+        if (!docked || !terminalVisible || !layoutVisible || isCollapsed || !panelRef.current) return
+        let frame = 0
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame)
+            frame = requestAnimationFrame(() => {
+                const targets = isSplitView ? managerState.terminals : managerState.terminals.filter(term => term.id === managerState.activeId)
+                targets.forEach(term => terminalManager.fitTerminal(term.id))
+            })
+        })
+        observer.observe(panelRef.current)
+        return () => { observer.disconnect(); cancelAnimationFrame(frame) }
+    }, [docked, terminalVisible, layoutVisible, isCollapsed, isSplitView, managerState.terminals, managerState.activeId])
 
     useEffect(() => {
         if (!terminalVisible || isCollapsed || !managerState.activeId) return
@@ -412,9 +438,9 @@ const TerminalPanel = memo(function TerminalPanel() {
         <>
             <style>{XTERM_STYLE}</style>
             {showExecutionManager && <ExecutionManager language={language} onClose={() => setShowExecutionManager(false)} />}
-            <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 42 : height }}>
+            <div ref={panelRef} className="bg-transparent flex flex-col transition-none relative z-10 min-h-0" style={{ height: docked ? '100%' : isCollapsed ? 42 : height }}>
                 {/* 拖拽调整高度的区域 */}
-                <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
+                {!docked && <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />}
 
                 {/* 标题栏 */}
                 <div className="h-[42px] min-h-[42px] flex items-center justify-between border-b border-border/50 bg-background select-none relative z-20 px-2 py-1.5">
@@ -502,6 +528,8 @@ const TerminalPanel = memo(function TerminalPanel() {
 
                     {/* 右侧：操作按钮 */}
                     <div className="flex items-center gap-1 px-2 flex-shrink-0 h-full">
+                        <Button ref={toolbarButtonRef} variant="ghost" size="icon" className="terminal-more-actions h-7 w-7 text-text-muted" aria-label={t('workbench.terminalActions', language)} title={t('workbench.terminalActions', language)} aria-expanded={showToolbarMenu} onClick={() => setShowToolbarMenu(value => !value)}><Ellipsis className="w-4 h-4" /></Button>
+                        <div ref={toolbarMenuRef} className="terminal-toolbar-actions" data-open={showToolbarMenu || undefined} onKeyDown={event => { if (event.key === 'Escape') { setShowToolbarMenu(false); toolbarButtonRef.current?.focus() } }}>
                         <div className="relative flex items-center h-full border-l border-border/50 pl-2">
                             <Button ref={scriptButtonRef} variant="ghost" size="icon" onClick={() => setShowScriptMenu(!showScriptMenu)} className="h-7 w-7 rounded-lg text-green-400 hover:bg-green-500/10" title="Run Task">
                                 <Play className="w-3.5 h-3.5" />
@@ -527,6 +555,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                         <div className="w-[1px] h-4 bg-border/50 mx-1" />
                         <Button variant="ghost" size="icon" onClick={() => { createTerminal(); setTerminalLayout('split'); }} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Split Terminal"><SplitSquareHorizontal className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => activeId && terminalManager.getXterm(activeId)?.clear()} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Clear"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
                         <Button variant="ghost" size="icon" onClick={closePanel} className="h-7 w-7 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover" title="Close"><X className="w-3.5 h-3.5" /></Button>
                     </div>
                 </div>

@@ -9,6 +9,7 @@ import { updaterService, type UpdateStatus } from '@services/updaterService'
 import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
 import { t } from '@shared/i18n'
+import './titlebar-controls.css'
 
 export default function UpdateIndicator() {
   const language = useStore(state => state.language)
@@ -80,34 +81,29 @@ export default function UpdateIndicator() {
   return (
     <div className="relative z-50" ref={popoverRef}>
       <button
+        type="button"
         onClick={() => setShowPopover(!showPopover)}
-        className={`relative flex items-center justify-center w-8 h-8 rounded-full transition-all duration-300 group ${
-          hasUpdate
-            ? 'bg-accent/10 text-accent ring-1 ring-accent/20 hover:bg-accent/20 hover:shadow-[0_0_15px_-3px_rgba(var(--accent),0.3)]'
-            : isError
-              ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20 hover:bg-red-500/20'
-              : showPopover
-                ? 'bg-surface text-text-primary'
-                : 'text-text-muted hover:text-text-primary hover:bg-white/5'
-        }`}
-        title={hasUpdate ? labels.available : labels.checkNow}
+        className="titlebar-action"
+        aria-expanded={showPopover}
+        aria-controls="titlebar-update-popover"
+        aria-label={isError ? labels.error : isDownloading ? labels.downloading : isChecking ? labels.checking : status?.status === 'downloaded' ? labels.downloaded : hasUpdate ? labels.available : labels.title}
+        title={isError ? labels.error : isDownloading ? labels.downloading : isChecking ? labels.checking : status?.status === 'downloaded' ? labels.downloaded : hasUpdate ? labels.available : labels.checkNow}
       >
         {isChecking || isDownloading ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : hasUpdate ? (
           <ArrowUpCircle className="w-4 h-4" />
-        ) : isError ? (
-          <AlertCircle className="w-4 h-4" />
         ) : (
-          <Download className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+          <Download className="w-4 h-4" />
         )}
 
-        {hasUpdate && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-accent rounded-full border-2 border-background animate-pulse" />}
+        {(hasUpdate || isError) && <span className="titlebar-status-dot" data-status={isError ? 'error' : 'update'} aria-hidden="true" />}
       </button>
 
       <AnimatePresence>
         {showPopover && (
           <motion.div
+            id="titlebar-update-popover"
             initial={{ opacity: 0, y: 8, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
