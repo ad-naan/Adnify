@@ -20,15 +20,9 @@ export const en = {
   'workbench.agent': 'Agent',
   'workbench.preset.classic': 'Classic',
   'workbench.preset.agent': 'Agent first',
-  'workbench.move': 'Move {panel}',
   'workbench.focus': 'Focus {panel}',
   'workbench.restore': 'Restore layout',
   'workbench.hide': 'Hide {panel}',
-  'workbench.left': 'Left',
-  'workbench.right': 'Right',
-  'workbench.top': 'Above',
-  'workbench.bottom': 'Below',
-  'workbench.center': 'Swap positions',
   'workbench.resizeWidth': 'Resize panel width',
   'workbench.resizeHeight': 'Resize panel height',
   'workbench.resizeTerminal': 'Resize terminal height',
@@ -3462,7 +3456,6 @@ export const en = {
   'skinPanel.pageScale': 'Page Scale',
   'skinPanel.skin': 'Appearance and layout',
   'skinPanel.theme': 'Theme',
-  'skinPanel.themeScaleAndLayout': 'Theme, scale and workbench arrangement',
 
   // slashCommandPopup
   'slashCommandPopup.noMatchingCommands': 'No matching commands',

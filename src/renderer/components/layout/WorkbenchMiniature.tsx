@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import type { Theme } from '@renderer/config/themeConfig'
 import { t, type Language } from '@shared/i18n'
 import { createWorkbenchLayout, measureWorkbench, WORKBENCH_PANELS, type WorkbenchLayout, type WorkbenchPanel } from './workbenchLayout'
+import { WORKBENCH_PANEL_LABEL_KEYS } from './workbenchLabels'
 
 interface WorkbenchMiniatureProps {
   theme?: Theme
@@ -31,7 +32,7 @@ export default function WorkbenchMiniature({ theme, layout = createWorkbenchLayo
         const rect = geometry.panels[panel]
         if (!rect) return null
         return <div key={panel} className="appearance-mini-pane" data-kind={panel} data-condensed={rect.height < 500} style={{ left: `${rect.x / 12}%`, top: `${rect.y / 6.4}%`, width: `${rect.width / 12}%`, height: `${rect.height / 6.4}%` }}>
-          {!compact && <span className="appearance-mini-label">{t(`workbench.${panel}`, language)}</span>}
+          {!compact && <span className="appearance-mini-label">{t(WORKBENCH_PANEL_LABEL_KEYS[panel], language)}</span>}
           <div className="appearance-mini-lines"><i /><i /><i /><i /></div>
           {panel === 'agent' && <div className="appearance-mini-composer" />}
         </div>

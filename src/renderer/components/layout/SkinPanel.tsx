@@ -9,6 +9,7 @@ import { api } from '@/renderer/services/electronAPI'
 import WorkbenchMiniature from './WorkbenchMiniature'
 import { t, type TranslationKey } from '@shared/i18n'
 import WorkbenchLayoutSettings from './WorkbenchLayoutSettings'
+import { WORKBENCH_TAB_LABEL_KEYS } from './workbenchLabels'
 import { useDecorativeAnimations } from '@renderer/hooks/useDecorativeAnimations'
 import './titlebar-controls.css'
 import './appearance-panel.css'
@@ -114,7 +115,7 @@ export default function SkinPanel() {
                 event.preventDefault()
                 const next = event.key === 'Home' ? 'appearance' : event.key === 'End' ? 'workbench' : id === 'appearance' ? 'workbench' : 'appearance'
                 setTab(next); document.getElementById(`appearance-tab-${next}`)?.focus()
-              }}><Icon size={14} />{t(`workbench.tab.${id}`, language)}</button>
+              }}><Icon size={14} />{t(WORKBENCH_TAB_LABEL_KEYS[id], language)}</button>
             })}
           </div>}
           <div className="appearance-panel-scroll custom-scrollbar">

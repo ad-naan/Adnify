@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@store'
 import { t } from '@shared/i18n'
 import { movePanel, panelOrder, type LayoutPreset } from './workbenchLayout'
+import { WORKBENCH_PANEL_LABEL_KEYS, WORKBENCH_PRESET_LABEL_KEYS, WORKBENCH_TERMINAL_LABEL_KEYS } from './workbenchLabels'
 import WorkbenchMiniature from './WorkbenchMiniature'
 
 export default function WorkbenchLayoutSettings() {
@@ -21,7 +22,7 @@ export default function WorkbenchLayoutSettings() {
       <div className="appearance-section-heading"><h3>{t('workbench.layout', state.language)}</h3><span>{t(state.focused ? 'workbench.preview.focused' : state.layout.preset === 'custom' ? 'workbench.preview.custom' : 'workbench.preview.live', state.language)}</span></div>
       <div className="appearance-layout-preview"><WorkbenchMiniature layout={state.layout} visible={order.filter(panel => visible[panel])} focused={state.focused} terminalVisible={state.terminalVisible} language={state.language} /></div>
       <div className="appearance-segmented" aria-label={t('workbench.layout', state.language)}>
-        {(['classic', 'agent'] as LayoutPreset[]).map(preset => <button type="button" key={preset} aria-pressed={state.layout.preset === preset} onClick={() => state.preset(preset)}>{t(`workbench.preset.${preset}`, state.language)}</button>)}
+        {(['classic', 'agent'] as LayoutPreset[]).map(preset => <button type="button" key={preset} aria-pressed={state.layout.preset === preset} onClick={() => state.preset(preset)}>{t(WORKBENCH_PRESET_LABEL_KEYS[preset], state.language)}</button>)}
       </div>
     </section>
     <section className="appearance-section">
@@ -29,7 +30,7 @@ export default function WorkbenchLayoutSettings() {
       <div className="appearance-panel-list">
         {order.map((panel, index) => {
           const Icon = icons[panel]
-          const label = t(`workbench.${panel}`, state.language)
+          const label = t(WORKBENCH_PANEL_LABEL_KEYS[panel], state.language)
           return <div key={panel} className="appearance-panel-row" data-visible={visible[panel]}>
             <span className="appearance-panel-number">{index + 1}</span><Icon size={15} /><span className="appearance-panel-label">{label}</span>
             <div className="appearance-order-actions">
@@ -50,7 +51,7 @@ export default function WorkbenchLayoutSettings() {
       <div className="appearance-segmented appearance-terminal-options" aria-label={t('workbench.terminal', state.language)}>
         {(['editor', 'agent', 'bottom', 'hidden'] as const).map(position => {
           const selected = state.terminalVisible ? state.layout.terminalPosition === position : position === 'hidden'
-          return <button type="button" key={position} aria-pressed={selected} onClick={() => position === 'hidden' ? state.setTerminal(false) : state.setPosition(position)}>{t(`workbench.terminal.${position}`, state.language)}</button>
+          return <button type="button" key={position} aria-pressed={selected} onClick={() => position === 'hidden' ? state.setTerminal(false) : state.setPosition(position)}>{t(WORKBENCH_TERMINAL_LABEL_KEYS[position], state.language)}</button>
         })}
       </div>
     </section>
@@ -60,7 +61,7 @@ export default function WorkbenchLayoutSettings() {
         if (panel === 'editor') state.setEditor(true)
         else state.setAgent(true)
         state.setFocus(panel)
-      }}><Maximize2 size={13} />{t('workbench.focus', state.language, { panel: t(`workbench.${panel}`, state.language) })}</button>)}
+      }}><Maximize2 size={13} />{t('workbench.focus', state.language, { panel: t(WORKBENCH_PANEL_LABEL_KEYS[panel], state.language) })}</button>)}
       <button type="button" className="appearance-icon-button" disabled={!state.focused} aria-label={t('workbench.restore', state.language)} title={t('workbench.restore', state.language)} onClick={() => state.setFocus(null)}><RotateCcw size={14} /></button>
     </div>
   </div>
