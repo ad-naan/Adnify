@@ -118,7 +118,7 @@ function UnifiedStatusTray({
   return (
     <SmoothCollapse open={showTray}>
     <div className="pb-3">
-      <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
+      <div className="chat-layered-surface rounded-xl border border-border/50 overflow-hidden">
         {/* Header: 状态 + Tab 切换 */}
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">

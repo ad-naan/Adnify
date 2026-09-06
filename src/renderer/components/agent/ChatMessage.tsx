@@ -1350,7 +1350,7 @@ const ChatMessage = React.memo(({
                     </div>
                   </div>
                 ) : (
-                  <div className="relative bg-surface/75 backdrop-blur-md text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-[0_4px_16px_rgba(0,0,0,0.02),_0_2px_4px_rgba(0,0,0,0.01)] w-fit max-w-full border border-border/60">
+                  <div className="chat-layered-surface relative text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] w-fit max-w-full border border-border/60">
                     {/* Context Items */}
                     {message.contextItems && message.contextItems.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2 -mt-1 pt-1 justify-end">
@@ -1473,7 +1473,7 @@ const ChatMessage = React.memo(({
             <Tooltip content={t('chatMessage.clickToCustomizeMy', language)}>
               <div
                 onClick={() => setShowAvatarDialog(true)}
-                className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar mt-0.5"
+                className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar mt-0.5"
               >
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 z-10">
                   <Edit2 className="w-3.5 h-3.5 text-white" />
@@ -1496,7 +1496,7 @@ const ChatMessage = React.memo(({
         {!isUser && (
           <div className="w-full min-w-0 flex flex-col gap-2">
             <div className="flex items-center gap-3 px-1">
-              <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface relative flex-shrink-0">
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
                 <OtterAsset asset={isMessageActive ? 'typing' : 'assistantFace'} alt="AI" className="h-full w-full object-cover" />
               </div>

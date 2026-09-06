@@ -152,44 +152,39 @@ export const EmotionStatusIndicator: React.FC = () => {
     >
       <button
         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all duration-500 ease-out relative overflow-hidden ${activeFeedback
-          ? 'bg-surface/80 backdrop-blur-md shadow-lg border border-white/10'
+          ? 'chat-layered-surface shadow-lg border border-white/10'
           : justChanged
-            ? 'bg-surface/50 backdrop-blur-sm border border-white/5'
+            ? 'chat-layered-surface border border-white/5'
             : 'hover:bg-white/5 border border-transparent'
           }`}
         onClick={() => activeFeedback ? dismissFeedback() : setMessageIndex((prev) => messages.length > 0 ? (prev + 1) % messages.length : 0)}
       >
         {activeFeedback && (
-          <motion.div
-            className="absolute inset-0 opacity-20 pointer-events-none"
-            animate={decorativeAnimations ? { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] } : undefined}
-            transition={decorativeAnimations ? { duration: 5, ease: 'linear', repeat: Infinity } : undefined}
-            style={{
-              backgroundImage: `linear-gradient(90deg, transparent, ${meta.color}, transparent)`,
-              backgroundSize: '200% 100%'
-            }}
-          />
+          <div className="absolute inset-0 opacity-20 pointer-events-none" aria-hidden="true">
+            <div
+              className={`absolute inset-0 ${decorativeAnimations ? 'ambient-light--animated' : ''}`}
+              style={{ backgroundImage: `linear-gradient(110deg, transparent, ${meta.color}, transparent)` }}
+            />
+          </div>
         )}
         <div className="relative flex-shrink-0">
           {/* The halo ring only exists to pulse, so it is dropped entirely rather
               than left as a static circle when decorative motion is off. */}
           {decorativeAnimations && (
-            <motion.div
-              className="absolute inset-0 rounded-full"
-              style={{ backgroundColor: meta.color, willChange: 'transform, opacity' }}
-              animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
-              transition={{ duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' }}
+            <div
+              className="emotion-status-halo absolute inset-0 rounded-full"
+              style={{ backgroundColor: meta.color, animationDuration: `${meta.pulseSpeed}s` }}
             />
           )}
           <motion.div
-            className="w-2.5 h-2.5 rounded-full relative z-10"
+            className={`w-2.5 h-2.5 rounded-full relative z-10 ${decorativeAnimations && !justChanged && !activeFeedback ? 'ambient-light--animated' : ''}`}
             style={{ backgroundColor: meta.color }}
             animate={justChanged || activeFeedback
               ? { scale: [1, 1.5, 1] }
-              : decorativeAnimations ? { opacity: [0.7, 1, 0.7] } : undefined}
+              : { scale: 1 }}
             transition={justChanged || activeFeedback
               ? { duration: 0.5, type: 'spring' }
-              : decorativeAnimations ? { duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' } : undefined}
+              : { duration: 0.2 }}
           />
         </div>
 

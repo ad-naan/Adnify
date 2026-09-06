@@ -15,12 +15,8 @@ export interface EmotionPanelSettings {
   privacyMode: boolean
   sensitivity: EmotionPanelSensitivity
   /**
-   * 装饰性循环动画总开关。关闭后所有 `repeat: Infinity` 的纯装饰动画停止。
-   *
-   * 这类动画由 framer-motion 用 JS 每帧改写 style，且多数作用在 scale /
-   * filter / background-position 上 —— 这些属性无法留在合成器层，每帧都要
-   * 重新光栅化。在集显上实测可让 GPU 3D 占用长期停在 80% 以上。
-   * 表达状态的动画（加载中、流式输出）不受此开关影响。
+   * 装饰性循环动画总开关，包括环境光、输入框和运行文字的呼吸效果。
+   * 关闭后保留静态渐变和状态信息；加载指示器与流式内容继续工作。
    */
   decorativeAnimations: boolean
 }

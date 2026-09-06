@@ -1268,34 +1268,16 @@ function ChatPanelContent() {
   const virtuosoComponents = useMemo(() => ({
     Scroller: ChatScroller,
     EmptyPlaceholder: () => (
-      <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
-        {/* Background Ambience — translate/opacity only.
-            `scale` here forced the 120px blur to re-rasterize every frame, and
-            `mix-blend-screen` forced an extra off-screen pass; together they held
-            the GPU at ~27% on integrated graphics. Translation and opacity stay
-            on the compositor, so the blurred layer is rasterized once. */}
+      <div className="flex flex-col h-full w-full bg-background relative overflow-hidden">
+        {/* Soft radial falloff keeps the ambience without large blur surfaces. */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <motion.div
-            animate={decorativeAnimations ? {
-              opacity: [0.3, 0.5, 0.3],
-              x: [0, 20, 0]
-            } : undefined}
-            transition={decorativeAnimations
-              ? { duration: 8, repeat: Infinity, ease: "easeInOut" }
-              : undefined}
-            style={{ opacity: 0.4, willChange: decorativeAnimations ? 'transform, opacity' : undefined }}
-            className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px]"
+          <div
+            style={{ background: 'radial-gradient(ellipse, rgb(var(--accent) / 0.07), transparent 70%)', animationDuration: '8s' }}
+            className={`absolute top-[-20%] right-[-10%] w-[500px] h-[500px] ${decorativeAnimations ? 'ambient-light--animated' : ''}`}
           />
-          <motion.div
-            animate={decorativeAnimations ? {
-              opacity: [0.2, 0.4, 0.2],
-              x: [0, -30, 0]
-            } : undefined}
-            transition={decorativeAnimations
-              ? { duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }
-              : undefined}
-            style={{ opacity: 0.3, willChange: decorativeAnimations ? 'transform, opacity' : undefined }}
-            className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px]"
+          <div
+            style={{ background: 'radial-gradient(ellipse, rgb(59 130 246 / 0.05), transparent 70%)', animationDuration: '10s', animationDelay: '-3s' }}
+            className={`absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] ${decorativeAnimations ? 'ambient-light--animated' : ''}`}
           />
         </div>
 
@@ -1321,7 +1303,7 @@ function ChatPanelContent() {
       <div className="flex flex-col h-full">
 
         {/* Header - 简洁版 */}
-        {chatMode !== 'plan' && <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
+        {chatMode !== 'plan' && <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background border-b border-border/30 select-none transition-colors duration-300">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
             <BranchSelector

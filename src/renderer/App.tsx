@@ -16,6 +16,7 @@ import { startupMetrics } from '@shared/utils/startupMetrics'
 import SystemPrivilegeCoordinator from './components/system/SystemPrivilegeCoordinator'
 import { useBackgroundTasks } from './backgroundTasks/useBackgroundTasks'
 import { useNotificationBridge } from './notifications/useNotificationBridge'
+import { DecorativeAnimationScope } from './components/common/DecorativeAnimationScope'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -116,8 +117,11 @@ function AppContent() {
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
 
   return (
-    <div className={`h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative ${layoutDensityClass}`}>
-      <div className="relative z-10 flex flex-col h-full">
+    <DecorativeAnimationScope className={`h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative ${layoutDensityClass}`}>
+      <DecorativeAnimationScope
+        paused={showSettings || showAbout || showChangelog || showAvatarDialog || showKeyboardShortcuts || showOnboarding || showCommandPalette || showQuickOpen}
+        className="relative z-10 flex flex-col h-full"
+      >
         <TitleBar />
 
         {hasWorkspace ? (
@@ -203,7 +207,7 @@ function AppContent() {
             </Suspense>
           </div>
         )}
-      </div>
+      </DecorativeAnimationScope>
 
       {showSettings && (
         <Suspense fallback={<SettingsSkeleton />}>
@@ -257,7 +261,7 @@ function AppContent() {
 
       <GlobalConfirmDialog />
       <GlobalToastContainer />
-    </div>
+    </DecorativeAnimationScope>
   )
 }
 

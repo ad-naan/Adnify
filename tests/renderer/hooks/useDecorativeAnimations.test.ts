@@ -4,16 +4,19 @@ import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimation
 const state = vi.hoisted(() => ({
   enabled: true,
   value: false,
-  cleanup: undefined as (() => void) | undefined,
+  scopeEnabled: true,
+  cleanups: [] as Array<() => void>,
   preferenceListener: undefined as (() => void) | undefined,
 }))
 
-vi.mock('react', () => ({
-  useState: (resolve: () => boolean) => {
+vi.mock('react', async importOriginal => ({
+  ...await importOriginal<typeof import('react')>(),
+  useContext: () => state.scopeEnabled,
+  useSyncExternalStore: (subscribe: (listener: () => void) => () => void, resolve: () => boolean) => {
     state.value = resolve()
-    return [state.value, (value: boolean) => { state.value = value }]
+    state.cleanups.push(subscribe(() => { state.value = resolve() }))
+    return state.value
   },
-  useEffect: (effect: () => (() => void)) => { state.cleanup = effect() },
 }))
 vi.mock('@/renderer/agent/emotion/panelSettings', () => ({
   loadEmotionPanelSettings: () => ({ decorativeAnimations: state.enabled }),
@@ -32,6 +35,8 @@ describe('decorative animation lifecycle', () => {
 
   beforeEach(() => {
     state.enabled = true
+    state.scopeEnabled = true
+    state.cleanups = []
     focused = true
     visibilityState = 'visible'
     windowEvents = new EventTarget()
@@ -45,7 +50,7 @@ describe('decorative animation lifecycle', () => {
     vi.stubGlobal('document', documentEvents)
   })
   afterEach(() => {
-    state.cleanup?.()
+    state.cleanups.forEach(cleanup => cleanup())
     vi.unstubAllGlobals()
   })
 
@@ -83,7 +88,7 @@ describe('decorative animation lifecycle', () => {
 
   it('removes listeners on unmount', () => {
     useDecorativeAnimations()
-    state.cleanup?.()
+    state.cleanups.pop()?.()
     expect(state.preferenceListener).toBeUndefined()
     focused = false
     visibilityState = 'hidden'
@@ -92,5 +97,26 @@ describe('decorative animation lifecycle', () => {
     documentEvents.dispatchEvent(new Event('visibilitychange'))
     mediaEvents.dispatchEvent(new Event('change'))
     expect(state.value).toBe(true)
+  })
+
+  it('keeps shared listeners until the last consumer leaves', () => {
+    const listen = vi.spyOn(windowEvents, 'addEventListener')
+    useDecorativeAnimations()
+    useDecorativeAnimations()
+    expect(listen.mock.calls.filter(([name]) => name === 'blur')).toHaveLength(1)
+    state.cleanups.pop()?.()
+    expect(state.preferenceListener).toBeDefined()
+    focused = false
+    windowEvents.dispatchEvent(new Event('blur'))
+    expect(state.value).toBe(false)
+    state.cleanups.pop()?.()
+    expect(state.preferenceListener).toBeUndefined()
+  })
+
+  it('keeps an occluded scope still even when the window is focused', () => {
+    state.scopeEnabled = false
+    expect(useDecorativeAnimations()).toBe(false)
+    state.scopeEnabled = true
+    expect(useDecorativeAnimations()).toBe(true)
   })
 })

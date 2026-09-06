@@ -101,12 +101,12 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
             // frame, which is the most expensive thing on this panel.
             animate={decorativeAnimations ? {
               opacity: [0.3, 0.5, 0.3],
-            } : undefined}
+            } : { opacity: 0.3 }}
             transition={decorativeAnimations ? {
               duration: 2,
               repeat: Infinity,
               ease: 'easeInOut',
-            } : undefined}
+            } : { duration: 0 }}
           />
 
           {/* 主球 */}
@@ -121,12 +121,12 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
             }}
             animate={decorativeAnimations ? {
               rotate: [0, 360],
-            } : undefined}
+            } : { rotate: 0 }}
             transition={decorativeAnimations ? {
               duration: 20,
               repeat: Infinity,
               ease: 'linear',
-            } : undefined}
+            } : { duration: 0 }}
           >
             {/* 内部光效 */}
             <div

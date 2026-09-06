@@ -191,7 +191,7 @@ const ChatInput = memo(function ChatInput({
     <div ref={inputContainerRef} className="z-20">
       <div
         className={`
-            process-fluid-input relative group flex flex-col rounded-xl transition-all duration-500 ease-out backdrop-blur-md
+            process-fluid-input relative group flex flex-col rounded-xl transition-shadow duration-300 ease-out
             ${decorativeAnimations && (isFocused || isStreaming) ? 'process-fluid-input--animated' : ''}
             ${isStreaming
             ? 'process-fluid-input--streaming'

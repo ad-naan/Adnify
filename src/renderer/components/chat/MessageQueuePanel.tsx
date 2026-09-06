@@ -36,7 +36,7 @@ export default memo(function MessageQueuePanel({ onSendNow }: MessageQueuePanelP
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className="mb-3 overflow-hidden"
     >
-      <div className="rounded-xl border border-accent/20 bg-surface/60 backdrop-blur-md shadow-sm overflow-hidden">
+      <div className="chat-layered-surface rounded-xl border border-accent/20 overflow-hidden">
         {/* Header */}
         <div
           className="flex items-center justify-between px-3 py-2 cursor-pointer select-none hover:bg-surface-hover/50 transition-colors"

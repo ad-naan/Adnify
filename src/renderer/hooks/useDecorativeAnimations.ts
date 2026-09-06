@@ -1,15 +1,17 @@
 /**
  * 装饰性循环动画是否启用。
  *
- * 同时尊重系统的 prefers-reduced-motion、用户开关与窗口前后台状态。
- * 用于门控 `repeat: Infinity` 的纯装饰动画 —— 它们由 framer-motion 每帧
- * 写 style 驱动，在集显上是持续的 GPU 光栅化开销。
+ * 同时尊重系统减弱动态效果、用户开关、窗口状态与遮挡范围。
+ * 所有消费者共用一组环境监听；暂停视觉效果不影响 Agent 执行。
  */
 
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useSyncExternalStore } from 'react'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+export const DecorativeAnimationContext = createContext(true)
+const listeners = new Set<() => void>()
+let disconnect: (() => void) | undefined
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false
@@ -22,11 +24,10 @@ function resolve(): boolean {
       || (document.visibilityState !== 'hidden' && document.hasFocus()))
 }
 
-export function useDecorativeAnimations(): boolean {
-  const [enabled, setEnabled] = useState(resolve)
-
-  useEffect(() => {
-    const onChange = () => setEnabled(resolve())
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  if (listeners.size === 1) {
+    const onChange = () => listeners.forEach(notify => notify())
     const unsubscribe = subscribeEmotionPanelSettings(onChange)
     const query = window.matchMedia?.(REDUCED_MOTION_QUERY)
     query?.addEventListener('change', onChange)
@@ -35,16 +36,26 @@ export function useDecorativeAnimations(): boolean {
     // observe focus: visibility alone may stay "visible" in background windows.
     window.addEventListener('focus', onChange)
     window.addEventListener('blur', onChange)
-    onChange()
-
-    return () => {
+    disconnect = () => {
       unsubscribe()
       query?.removeEventListener('change', onChange)
       document.removeEventListener('visibilitychange', onChange)
       window.removeEventListener('focus', onChange)
       window.removeEventListener('blur', onChange)
     }
-  }, [])
+  }
 
-  return enabled
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) {
+      disconnect?.()
+      disconnect = undefined
+    }
+  }
+}
+
+export function useDecorativeAnimations(): boolean {
+  const scopeEnabled = useContext(DecorativeAnimationContext)
+  const enabled = useSyncExternalStore(subscribe, resolve, () => false)
+  return scopeEnabled && enabled
 }

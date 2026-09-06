@@ -21,4 +21,6 @@
 
 开发验证：运行 `node scripts/diagnostics/performance-smoke.cjs`，使用隔离配置目录验证真实多窗口采样、原生分配录制及中英文界面。报告和截图保存在 `.tmp/performance-smoke`，不进入版本控制。
 
+动效验证：运行 `node scripts/diagnostics/decorative-motion-smoke.cjs`，使用 Playwright 和 Edge 检查装饰动画开关、系统减弱动态效果、窗口焦点和弹窗遮挡；同时确认后台状态更新和未发送草稿保留。可用 `PLAYWRIGHT_MODULE_PATH` 指定已有的 Playwright 安装，`MOTION_BASELINE_REF` 指定用于对比旧样式的 Git ref。深浅色截图、3 秒绘制 trace 和统计保存在 `.tmp/decorative-motion`。测试使用静态 Agent 界面隔离装饰效果，绘制次数和主线程时间不能直接视为真实任务的 GPU 利用率；整机收益应在同一任务、窗口尺寸和刷新率下重新采样。
+
 采集遇到应用退出时会中断，尽力保存已产生的 trace；只有正常完成的目录才包含完整的 `process-memory.json`。普通采集使用 32 MB trace 缓冲区，重负载下缓冲区可能提前填满。

@@ -433,13 +433,11 @@ export default function StatusBar() {
                     exit={{ opacity: 0, scale: 0.8 }}
                     className="flex items-center gap-1.5 text-red-400 px-2 h-6 hover:bg-white/5 rounded-md transition-colors"
                   >
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                      className="flex items-center justify-center w-4 h-4 drop-shadow-[0_0_6px_rgba(248,113,113,0.5)]"
+                    <div
+                      className="flex items-center justify-center w-4 h-4 animate-spin"
                     >
                       <Loader2 className="w-3 h-3" />
-                    </motion.div>
+                    </div>
                     <span className="text-[9px] font-medium">
                       {contextIndicatorCopy.switching}
                     </span>
@@ -452,13 +450,11 @@ export default function StatusBar() {
                     exit={{ opacity: 0, scale: 0.8 }}
                     className="flex items-center gap-1.5 px-2 h-6 hover:bg-white/5 rounded-md cursor-pointer transition-colors"
                   >
-                    <motion.div
-                      className="flex items-center justify-center w-4 h-4 drop-shadow-[0_0_6px_rgba(var(--accent-rgb),0.5)]"
-                      animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
-                      transition={{ duration: 0.8, repeat: Infinity }}
+                    <div
+                      className="flex items-center justify-center w-4 h-4 animate-pulse"
                     >
                       <Maximize2 className="w-3 h-3 text-accent" />
-                    </motion.div>
+                    </div>
                     <span className="text-[9px] font-medium text-accent">
                       {contextIndicatorCopy.compressing}
                     </span>

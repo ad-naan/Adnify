@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '@/renderer/hooks/usePerformance'
 import { useElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
+import { DecorativeAnimationScope } from '@/renderer/components/common/DecorativeAnimationScope'
 
 interface ModalProps {
     isOpen: boolean
@@ -52,7 +53,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
     if (!isOpen) return null
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <DecorativeAnimationScope className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 overlay-scrim modal-backdrop-enter"
@@ -85,7 +86,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                     {children}
                 </div>
             </div>
-        </div>,
+        </DecorativeAnimationScope>,
         document.body
     )
 })
