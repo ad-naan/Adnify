@@ -84,4 +84,4 @@ export interface ExecutionOverview {
   archives: ExecutionSnapshot[]
   sessions: (InteractiveSessionSnapshot & { ownerId: number })[]
 }
-export type ExecutionManagementAction = 'stop' | 'stop-session' | 'host' | 'unhost' | 'pin' | 'unpin' | 'delete' | 'export' | 'log' | 'recycle' | 'retain'
+export type ExecutionManagementAction = 'stop' | 'stop-session' | 'host' | 'unhost' | 'pin' | 'unpin' | 'delete' | 'clear-archives' | 'export' | 'log' | 'recycle' | 'retain'

@@ -32,6 +32,7 @@ import {
 // ===== 类型定义 =====
 
 import { isExecutionFinished, type ExecutionSnapshot } from '@shared/types/execution'
+import { normalizeExecutionSettings } from '@shared/config/executionSettings'
 
 export interface TerminalInstance {
   id: string;
@@ -302,6 +303,8 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
 export { parseShellIntegrationPayload, SHELL_INTEGRATION_OSC_ID } from "@/renderer/services/terminalShellIntegration";
 
 class TerminalManagerClass {
+  private executionSettings = normalizeExecutionSettings(undefined)
+  private completedTabTimer?: ReturnType<typeof setTimeout>
   private managedJobs = new Map<string, ExecutionSnapshot>()
   private hiddenJobs = new Set<string>()
   private closingJobs = new Set<string>()
@@ -449,6 +452,15 @@ class TerminalManagerClass {
   }
 
   private setupIpcListeners() {
+    let settingsChanged = false
+    const onSettingsChanged = api.settings.onChanged?.(({ key, value }) => {
+      if (key !== 'executionSettings') return
+      settingsChanged = true
+      this.configureExecutionSettings(value)
+    })
+    void api.settings.get('executionSettings').then(value => {
+      if (!settingsChanged) this.configureExecutionSettings(value)
+    }).catch(error => logger.system.warn('[TerminalManager] Failed to load execution settings:', error))
     const onExecutionChanged = api.execution?.onChanged(job => this.applyExecutionSnapshot(job))
     void api.execution?.list().then(result => {
       for (const job of result.jobs || []) this.applyExecutionSnapshot(job)
@@ -585,6 +597,7 @@ class TerminalManagerClass {
     );
 
     this.ipcCleanup = () => {
+      onSettingsChanged?.()
       onExecutionChanged?.()
       onData();
       onExit();
@@ -642,13 +655,50 @@ class TerminalManagerClass {
       this.currentCommandSessions.delete(job.jobId)
       this.lastCommandSessions.set(job.jobId, session)
     } else this.currentCommandSessions.set(job.jobId, session)
-    // Completed views are a bounded history, not persistent shells.
-    const history = this.state.terminals.filter(item => item.managedJob
-      && isExecutionFinished(this.managedJobs.get(item.id)?.status || 'running'))
-    for (const old of history.slice(0, Math.max(0, history.length - 64))) {
-      if (old.id !== this.state.activeId) this.removeTerminalView(old.id)
-    }
+    this.pruneCompletedTabs(job.jobId)
     this.notify()
+  }
+
+  configureExecutionSettings(value: unknown): void {
+    this.executionSettings = normalizeExecutionSettings(value)
+    this.pruneCompletedTabs()
+  }
+
+  private pruneCompletedTabs(incomingId?: string): void {
+    clearTimeout(this.completedTabTimer)
+    const history = this.state.terminals.filter(item => item.managedJob
+      && this.managedJobs.get(item.id)?.mode === 'command'
+      && isExecutionFinished(this.managedJobs.get(item.id)?.status || 'running'))
+      .sort((a, b) => (this.managedJobs.get(a.id)?.endedAt ?? a.createdAt) - (this.managedJobs.get(b.id)?.endedAt ?? b.createdAt))
+    let remaining = history.length
+    for (const item of history) {
+      if (item.id === this.state.activeId || item.id === incomingId) continue
+      const endedAt = this.managedJobs.get(item.id)?.endedAt ?? item.createdAt
+      if (remaining > this.executionSettings.completedTabLimit || Date.now() - endedAt >= this.executionSettings.completedTabTimeoutMs) {
+        this.removeTerminalView(item.id)
+        remaining--
+      }
+    }
+    if (remaining) {
+      this.completedTabTimer = setTimeout(() => this.pruneCompletedTabs(), Math.min(30_000, this.executionSettings.completedTabTimeoutMs))
+      this.completedTabTimer.unref?.()
+    }
+  }
+
+  async closeTerminals(target: 'current' | 'others' | 'right' | 'all' | 'completed', anchorId?: string): Promise<void> {
+    const tabs = [...this.state.terminals]
+    const anchor = tabs.findIndex(item => item.id === anchorId)
+    if (['current', 'others', 'right'].includes(target) && anchor < 0) return
+    const selected = tabs.filter((item, index) => {
+      if (target === 'current') return item.id === anchorId
+      if (target === 'others') return item.id !== anchorId
+      if (target === 'right') return index > anchor
+      if (target === 'completed') return item.managedJob && isExecutionFinished(this.managedJobs.get(item.id)?.status || 'running')
+      return true
+    })
+    const results = await Promise.allSettled(selected.map(item => this.closeTerminal(item.id)))
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failures.length) throw new Error(failures.map(result => String(result.reason)).join('\n'))
   }
 
   getManagedJob(id: string): ExecutionSnapshot | undefined { return this.managedJobs.get(id) }
@@ -1345,6 +1395,7 @@ class TerminalManagerClass {
     }
     if (this.state.activeId !== id) {
       this.state.activeId = id;
+      this.pruneCompletedTabs()
       this.notify();
     }
   }
@@ -1896,6 +1947,7 @@ class TerminalManagerClass {
   }
 
   cleanup() {
+    clearTimeout(this.completedTabTimer)
     if (this.ipcCleanup) {
       this.ipcCleanup();
       this.ipcCleanup = null;

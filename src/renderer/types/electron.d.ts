@@ -532,7 +532,7 @@ export interface ElectronAPI {
   executionOverview: () => Promise<import('@shared/types/execution').ExecutionOverview>
   executionManagerRequested: () => Promise<boolean>
   onExecutionManagerRequested: (callback: () => void) => () => void
-  executionManage: (id: string, action: import('@shared/types/execution').ExecutionManagementAction) => Promise<{ success: boolean; error?: string; output?: string; truncated?: boolean; cancelled?: boolean }>
+  executionManage: (id: string, action: import('@shared/types/execution').ExecutionManagementAction) => Promise<{ success: boolean; error?: string; output?: string; truncated?: boolean; cancelled?: boolean; deleted?: number }>
   onExecutionChanged: (callback: (job: import('@shared/types/execution').ExecutionSnapshot) => void) => () => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
   onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => () => void

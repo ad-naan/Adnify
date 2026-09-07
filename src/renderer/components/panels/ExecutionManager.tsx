@@ -24,6 +24,9 @@ const fields: [keyof ExecutionSettings, TranslationKey, number?][] = [
   ['logBytes', 'execution.capacity.logBytes', 1024 * 1024],
   ['diskBytes', 'execution.capacity.diskBytes', 1024 * 1024],
   ['history', 'execution.capacity.history'],
+  ['archiveRetentionDays', 'execution.capacity.archiveRetentionDays'],
+  ['completedTabLimit', 'execution.capacity.completedTabLimit'],
+  ['completedTabTimeoutMs', 'execution.capacity.completedTabTimeoutMs', 1000],
   ['idleTimeoutMs', 'execution.capacity.idleTimeoutMs', 1000],
   ['idlePerWindow', 'execution.capacity.idlePerWindow'],
   ['idleGlobal', 'execution.capacity.idleGlobal'],
@@ -71,6 +74,10 @@ export function ExecutionManager({ language, onClose, initialTab = 'running' }: 
       if (result.error) setError(result.error)
       if (action === 'export' && !result.cancelled) setNotice(t('execution.exported', language))
       if (action === 'delete' && log?.id === id) setLog(undefined)
+      if (action === 'clear-archives') {
+        setLog(undefined)
+        setNotice(t('execution.archivesCleared', language, { count: result.deleted ?? 0 }))
+      }
       await refresh()
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
@@ -119,6 +126,10 @@ export function ExecutionManager({ language, onClose, initialTab = 'running' }: 
       <nav className="flex gap-2" aria-label={t('execution.sections', language)}>
         {([['running', Activity, t('execution.runningTab', language)], ['history', Archive, t('execution.historyTab', language)], ['settings', Settings2, t('execution.settingsTab', language)]] as const).map(([key, Icon, text]) => <button key={key} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)} className={`${button} flex items-center gap-2 ${tab === key ? 'bg-accent/10 !text-accent border-accent/40' : ''}`}><Icon size={14} />{text}</button>)}
       </nav>
+      {overview && <div className="rounded-xl border border-border/50 bg-background/40 px-3 py-2 text-xs text-text-muted space-y-1">
+        <p>{t('execution.archivePolicy', language, { days: overview.settings.archiveRetentionDays, mb: overview.settings.diskBytes / 1024 / 1024 })}</p>
+        <p>{t('execution.tabPolicy', language, { count: overview.settings.completedTabLimit, seconds: overview.settings.completedTabTimeoutMs / 1000 })}</p>
+      </div>}
       {error && <p role="alert" className="text-sm text-red-400 break-all">{error}</p>}
       {notice && <p role="status" className="text-sm text-accent">{notice}</p>}
       {!overview && !error && <p className="text-text-muted">{t('execution.loading', language)}</p>}
@@ -129,6 +140,10 @@ export function ExecutionManager({ language, onClose, initialTab = 'running' }: 
         <div className="flex gap-2"><button className={`${button} !text-accent`} disabled={busy} onClick={() => void save()}>{t('execution.save', language)}</button><button className={button} disabled={busy} onClick={() => { dirty.current = true; setDraft(normalizeExecutionSettings(undefined)) }}>{t('execution.defaults', language)}</button></div>
       </div> : <>
         <input aria-label={t('execution.filterLabel', language)} placeholder={t('execution.filterPlaceholder', language)} value={filter} onChange={event => setFilter(event.target.value)} className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-text-primary" />
+        {tab === 'history' && <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-text-muted">{t('execution.clearArchivesDescription', language)}</p>
+          <button className={button} disabled={busy || !rows.some(row => !row.pinned)} onClick={() => void act('', 'clear-archives')}>{t('execution.clearArchives', language)}</button>
+        </div>}
         {tab === 'running' && <p className="text-xs text-text-muted">{t('execution.hostingDescription', language)}</p>}
         <div className="space-y-2">{visible.map(renderJob)}{!visible.length && <p className="p-5 text-center text-text-muted text-sm">{t('execution.empty', language)}</p>}</div>
         {tab === 'running' && overview?.sessions.map(session => <article key={session.id} className="rounded-xl border border-border/60 p-3 space-y-2">

@@ -153,6 +153,7 @@ describe('TerminalManager shell integration', () => {
     vi.resetModules()
     createMock.mockReset()
     createMock.mockResolvedValue({ success: true })
+    settingsGetMock.mockResolvedValue(undefined)
     writeMock.mockReset()
     resizeMock.mockReset()
     killMock.mockReset()
@@ -581,6 +582,53 @@ describe('TerminalManager shell integration', () => {
       expect(terminalManager.hasTerminal('job')).toBe(true)
       terminalManager.applyExecutionSnapshot({ ...job, status: 'cancelled', endedAt: 3, revision: 3 })
       expect(terminalManager.hasTerminal('job')).toBe(false)
+      expect(killMock).not.toHaveBeenCalled()
+    } finally { terminalManager.cleanup() }
+  })
+
+  it('bounds completed command tabs and expires old views without cancelling processes', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    const makeJob = (jobId: string, offset: number): ExecutionSnapshot => ({ jobId, requestKey: jobId, threadId: 'thread',
+      command: 'echo hello', cwd: 'C:\\workspace', shell: 'powershell.exe', mode: 'command',
+      status: 'completed', submittedAt: Date.now() + offset, endedAt: Date.now() + offset, exitCode: 0, output: 'hello', truncated: false, revision: 1 })
+    try {
+      terminalManager.configureExecutionSettings({ completedTabLimit: 2, completedTabTimeoutMs: 10_000 })
+      terminalManager.applyExecutionSnapshot(makeJob('selected', 0))
+      terminalManager.applyExecutionSnapshot(makeJob('older', 1))
+      terminalManager.applyExecutionSnapshot(makeJob('newest', 2))
+      expect(terminalManager.getState().terminals.map(tab => tab.id)).toEqual(['selected', 'newest'])
+      terminalManager.applyExecutionSnapshot({ ...makeJob('running', 0), status: 'running', exitCode: null })
+      terminalManager.applyExecutionSnapshot({ ...makeJob('unknown', 0), status: 'unknown', exitCode: null })
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(terminalManager.hasTerminal('selected')).toBe(true)
+      expect(terminalManager.hasTerminal('newest')).toBe(false)
+      expect(terminalManager.hasTerminal('running')).toBe(true)
+      expect(terminalManager.hasTerminal('unknown')).toBe(true)
+      expect(executionCancelMock).not.toHaveBeenCalled()
+      expect(killMock).not.toHaveBeenCalled()
+      // Later snapshots cannot reopen an automatically closed tab.
+      terminalManager.applyExecutionSnapshot({ ...makeJob('older', 1), revision: 2 })
+      expect(terminalManager.hasTerminal('older')).toBe(false)
+      expect(terminalManager.getManagedJob('older')).toBeDefined()
+    } finally { terminalManager.cleanup() }
+  })
+
+  it('closes only finished jobs in bulk and resolves close-to-right from the clicked tab', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+    const makeJob = (jobId: string, status: ExecutionSnapshot['status']): ExecutionSnapshot => ({ jobId, requestKey: jobId, threadId: 'thread',
+      command: 'command', cwd: 'C:\\workspace', shell: 'powershell.exe', mode: 'command', status,
+      submittedAt: Date.now(), exitCode: status === 'completed' ? 0 : null, output: '', truncated: false, revision: 1 })
+    try {
+      terminalManager.applyExecutionSnapshot(makeJob('left', 'completed'))
+      terminalManager.applyExecutionSnapshot(makeJob('anchor', 'completed'))
+      terminalManager.applyExecutionSnapshot(makeJob('right', 'completed'))
+      await terminalManager.closeTerminals('right', 'anchor')
+      expect(terminalManager.getState().terminals.map(tab => tab.id)).toEqual(['left', 'anchor'])
+      terminalManager.applyExecutionSnapshot(makeJob('running', 'running'))
+      terminalManager.applyExecutionSnapshot(makeJob('unknown', 'unknown'))
+      await terminalManager.closeTerminals('completed')
+      expect(terminalManager.getState().terminals.map(tab => tab.id)).toEqual(['running', 'unknown'])
+      expect(executionCancelMock).not.toHaveBeenCalled()
       expect(killMock).not.toHaveBeenCalled()
     } finally { terminalManager.cleanup() }
   })

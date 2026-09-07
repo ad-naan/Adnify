@@ -24,6 +24,7 @@ import { formatShortcut } from '@services/keybindingService'
 import { discoverProjectTasks, type ProjectFileSnapshot, type ProjectTask } from '@shared/utils/projectTasks'
 import { isExecutionFinished } from '@shared/types/execution'
 import { ExecutionManager } from './ExecutionManager'
+import { toast } from '../common/ToastProvider'
 
 const TASK_MANIFESTS = new Set([
     'package.json', 'deno.json', 'pyproject.toml', 'pom.xml', 'build.gradle', 'build.gradle.kts',
@@ -72,6 +73,7 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
         x: number
         y: number
         termId: string | null
+        source?: 'tab' | 'terminal'
     }>({
         visible: false,
         x: 0,
@@ -320,7 +322,9 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
             setContextMenu(prev => ({ ...prev, visible: false }))
         }
         window.addEventListener('click', handleClick)
-        return () => window.removeEventListener('click', handleClick)
+        const handleKey = (event: KeyboardEvent) => { if (event.key === 'Escape') handleClick() }
+        window.addEventListener('keydown', handleKey)
+        return () => { window.removeEventListener('click', handleClick); window.removeEventListener('keydown', handleKey) }
     }, [contextMenu.visible])
 
     // 终端右键菜单视口边界检测
@@ -478,6 +482,11 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
                                     <div
                                         key={term.id}
                                         onClick={() => terminalManager.setActiveTerminal(term.id)}
+                                        onContextMenu={event => {
+                                            event.preventDefault(); event.stopPropagation()
+                                            setContextMenu({ visible: true, x: event.clientX, y: event.clientY, termId: term.id, source: 'tab' })
+                                        }}
+                                        onAuxClick={event => { if (event.button === 1) closeTerminal(term.id, event) }}
                                         className={`
                                             relative flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-colors duration-150 rounded-md flex-shrink-0 group
                                             ${activeId === term.id
@@ -612,10 +621,36 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
                 {contextMenu.visible && contextMenu.termId && (
                     <div
                         ref={contextMenuRef}
-                        className="fixed z-[200] min-w-[200px] bg-surface border border-border rounded-md shadow-xl py-1 text-xs select-none"
+                        role="menu"
+                        className="fixed z-[200] min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto bg-surface border border-border rounded-md shadow-xl py-1 text-xs select-none"
                         style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
                         onClick={e => e.stopPropagation()}
                     >
+                        {([
+                            ['current', 'tabContextMenu.close'], ['others', 'tabContextMenu.closeOthers'],
+                            ['right', 'tabContextMenu.closeToTheRight'], ['completed', 'terminalPanel.closeCompleted'],
+                            ['all', 'tabContextMenu.closeAll'],
+                        ] as const).map(([target, label]) => <button key={target} role="menuitem"
+                            className="block w-full text-left px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={() => {
+                                const id = contextMenu.termId
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                                void terminalManager.closeTerminals(target, id || undefined).catch(error => toast.error(String(error)))
+                            }}>{t(label, language)}</button>)}
+                        <p className="px-3 py-1 text-[10px] text-text-muted max-w-[260px]">{t('terminalPanel.closeStopsProcess', language)}</p>
+                        <div className="my-1 h-px bg-border/60" />
+                        {([
+                            ['terminalPanel.copyId', contextMenu.termId],
+                            ['terminalPanel.copyCommand', (managerState.commandInfoByTerminal[contextMenu.termId]?.current || managerState.commandInfoByTerminal[contextMenu.termId]?.last)?.command],
+                            ['terminalPanel.copyCwd', terminals.find(item => item.id === contextMenu.termId)?.cwd],
+                        ] as const).map(([label, value]) => <button key={label} role="menuitem" disabled={!value}
+                            className="block w-full text-left px-3 py-1.5 hover:bg-surface-hover disabled:opacity-40"
+                            onClick={() => {
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                                if (value) void writeClipboardText(value).catch(error => toast.error(String(error)))
+                            }}>{t(label, language)}</button>)}
+                        {contextMenu.source !== 'tab' && <>
+                        <div className="my-1 h-px bg-border/60" />
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
                             onClick={() => {
@@ -651,7 +686,6 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
                                     } catch {
                                         // ignore
                                     }
-                                    await writeClipboardText(sel)
                                 }
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
@@ -687,6 +721,7 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
                         >
                             <span>{t('selectAll', language)}</span>
                         </button>
+                        </>}
 
                         <div className="my-1 h-px bg-border/60" />
 
@@ -699,17 +734,6 @@ const TerminalPanel = memo(function TerminalPanel({ docked = false, layoutVisibl
                             }}
                         >
                             <span>{t('clearTerminal', language)}</span>
-                        </button>
-                        <button
-                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-red-500/10 text-status-error"
-                            onClick={() => {
-                                if (contextMenu.termId) {
-                                    closeTerminal(contextMenu.termId)
-                                }
-                                setContextMenu(prev => ({ ...prev, visible: false }))
-                            }}
-                        >
-                            <span>{t('killTerminal', language)}</span>
                         </button>
                     </div>
                 )}

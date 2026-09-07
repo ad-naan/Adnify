@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import * as os from 'node:os'
@@ -16,10 +16,41 @@ async function setup() {
   return { directory, store }
 }
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(stores.splice(0).map(store => store.flush()))
   await Promise.all(directories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })))
 })
 describe('durable bounded execution logs', () => {
+  it('expires ordinary archives by completion time while keeping pinned and live logs', async () => {
+    const { directory, store } = await setup()
+    const now = Date.now()
+    for (const id of ['old', 'pinned', 'live', 'recent']) {
+      store.update({ ...row(id), status: id === 'live' ? 'running' : 'completed', endedAt: id === 'recent' ? now + 7 * 86_400_000 : now })
+      store.append(id, `${id} output`)
+    }
+    await store.pin('pinned', true)
+    vi.spyOn(Date, 'now').mockReturnValue(now + 8 * 86_400_000)
+    await store.flush()
+    expect((await store.list()).map(item => item.jobId).sort()).toEqual(['live', 'pinned', 'recent'])
+    await expect(store.read('old')).rejects.toThrow('log_not_found')
+    expect((await fs.readdir(directory)).filter(name => name.endsWith('.log'))).toHaveLength(3)
+  })
+
+  it('clears all ordinary archives in one action, preserving pinned and live output across restart', async () => {
+    const { directory, store } = await setup()
+    for (const id of ['one', 'two', 'pinned', 'live']) {
+      store.update({ ...row(id), status: id === 'live' ? 'running' : 'failed', exitCode: 2 })
+      store.append(id, `${id} output`)
+    }
+    await store.pin('pinned', true)
+    expect(await store.clearArchives()).toBe(2)
+    expect((await store.list()).map(item => item.jobId).sort()).toEqual(['live', 'pinned'])
+    expect((await store.read('live')).output).toBe('live output')
+    const recovered = new ExecutionLogStore(directory); stores.push(recovered)
+    expect((await recovered.list()).map(item => item.jobId).sort()).toEqual(['live', 'pinned'])
+    expect((await recovered.read('pinned')).output).toBe('pinned output')
+    expect((await fs.readdir(directory)).filter(name => name.endsWith('.log'))).toHaveLength(2)
+  })
   it('recovers logs without reviving jobs or claiming an interrupted process completed', async () => {
     const { directory, store } = await setup()
     store.update(row('old')); store.append('old', '中文输出\n'); await store.flush()

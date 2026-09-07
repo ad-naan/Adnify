@@ -97,6 +97,12 @@ export class ExecutionLogStore {
     clearTimeout(this.timer); this.timer = undefined
     this.chain = this.chain.then(async () => {
       await this.ready
+      const cutoff = Date.now() - this.settings.archiveRetentionDays * 86_400_000
+      for (const [id, row] of this.records) {
+        if (row.active || row.snapshot.pinned || (row.snapshot.endedAt ?? row.snapshot.submittedAt) > cutoff) continue
+        await fs.rm(this.file(id), { force: true })
+        this.records.delete(id)
+      }
       for (const [id, row] of [...this.records]) {
         const pending = row.pending
         row.pending = ''
@@ -200,6 +206,22 @@ export class ExecutionLogStore {
     this.records.delete(id)
     await fs.rm(this.file(id), { force: true })
     await this.flush()
+  }
+  async clearArchives(): Promise<number> {
+    await this.flush()
+    let deleted = 0
+    const clearing = this.chain.then(async () => {
+      for (const [id, row] of this.records) {
+        if (row.active || row.snapshot.pinned) continue
+        await fs.rm(this.file(id), { force: true })
+        this.records.delete(id)
+        deleted++
+      }
+    })
+    // A failed deletion must be reported without poisoning later log writes.
+    this.chain = clearing.catch(() => {})
+    try { await clearing } finally { await this.flush() }
+    return deleted
   }
   async export(id: string, target: string): Promise<void> {
     await this.flush()

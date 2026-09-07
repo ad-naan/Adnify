@@ -748,10 +748,15 @@ export function registerSecureTerminalHandlers(
     async id => { const pid = terminals.get(id)?.pid; return pid ? hasNoChildProcesses(pid) : false },
     id => { if (terminals.has(id)) { reclaimed.add(id); void stopSession(id) } })
   clearInterval(idleSweepTimer)
+  let lastArchiveSweep = 0
   idleSweepTimer = setInterval(() => {
     const usage = executionScheduler.usage()
     void reaper.sweep(usage.queued > 0 && usage.sessions + usage.background >= executionSettings.persistent)
       .catch(error => logger.security.warn('[Terminal] Idle inspection failed:', error))
+    if (Date.now() - lastArchiveSweep >= 60_000) {
+      lastArchiveSweep = Date.now()
+      void logs?.flush()
+    }
   }, 5000)
   idleSweepTimer.unref?.()
   const ownerFor = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): number => {
@@ -863,6 +868,7 @@ export function registerSecureTerminalHandlers(
       return { success: true }
     }
     if (!logs) throw new Error('Log archive is unavailable')
+    if (action === 'clear-archives') return { success: true, deleted: await logs.clearArchives() }
     if (action === 'log') {
       const result = await logs.read(id)
       if (result.error) {

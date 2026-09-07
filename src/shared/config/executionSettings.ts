@@ -8,6 +8,9 @@ export const EXECUTION_SETTINGS_DEFAULTS = {
   idleTimeoutMs: 120_000,
   idlePerWindow: 1,
   idleGlobal: 4,
+  archiveRetentionDays: 7,
+  completedTabLimit: 10,
+  completedTabTimeoutMs: 300_000,
 }
 export type ExecutionSettings = typeof EXECUTION_SETTINGS_DEFAULTS extends infer T ? { [K in keyof T]: number } : never
 export const EXECUTION_SETTING_RANGES: Record<keyof ExecutionSettings, readonly [number, number]> = {
@@ -18,6 +21,7 @@ export const EXECUTION_SETTING_RANGES: Record<keyof ExecutionSettings, readonly 
   memoryBytes: [1024 * 1024, 64 * 1024 * 1024], logBytes: [64 * 1024, 64 * 1024 * 1024],
   diskBytes: [8 * 1024 * 1024, 1024 * 1024 * 1024], idleTimeoutMs: [10_000, 3600_000],
   idlePerWindow: [0, 16], idleGlobal: [0, 64],
+  archiveRetentionDays: [1, 365], completedTabLimit: [1, 128], completedTabTimeoutMs: [10_000, 3600_000],
 }
 export function normalizeExecutionSettings(value: unknown): ExecutionSettings {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
