@@ -835,7 +835,6 @@ export const en = {
   'splitTerminal': 'Split Terminal',
   'clearTerminal': 'Clear',
   'closeTerminal': 'Close',
-  'killTerminal': 'Kill Terminal',
   'selectAll': 'Select All',
   'openIntegratedTerminalHere': 'Open Integrated Terminal Here',
 

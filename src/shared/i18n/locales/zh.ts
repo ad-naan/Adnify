@@ -835,7 +835,6 @@ export const zh = {
   'splitTerminal': '拆分终端',
   'clearTerminal': '清空',
   'closeTerminal': '关闭',
-  'killTerminal': '终止终端',
   'selectAll': '全选',
   'openIntegratedTerminalHere': '在此处打开集成终端',
 

@@ -14,7 +14,7 @@ export function Editor() {
 }
 export function Sidebar({ panel }: { panel?: SidePanel }) {
   useMountCount('sidebar')
-  return <div className="h-full overflow-auto p-4 text-xs text-text-muted" data-fixture-scroll><p className="mb-4">{panel === 'explorer' ? 'blog / frontend / src' : panel}</p>{Array.from({ length: 45 }, (_, i) => <div key={i} className="py-2 pl-3">{i === 0 ? '▾ layouts' : i === 1 ? '　footer.tsx' : `　component-${i}.tsx`}</div>)}</div>
+  return <div className="h-full overflow-auto p-4 text-xs text-text-muted" data-fixture-scroll><p className="mb-4">{panel === 'explorer' ? 'blog / frontend / src' : panel}</p>{Array.from({ length: 45 }, (_, i) => <div key={i} className={`py-2 ${i === 0 ? 'pl-3' : 'pl-6'}`}>{i === 0 ? '▾ layouts' : i === 1 ? 'footer.tsx' : `component-${i}.tsx`}</div>)}</div>
 }
 export function ChatPanel() {
   useMountCount('agent')

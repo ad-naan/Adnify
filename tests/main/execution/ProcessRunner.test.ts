@@ -24,8 +24,8 @@ describe('managed shell process', { timeout: 20_000 }, () => {
     let output = ''
     const script = `process.stdout.write('stdout 中文\\n'); process.stderr.write('stderr TS2430\\n'); process.exitCode = ${exitCode}`
     const command = process.platform === 'win32'
-      ? `& '${process.execPath.replace(/'/g, "''")}' -e \"${script}\"`
-      : `'${process.execPath.replace(/'/g, "'\\''")}' -e \"${script}\"`
+      ? `& '${process.execPath.replace(/'/g, "''")}' -e "${script}"`
+      : `'${process.execPath.replace(/'/g, "'\\''")}' -e "${script}"`
     const child = startExecutionProcess({ shell, cwd: process.cwd(), command }, text => { output += text })
     expect((await child.done).exitCode).toBe(exitCode)
     expect(output).toContain('stdout 中文')

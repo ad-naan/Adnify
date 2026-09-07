@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const electron = require('electron')
 const root = path.resolve(__dirname, '../..')
 if (typeof electron === 'string') {
-  ;(async () => {
+  (async () => {
     const parent = path.join(root, '.tmp/execution-ui-smoke')
     fs.mkdirSync(parent, { recursive: true })
     const output = fs.mkdtempSync(path.join(parent, 'run-'))
@@ -50,8 +50,29 @@ if (typeof electron === 'string') {
   }
   const body = win => win.webContents.executeJavaScript('document.body.innerText')
   const click = async (win, label) => {
-    await waitFor(() => win.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('button')].find(b => b.innerText === ${JSON.stringify(label)}); return Boolean(button && !button.disabled) })()`), `enabled button ${label}`)
-    await win.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find(b => b.innerText === ${JSON.stringify(label)}).click()`)
+    const debuggerSession = win.webContents.debugger
+    if (!debuggerSession.isAttached()) debuggerSession.attach('1.3')
+    await waitFor(async () => {
+      const { result: document } = await debuggerSession.sendCommand('Runtime.evaluate', { expression: 'document' })
+      try {
+        // Pass the label as data; never interpolate it into executable source.
+        const result = await debuggerSession.sendCommand('Runtime.callFunctionOn', {
+          objectId: document.objectId,
+          functionDeclaration: `function(label) {
+            const button = [...this.querySelectorAll('button')].find(b => b.innerText === label);
+            if (!button || button.disabled) return false;
+            button.click();
+            return true;
+          }`,
+          arguments: [{ value: label }],
+          returnByValue: true,
+        })
+        if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
+        return result.result.value === true
+      } finally {
+        await debuggerSession.sendCommand('Runtime.releaseObject', { objectId: document.objectId })
+      }
+    }, `enabled button ${label}`)
   }
   const screenshot = async (win, name) => {
     await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
@@ -59,9 +80,13 @@ if (typeof electron === 'string') {
   }
   const timeout = setTimeout(() => { service.shutdown(); app.exit(1) }, 45000)
   app.whenReady().then(async () => {
+    const fixturePreferences = new Map()
+    ipcMain.handle('settings:get', (_event, key) => key === 'executionSettings' ? settings : fixturePreferences.get(key))
     ipcMain.handle('execution:overview', async event => ({ success: true, ownerId: event.sender.id, settings, usage: service.scheduler.usage(), jobs: service.listAll(), archives: await logs.list(), sessions: [] }))
     ipcMain.handle('settings:set', (_event, key, value) => {
-      assert.equal(key, 'executionSettings'); settings = normalizeExecutionSettings(value); service.configure(settings)
+      // Shared modal hooks also migrate their own preferences in this isolated profile.
+      if (key !== 'executionSettings') { fixturePreferences.set(key, value); return true }
+      settings = normalizeExecutionSettings(value); service.configure(settings)
       fs.writeFileSync(path.join(output, 'settings.json'), JSON.stringify(settings)); return true
     })
     ipcMain.handle('execution:manage', async (event, { id, action }) => {
