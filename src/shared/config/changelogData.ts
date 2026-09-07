@@ -69,6 +69,129 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.68",
+    "rawVersion": "1.7.68",
+    "date": "2026-09-07",
+    "title": "工作台布局自定义与终端体验改进",
+    "titleEn": "Custom Workbench Layouts & Terminal Improvements",
+    "highlight": "支持调整工作台面板顺序、比例与终端停靠位置，并按工作区记住布局。修复非交互命令失败时诊断输出被覆盖的问题，新增终端标签右键菜单、归档一键清理和可配置的自动回收策略，同时优化后台及被遮挡区域的装饰动画。",
+    "highlightEn": "Reorder and resize workbench panels, choose where terminals dock, and save layouts per workspace. Failed non-interactive commands now retain their diagnostic output. Terminal tab context menus, bulk archive cleanup, and configurable retention policies make execution history easier to manage, while decorative animations pause in background windows and occluded areas.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "工作台布局 / Workbench Layouts",
+        "labelEn": "Workbench Layouts",
+        "items": [
+          {
+            "title": "按工作习惯调整面板与终端",
+            "titleEn": "Arrange Panels and Terminals to Suit Your Workflow",
+            "details": [
+              "在外观面板的工作台设置中选择经典或 Agent 布局，调整侧栏、编辑器和 Agent 面板的显示、顺序与分区比例，并通过缩略预览查看布局。",
+              "终端可停靠在编辑器下方、Agent 下方或整个窗口底部；支持聚焦编辑器或 Agent，并恢复完整布局。",
+              "布局和面板显示状态按工作区保存，重新打开工作区时恢复；调整布局时保留编辑器、聊天输入和终端会话状态。"
+            ],
+            "detailsEn": [
+              "Choose Classic or Agent layouts in the appearance panel's workbench settings. Control panel visibility, order, and proportions, with a miniature layout preview.",
+              "Dock terminals below the editor, below the Agent, or across the bottom of the window. Focus the editor or Agent and restore the full layout when needed.",
+              "Layouts and panel visibility are saved per workspace and restored when reopening it. Layout changes preserve editor state, chat drafts, and terminal sessions."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "终端标签与输出归档 / Terminal Tabs and Output Archives",
+        "labelEn": "Terminal Tabs and Output Archives",
+        "items": [
+          {
+            "title": "终端标签右键管理",
+            "titleEn": "Manage Terminal Tabs from the Context Menu",
+            "details": [
+              "新增关闭当前、其他、右侧、全部及已完成命令标签的操作，支持鼠标中键关闭标签。",
+              "可复制所选终端的 ID、命令和工作目录；关闭运行中的终端会停止进程，关闭已完成命令只移除标签。"
+            ],
+            "detailsEn": [
+              "Close the current tab, other tabs, tabs to the right, all tabs, or completed command tabs. Middle-clicking a tab also closes it.",
+              "Copy the selected terminal's ID, command, or working directory. Closing a running terminal stops its process; closing a completed command removes only its tab."
+            ]
+          },
+          {
+            "title": "归档清理与标签自动收拢",
+            "titleEn": "Archive Cleanup and Automatic Tab Retention",
+            "details": [
+              "执行管理器新增一键清理普通归档，覆盖所有窗口并保留已标记保留的日志和正在写入的日志。",
+              "普通归档默认保留 7 天，仍受磁盘预算约束；标记保留的日志不按天清理。",
+              "已完成的非交互命令标签默认保留最近 10 个，完成约 5 分钟后自动关闭，当前选中的标签继续保留；关闭标签后仍可在归档查看保留期内的日志。",
+              "归档保留天数、已完成标签数量及保留时间均可在「执行管理 → 容量设置」调整，界面同步展示当前策略。"
+            ],
+            "detailsEn": [
+              "The execution manager can clear unpinned archives across all windows in one action, while preserving pinned logs and logs that are still being written.",
+              "Unpinned archives are retained for 7 days by default and remain subject to the disk budget. Pinned logs do not expire by age.",
+              "Completed non-interactive command tabs default to the latest 10 and close approximately 5 minutes after completion, while the selected tab stays open. Logs remain available in archives within their retention period.",
+              "Configure archive retention days, completed tab counts, and tab retention time under Execution Manager → Capacity Settings. The current policies are displayed in the interface."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "终端执行与诊断 / Terminal Execution and Diagnostics",
+        "labelEn": "Terminal Execution and Diagnostics",
+        "items": [
+          {
+            "title": "保留失败命令的诊断输出",
+            "titleEn": "Preserve Diagnostics from Failed Commands",
+            "details": [
+              "修复非交互命令以非零退出码结束时，已捕获的 stdout/stderr 被简短失败状态覆盖的问题，确保 AI 助手能够读取构建和类型检查错误。",
+              "命令结果明确显示退出码并保留最终输出元数据；即使缓存内容已全部移除，也会显示输出截断标记。"
+            ],
+            "detailsEn": [
+              "Fix captured stdout/stderr being replaced by a short failure status when a non-interactive command exits with a nonzero code, allowing the AI assistant to read build and type-check diagnostics.",
+              "Command results explicitly show exit codes and retain final output metadata. Truncation is reported even when no buffered output remains."
+            ]
+          },
+          {
+            "title": "改善终端复用与错误提示",
+            "titleEn": "Improve Terminal Reuse and Error Messages",
+            "details": [
+              "修复超过 16 KB 的输出块导致命令结束标记被跳过、交互终端持续占用的问题，命令确认结束后正常释放占用。",
+              "读取终端输出时区分不可用 ID 与已有终端的空输出，列出可用终端 ID，并明确提示暂不支持 last / recent 别名。",
+              "细化终端被占用、人工控制及状态异常的提示，并给出查看输出或停止终端的处理入口。"
+            ],
+            "detailsEn": [
+              "Fix command completion markers being skipped in output chunks larger than 16 KB, which could leave interactive terminals occupied. Capacity is released once completion is confirmed.",
+              "Distinguish unavailable terminal IDs from empty output on existing terminals, list available IDs, and clarify that last / recent aliases are not supported.",
+              "Provide more specific messages for occupied, manually controlled, and unavailable terminal states, with guidance to inspect output or stop the terminal."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "界面性能与质量 / Interface Performance and Quality",
+        "labelEn": "Interface Performance and Quality",
+        "items": [
+          {
+            "title": "减少无效动画与完善界面一致性",
+            "titleEn": "Reduce Unnecessary Animation and Improve Interface Consistency",
+            "details": [
+              "装饰性循环动画遵循用户开关和系统减弱动态效果设置，在窗口失焦、隐藏或相关区域被遮挡时暂停；后台 Agent 任务继续执行。",
+              "统一外观设置、标题栏和工作台布局控件的样式及中英文文案，改善较窄面板下终端工具栏的收纳。",
+              "清理未引用的翻译键、多余转义和不规则空白，改进界面诊断脚本的参数传递，并补充终端输出、回收及归档保留的回归验证。"
+            ],
+            "detailsEn": [
+              "Decorative loops respect the user preference and system reduced-motion setting, pausing when the window loses focus, becomes hidden, or the relevant area is occluded. Background Agent tasks continue running.",
+              "Unify appearance settings, title bar controls, and workbench layout controls with consistent styling and Chinese and English labels, and improve terminal toolbar overflow in narrow panels.",
+              "Remove unused translation keys, unnecessary escapes, and irregular whitespace. Improve parameter passing in UI diagnostics and add regression coverage for terminal output, recycling, and archive retention."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.67",
     "rawVersion": "1.7.67",
     "date": "2026-09-06",
@@ -76,8 +199,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Execution Management, Notifications & Device Preview",
     "highlight": "新增执行管理器，集中查看跨窗口命令、后台服务和日志，支持服务托管与资源限额设置；任务完成、失败和待审批可通过系统通知或 Webhook 提醒。内嵌预览新增手机、平板与横竖屏切换，并按项目隔离登录态。后台任务支持任务栏进度、防休眠和唤醒后连接检查，同时新增性能诊断，将索引、存储与内容解析迁入独立进程。",
     "highlightEn": "The new execution manager brings commands, background services, and logs from all windows together, with service hosting and configurable resource limits. System notifications and webhooks can report completion, failures, and pending approvals. Embedded previews gain phone and tablet modes, orientation switching, and project-isolated sign-in state. Background controls add taskbar progress, optional sleep prevention, and connection checks after wake, alongside performance diagnostics and separate processes for indexing, storage, and content parsing.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
