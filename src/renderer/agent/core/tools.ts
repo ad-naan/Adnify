@@ -603,9 +603,12 @@ async function executeSingle(
 
     const duration = Date.now() - startTime
 
-    const rawContent = sanitizeToolTextOutput(result.success
-      ? (result.result !== undefined && result.result !== null ? result.result : 'Success')
-      : `Error: ${result.error || 'Unknown error'}`)
+    // A failed command can carry its diagnostics in result and only a short
+    // status in error. Preserve both when sending the tool response to the model.
+    const resultText = sanitizeToolTextOutput(result.result ?? (result.success ? 'Success' : ''))
+    const errorText = sanitizeToolTextOutput(result.error || 'Unknown error')
+    const rawContent = result.success ? resultText
+      : `Error: ${errorText}${resultText && resultText !== errorText ? `\n${resultText}` : ''}`
 
     const content = boundToolOutput(toolCall.name, rawContent, result.success)
 

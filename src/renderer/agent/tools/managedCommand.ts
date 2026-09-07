@@ -9,16 +9,17 @@ function resultFor(job: ExecutionSnapshot): ToolExecutionResult {
   const status = job.reason === 'execution_timeout' ? 'Execution timed out; process exit confirmed'
     : job.status === 'expired' ? `Not started: ${job.reason}`
     : `${job.status}${job.reason ? `: ${job.reason}` : ''}`
-  const header = `Job/Terminal ID: ${job.jobId}\nStatus: ${status}`
+  const header = `Job/Terminal ID: ${job.jobId}\nStatus: ${status}\nExit code: ${job.exitCode ?? 'unknown'}`
   const continuation = !finished
     ? '\nThe process is still tracked. Use read_terminal_output to inspect status/logs, send_terminal_input for input, or stop_terminal to stop it. Do not start the same command again.' : ''
   return {
     success: successful || (!finished && job.status !== 'unknown'),
-    result: `${header}${continuation}${job.output ? `\n${job.truncated ? '[Earlier output truncated]\n' : ''}${job.output}` : ''}`,
+    result: `${header}${continuation}${job.truncated ? '\n[Earlier output truncated]' : ''}${job.output ? `\n${job.output}` : ''}`,
     error: finished && !successful || job.status === 'unknown' ? status : undefined,
     meta: { command: job.command, cwd: job.cwd, jobId: job.jobId, terminalId: job.jobId,
       finalStatus: job.status, exitCode: job.exitCode, timedOut: job.reason === 'execution_timeout',
-      isBackground: job.mode === 'background', executionMode: 'managed', truncated: job.truncated },
+      isBackground: job.mode === 'background', executionMode: 'managed', truncated: job.truncated,
+      output: job.output },
   }
 }
 

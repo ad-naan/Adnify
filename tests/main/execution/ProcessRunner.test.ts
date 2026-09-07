@@ -20,6 +20,17 @@ describe('managed shell process', { timeout: 20_000 }, () => {
       command: process.platform === 'win32' ? "Write-Error 'expected failure'" : 'false' }, () => {})
     expect((await child.done).exitCode).not.toBe(0)
   })
+  it.each([0, 1, 2])('captures both native streams on exit %i', async exitCode => {
+    let output = ''
+    const script = `process.stdout.write('stdout 中文\\n'); process.stderr.write('stderr TS2430\\n'); process.exitCode = ${exitCode}`
+    const command = process.platform === 'win32'
+      ? `& '${process.execPath.replace(/'/g, "''")}' -e \"${script}\"`
+      : `'${process.execPath.replace(/'/g, "'\\''")}' -e \"${script}\"`
+    const child = startExecutionProcess({ shell, cwd: process.cwd(), command }, text => { output += text })
+    expect((await child.done).exitCode).toBe(exitCode)
+    expect(output).toContain('stdout 中文')
+    expect(output).toContain('stderr TS2430')
+  })
   it('waits for actual process closure after stopping', async () => {
     let ready!: () => void
     const started = new Promise<void>(resolve => { ready = resolve })

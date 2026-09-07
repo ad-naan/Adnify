@@ -5,6 +5,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { browserToolExecutors } from './executors/browser'
+import { readTerminalOutput } from './readTerminalOutput'
 import { toAppError } from '@shared/utils/errorHandler'
 import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
@@ -2201,45 +2202,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async read_terminal_output(args) {
-        const terminalId = args.terminal_id as string
-        const linesCount = (args.lines as number) || 100
-
-        try {
-            const terminalManager = await getTerminalManager()
-            const job = terminalManager.getManagedJob(terminalId)
-            if (job) {
-                const response = await api.execution.wait(terminalId, 0, 0)
-                if (!response.success) throw new Error(response.error)
-                terminalManager.applyExecutionSnapshot(response.job)
-                return { success: true, result: `Job/Terminal ID: ${terminalId}\nStatus: ${response.job.status}${response.job.reason ? ` (${response.job.reason})` : ''}\nExit code: ${response.job.exitCode ?? 'unknown'}\n${response.job.truncated ? '[Earlier output truncated]\n' : ''}${response.job.output.split('\n').slice(-linesCount).join('\n')}`,
-                    meta: { terminalId, jobId: terminalId, finalStatus: response.job.status, exitCode: response.job.exitCode } }
-            }
-            const lines = terminalManager.getOutputBuffer(terminalId)
-
-            if (!lines || lines.length === 0) {
-                return {
-                    success: true,
-                    result: '[Empty buffer. Either the terminal was closed, invalid, or it has not produced output yet]'
-                }
-            }
-
-            // 返回清理掉 ANSI 色彩字符的内容以便 AI 解析
-            const rawOutput = lines.slice(-linesCount).join('')
-            const cleanOutput = rawOutput
-                // eslint-disable-next-line no-control-regex -- Intentionally match protocol/control bytes for terminal handling or input sanitization.
-                .replace(/\x1b\[[0-9;]*[mGK]/g, '')
-                .replace(/\r\n/g, '\n')
-                .trim()
-
-            return {
-                success: true,
-                result: cleanOutput || '[Terminal produced no printable output]',
-                meta: { terminalId }
-            }
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error)
-            return { success: false, result: `Failed to read terminal output: ${errorMsg}`, error: errorMsg }
-        }
+        return readTerminalOutput(args.terminal_id as string, (args.lines as number) || 100)
     },
 
     async send_terminal_input(args) {

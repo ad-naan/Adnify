@@ -85,4 +85,15 @@ describe('terminalShellIntegration', () => {
     // The malformed sequence has been discarded and cannot swallow a later event.
     expect(parser.push('\x1b]633;D;7\x07')).toEqual(['D;7'])
   })
+
+  it('parses lifecycle markers around large output and a split final marker', () => {
+    const parser = createShellIntegrationOscParser()
+    expect(parser.push('\x1b]633;C\x07' + 'diagnostic\n'.repeat(4000) + '\x1b]633;D;')).toEqual(['C'])
+    expect(parser.push('2\x07\x1b]633;A\x07')).toEqual(['D;2', 'A'])
+  })
+
+  it('bounds oversized complete payloads while keeping subsequent markers', () => {
+    const parser = createShellIntegrationOscParser()
+    expect(parser.push('\x1b]633;E;' + 'x'.repeat(20_000) + '\x07\x1b]633;D;2\x07')).toEqual(['D;2'])
+  })
 })

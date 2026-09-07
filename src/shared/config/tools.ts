@@ -714,7 +714,7 @@ Ordinary commands do not inherit temporary shell variables from previous calls. 
         displayName: 'Read Terminal',
         description: 'Read the output buffer of a background UI terminal.',
         detailedDescription: `Get the recent output lines of a running terminal.
-- Use the terminal ID returned from a background run_command
+- Use the exact terminal ID returned from run_command; "last" and "recent" aliases are not supported
 - By default returns the last 100 lines`,
         category: 'terminal',
         approvalType: 'none',

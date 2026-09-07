@@ -123,6 +123,28 @@ describe('Tools Core - Parallel Execution', () => {
   })
 
   describe('Parallel Tool Execution Performance', () => {
+    it('preserves failed command diagnostics alongside the error status', async () => {
+      vi.mocked(toolManager.execute).mockResolvedValueOnce({
+        success: false,
+        result: 'Job/Terminal ID: build-job\nStatus: failed\nstdout: building\nstderr: TS2430 incompatible interface',
+        error: 'failed',
+        meta: { finalStatus: 'failed', exitCode: 2, executionMode: 'managed' },
+      })
+      const requestId = 'failed-build-request'
+      const execution = executeTools(
+        [{ id: 'failed-build', name: 'run_command', arguments: { command: 'pnpm build' }, status: 'pending' }],
+        { ...context, requestId }, getStore(),
+      )
+      setTimeout(() => approvalService.approve(requestId), 0)
+      const outcome = await execution
+      const result = outcome.results[0].result
+      expect(result.content).toContain('stdout: building')
+      expect(result.content).toContain('stderr: TS2430 incompatible interface')
+      expect(result.content).toContain('failed')
+      expect(result.meta).toMatchObject({ finalStatus: 'failed', exitCode: 2 })
+      expect(result.status).toBe('error')
+    })
+
     it('persists progress on the running tool without finishing it or creating another call', async () => {
       let finish!: () => void
       const gate = new Promise<void>(resolve => { finish = resolve })

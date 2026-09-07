@@ -44,9 +44,9 @@ export class InteractiveSessionRegistry {
   }
   claim(ownerId: number, id: string): string {
     const session = this.owned(ownerId, id)
-    if (session.lease || session.snapshot.userControlled || !['starting', 'ready'].includes(session.snapshot.state)) {
-      throw new Error('Terminal is busy, manually controlled, or its state is unknown')
-    }
+    if (session.snapshot.userControlled) throw new Error(`Terminal ${id} is manually controlled. Use a new Agent terminal.`)
+    if (session.lease) throw new Error(`Terminal ${id} has an active command lease; completion has not been confirmed. Use read_terminal_output to inspect it or stop_terminal to stop it.`)
+    if (!['starting', 'ready'].includes(session.snapshot.state)) throw new Error(`Terminal ${id} is ${session.snapshot.state}. Use read_terminal_output to inspect it or stop_terminal to stop it.`)
     const leaseId = randomUUID()
     session.lease = { id: leaseId, submitted: false, started: false }
     session.snapshot.disposable = false

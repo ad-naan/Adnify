@@ -69,13 +69,6 @@ export function createShellIntegrationOscParser(): {
           pending = retained > 0 ? pending.slice(-retained) : ''
         }
 
-        // A valid lifecycle OSC is tiny. Refuse to accumulate malformed or
-        // unterminated data before attempting another payload extraction.
-        if (pending.length > 16_384) {
-          retainPrefixTail()
-          return payloads
-        }
-
         for (;;) {
           const start = pending.indexOf(prefix)
           if (start < 0) {
@@ -103,12 +96,14 @@ export function createShellIntegrationOscParser(): {
             pending = pending.slice(next)
             continue
           }
-          if (pending.length > 16_384) pending = ''
+          // Bound an unfinished OSC, not the whole PTY chunk: a large build
+          // log can contain valid start/end markers that must still be parsed.
+          if (pending.length > 16_384) retainPrefixTail()
           return payloads
         }
 
           const payload = pending.slice(prefix.length, end)
-          if (payload) payloads.push(payload)
+          if (payload && end <= 16_384) payloads.push(payload)
           pending = pending.slice(end + terminatorLength)
       }
     },
