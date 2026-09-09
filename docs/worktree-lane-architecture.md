@@ -25,9 +25,9 @@ while an unnecessary lane only costs one `worktree add`.
 
 A top-level Agent run is the one case allowed to degrade: sending a second chat
 message is not a declaration of parallel writing, so when a lane is unavailable
-(no repository, no commits, dirty base) the run continues in the shared workspace
-and posts a visible warning. Sub-agents and Plan tasks are real parallel writers,
-so for them an unavailable lane is a hard error.
+(no repository, no commits, Git operation failure) the run continues in the
+shared workspace and posts a visible warning. Sub-agents and Plan tasks are real
+parallel writers, so for them an unavailable lane is a hard error.
 
 ## Shared ownership
 
@@ -51,8 +51,8 @@ repository-local `.git/info/exclude`; Adnify never modifies the project's
 `.gitignore` for machine-local execution state. Excluding only
 `.adnify/worktrees/` is not enough: Adnify itself writes `.adnify/plan/*.md` and
 agent scratch state, which would keep the base workspace permanently dirty (so
-no lane could ever be created) and would be committed into merges by the lane's
-`git add -A`.
+lanes could never merge automatically) and would be committed into merges by
+the lane's `git add -A`.
 
 Callers may persist a projection of the lane state for UI, but must not issue
 their own worktree commands. The lane → UI mapping lives in exactly one place
@@ -98,10 +98,12 @@ active -> merged      (merged into the base branch; folder and branch removed)
       \-> failed      (a lane Git operation itself failed; needs inspection)
 ```
 
-- Lane creation is based on the current `HEAD`, and records `baseBranch` plus
-  `baseCommit`.
-- A dirty base workspace is not equivalent to that `HEAD`, so a lane is never
-  created from one.
+- Lane creation resolves the current `HEAD`, records `baseBranch` plus
+  `baseCommit`, and checks out that exact commit even if `HEAD` advances meanwhile.
+- Uncommitted changes in the base workspace do not block lane creation. Staged,
+  unstaged, and untracked files stay in the base workspace; they are not copied
+  into the lane. This lets a second session remain isolated while the first
+  session edits the shared workspace.
 - Merges are serialized across Agent and Plan, and refuse to run when the base
   workspace is dirty or has moved to a different branch than `baseBranch` —
   merging onto the wrong branch is worse than retaining the lane.

@@ -113,25 +113,23 @@ class WorktreeLaneServiceClass {
   private async createNow(workspacePath: string, label: string): Promise<WorktreeLaneHandle> {
     await this.sweepOnce(workspacePath)
 
-    // 排除必须在洁净度检查之前：应用自己往 `.adnify/` 里写 plan 文档和 agent 临时
-    // 文件，仓库没把它加进 .gitignore 时这些未跟踪文件会让检查永远失败 —— 而本该
-    // 让检查通过的那条 exclude 却排在检查后面，于是每次重试都同样失败。
+    // 排除应用状态，避免嵌套 worktree 和临时文件污染主工作区状态及车道提交。
     await this.ensureExcluded(workspacePath)
 
-    if (!await gitService.isWorkingTreeClean(workspacePath)) {
-      throw new LaneUnavailableError(
-        'Cannot start an isolated parallel writer while the base workspace has uncommitted changes.',
-        notice('dirtyBase'),
-      )
-    }
+    // 车道从已提交的版本创建，主工作区的暂存、未暂存和未跟踪改动都留在原处。
+    // 并发会话通常正在修改主工作区，不能因此拒绝隔离并退回同一个目录。
+    // 洁净度只在合并回主工作区时检查。
     const id = crypto.randomUUID().slice(0, 8)
     const segment = laneSegment(label)
     const path = `${this.laneRoot(workspacePath)}/${segment}-${id}`
     const branch = `${WORKTREE_LANE_BRANCH_PREFIX}${segment}-${id}`
     const baseBranch = await gitService.getCurrentBranch(workspacePath) || undefined
     const baseCommit = await gitService.resolveCommit('HEAD', workspacePath) || undefined
+    if (!baseCommit) {
+      throw new LaneUnavailableError('Unable to resolve the base commit for an isolated lane.', notice('createFailed'))
+    }
 
-    const result = await gitService.createWorktree(path, branch, workspacePath)
+    const result = await gitService.createWorktree(path, branch, workspacePath, baseCommit)
     if (!result.success) throw new LaneUnavailableError(result.error || 'Unable to create worktree lane', notice('createFailed'))
 
     const handle: WorktreeLaneHandle = { id, workspacePath, path, branch, baseBranch, baseCommit }
@@ -149,7 +147,7 @@ class WorktreeLaneServiceClass {
    *
    * 应用自己会往 `.adnify/plan/*.md`、agent 临时目录里写机器本地状态。只排除
    * worktrees 的话，任何没有把 `.adnify` 写进 .gitignore 的仓库都会因为这些文件
-   * 一直是脏的 —— 于是 `isWorkingTreeClean` 永远为 false，车道功能整体不可用；
+   * 一直是脏的，导致车道无法自动合并；
    * 而车道里的 `add -A` 又会把这些本地状态提交进合并结果。
    */
   private async ensureExcluded(workspacePath: string): Promise<void> {

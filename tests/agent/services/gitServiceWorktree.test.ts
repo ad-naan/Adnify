@@ -35,6 +35,15 @@ describe('gitService worktree lane commands', () => {
     expect(result).toMatchObject({ success: true })
   })
 
+  it('creates from the recorded commit even if the base HEAD has since advanced', async () => {
+    const baseCommit = '1111111111111111111111111111111111111111'
+    await gitService.createWorktree('D:/repo/.adnify/worktrees/task-1', 'adnify/lane-task-1', 'D:/repo', baseCommit)
+    expect(worktreeLane).toHaveBeenCalledWith(
+      ['worktree', 'add', '-b', 'adnify/lane-task-1', 'D:/repo/.adnify/worktrees/task-1', baseCommit],
+      'D:/repo',
+    )
+  })
+
   it.each([
     { force: false, expected: ['worktree', 'remove', 'D:/repo/.adnify/worktrees/task-1'] },
     { force: true, expected: ['worktree', 'remove', '--force', 'D:/repo/.adnify/worktrees/task-1'] },

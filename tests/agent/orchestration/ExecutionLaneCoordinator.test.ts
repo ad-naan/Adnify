@@ -63,9 +63,9 @@ describe('ExecutionLaneCoordinator', () => {
     { case: 'no repository', setup: () => git.isInsideWorkTree.mockResolvedValue(false), code: 'noRepository' },
     { case: 'no commits', setup: () => git.hasCommits.mockResolvedValue(false), code: 'noCommits' },
     {
-      case: 'dirty base',
-      setup: () => lanes.create.mockRejectedValue(new LaneUnavailableError('uncommitted changes', { code: 'dirtyBase' })),
-      code: 'dirtyBase',
+      case: 'lane creation failure',
+      setup: () => lanes.create.mockRejectedValue(new LaneUnavailableError('worktree add failed', { code: 'createFailed' })),
+      code: 'createFailed',
     },
     {
       case: 'an unclassified Git failure',

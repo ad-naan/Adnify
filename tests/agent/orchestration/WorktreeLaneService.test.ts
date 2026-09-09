@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const git = vi.hoisted(() => ({
+  isInsideWorkTree: vi.fn(),
+  hasCommits: vi.fn(),
   isWorkingTreeClean: vi.fn(),
   getCurrentBranch: vi.fn(),
   resolveCommit: vi.fn(),
@@ -27,6 +29,8 @@ describe('WorktreeLaneService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    git.isInsideWorkTree.mockResolvedValue(true)
+    git.hasCommits.mockResolvedValue(true)
     git.isWorkingTreeClean.mockResolvedValue(true)
     git.getCurrentBranch.mockResolvedValue('main')
     git.resolveCommit.mockResolvedValue('base000')
@@ -45,15 +49,35 @@ describe('WorktreeLaneService', () => {
     service = (await import('@/renderer/agent/orchestration/WorktreeLaneService')).WorktreeLaneService
   })
 
-  it('blocks isolation from a dirty base snapshot', async () => {
+  it('isolates a second session even while the shared workspace has uncommitted edits', async () => {
     git.isWorkingTreeClean.mockResolvedValue(false)
-    await expect(service.create('D:/repo', 'write task')).rejects.toThrow('uncommitted changes')
+    const { ExecutionLaneCoordinator } = await import('@/renderer/agent/orchestration/ExecutionLaneCoordinator')
+    const assignment = await ExecutionLaneCoordinator.acquire({
+      kind: 'agent-session', workspacePath: 'D:/repo', label: 'second session',
+      mayWrite: true, concurrent: true, allowSharedFallback: true,
+    })
+    expect(assignment.isolated).toBe(true)
+    expect(assignment.workspacePath).toBe(assignment.lane?.path)
+    expect(assignment.workspacePath).not.toBe('D:/repo')
+    expect(assignment.fallbackNotice).toBeUndefined()
+    expect(git.createWorktree).toHaveBeenCalledWith(assignment.lane?.path, assignment.lane?.branch, 'D:/repo', 'base000')
+
+    // 能开始隔离不意味着能覆盖主目录的未提交改动：结果留在分支，等待后续合并。
+    const result = await ExecutionLaneCoordinator.complete(assignment, 'done')
+    expect(result).toMatchObject({ outcome: 'retained', archived: true, notice: { code: 'dirtyBaseMerge' } })
+    expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
+    expect(git.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  it('does not create a lane without a resolved base commit', async () => {
+    git.resolveCommit.mockResolvedValue(null)
+    await expect(service.create('D:/repo', 'write task')).rejects.toMatchObject({ notice: { code: 'createFailed' } })
     expect(git.createWorktree).not.toHaveBeenCalled()
   })
 
   it('excludes the whole .adnify directory, not just the worktree root', async () => {
     // 只排除 .adnify/worktrees 时，应用自己写的 .adnify/plan/*.md 会让基准工作区
-    // 永远是脏的，车道功能整体失效
+    // 永远是脏的，车道无法自动合并
     await service.create('D:/repo', 'write task')
     expect(exclude.update).toHaveBeenCalledWith('D:/repo', 'D:/repo/.adnify', true, 'add', 'exclude')
   })

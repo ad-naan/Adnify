@@ -1009,8 +1009,8 @@ class GitService {
         }
     }
 
-    async createWorktree(path: string, branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
-        const result = await this.execLane(['worktree', 'add', '-b', branch, path, 'HEAD'], rootPath)
+    async createWorktree(path: string, branch: string, rootPath?: string, baseCommit = 'HEAD'): Promise<GitWorktreeLaneResult> {
+        const result = await this.execLane(['worktree', 'add', '-b', branch, path, baseCommit], rootPath)
         return result.exitCode === 0
             ? { success: true, path, branch }
             : { success: false, error: (result.stderr || result.stdout || 'Unable to create worktree').trim() }
