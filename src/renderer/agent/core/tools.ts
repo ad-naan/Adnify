@@ -178,7 +178,7 @@ const rejectedApprovalScopes = new Set<string>()
 
 function toolApprovalScope(toolCall: ToolCall, context: ToolExecutionContext): string {
   if (toolCall.name.startsWith('asset_')) return `tool:${toolCall.name}:${JSON.stringify(toolCall.arguments)}`
-  if (toolCall.name === 'extension_apply' && typeof toolCall.arguments.change_set_id === 'string') {
+  if (toolCall.name === 'configuration_apply' && typeof toolCall.arguments.change_set_id === 'string') {
     return extensionApprovalScope(toolCall.arguments.change_set_id)
   }
   if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {

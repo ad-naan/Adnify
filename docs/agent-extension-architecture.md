@@ -1,6 +1,6 @@
 # Agent 扩展配置架构
 
-本文定义 Adnify Agent 自主发现、规划、安装和验证 MCP/Skill 的安全边界。目标不是给模型一个通用 Shell，而是提供少量、可审计的语义工具。
+本文定义 Adnify Agent 自主发现、规划、应用和验证配置的安全边界。模型只看到统一配置工具；当前底层适配器支持 MCP 和 Skill，后续类型不会继续增加模型工具数量。
 
 ## 1. 运行链路
 
@@ -23,14 +23,11 @@ flowchart LR
 
 | 工具 | 是否修改系统 | 审批 |
 | --- | --- | --- |
-| `extension_list` | 否 | 无 |
-| `extension_history` | 否 | 无 |
-| `extension_search` | 否 | 无 |
-| `extension_prepare` | 仅创建 10 分钟有效的内存变更单 | 无 |
-| `extension_apply` | 安装并验证扩展 | 必须，且绑定单一 `changeSetId` |
-| `extension_verify` | 否 | 无 |
+| `configuration_discover` | 否；无查询时列出已配置项，有查询时搜索目录 | 无 |
+| `configuration_prepare` | 仅创建 10 分钟有效的内存变更单 | 无 |
+| `configuration_apply` | 应用并自动验证配置，失败时回滚 | 必须，且绑定单一 `changeSetId` |
 
-隐藏子 Agent 与 Plan 的非执行阶段只暴露搜索和验证工具。只有前台执行 Agent 可以准备和应用变更。
+历史查询和单独验证仍是内部 IPC 能力，不占用 Agent 的工具位。隐藏子 Agent 与 Plan 的非执行阶段只暴露 `configuration_discover`；只有前台执行 Agent 可以准备和应用变更。
 
 ## 3. 事务状态
 
@@ -52,7 +49,7 @@ prepared -> applying -> committed
 
 ## 4. 当前边界与后续演进
 
-当前版本只支持“从官方 MCP Registry 安装”和“从 skills.sh 的 GitHub 来源安装”。Agent 不接触明文密钥；缺少凭据时会暂停应用，等待用户在 MCP 设置页完成安全录入。
+当前版本支持从官方 MCP Registry 安装 MCP，以及从 skills.sh 来源或直接的 GitHub 仓库地址安装 Skill。GitHub URL 仅接受 `https://github.com/owner/repository` 形式；Agent 不接触明文密钥，缺少凭据时会暂停应用，等待用户在 MCP 设置页完成安全录入。
 
 下一阶段按以下顺序演进：
 

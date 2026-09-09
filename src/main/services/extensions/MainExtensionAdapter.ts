@@ -15,6 +15,7 @@ import { getUserConfigDir, getWorkspaceConfigFilePath, CONFIG_FILES } from '../c
 import { McpClient, mcpManager, mcpRegistry } from '../mcp'
 import { extensionCredentialBroker } from './ExtensionCredentialBroker'
 import type { ExtensionTransactionAdapter, PreparedExtension } from './ExtensionTransactionService'
+import { parseSkillSource } from './SkillSource'
 
 interface McpPayload {
   kind: 'mcp'
@@ -45,12 +46,6 @@ function ensureKnownWorkspace(workspacePath: string | null | undefined): string 
   const known = normalizePath(mcpManager.getConfigPaths().workspace[0] || '') === expected
   if (!known) throw new Error('The requested workspace is not active in this window')
   return path.resolve(workspacePath)
-}
-
-function parseSkillSource(source: string): { repositoryUrl: string; skillId: string } {
-  const match = /^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/.exec(source.trim())
-  if (!match) throw new Error('Skill source must use the skills.sh owner/repository@skill-id format')
-  return { repositoryUrl: `https://github.com/${match[1]}/${match[2]}.git`, skillId: match[3] }
 }
 
 function runGitCapture(args: string[], cwd: string, timeoutMs = 60_000): Promise<string> {

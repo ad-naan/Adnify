@@ -27,7 +27,7 @@ export interface ExtensionSearchResult {
 
 export interface ExtensionPrepareRequest {
   kind: ExtensionKind
-  /** MCP registry server name, or skills.sh package in owner/repo@skill-id form. */
+  /** MCP registry server name, skills.sh owner/repo@skill-id, or a direct GitHub repository URL. */
   source: string
   scope: ExtensionScope
   workspacePath?: string | null
