@@ -6,7 +6,7 @@
 
   <h1>Adnify</h1>
 
-  <p><a href="README_CN.md">中文</a> | <strong>English</strong></p>
+  <p><a href="README_CN.md">中文</a> | <strong>English</strong> | <a href="README_JA.md">日本語</a> | <a href="README_KO.md">한국어</a> | <a href="README_ES.md">Español</a> | <a href="README_FR.md">Français</a> | <a href="README_DE.md">Deutsch</a> | <a href="README_PT_BR.md">Português (Brasil)</a> | <a href="README_RU.md">Русский</a></p>
 
   <p><strong>Connect AI to Your Code.</strong></p>
   <p>An AI-native engineering workspace for direct execution and governed multi-agent planning.</p>

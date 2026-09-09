@@ -5,7 +5,7 @@
 </picture>
   <h1>Adnify</h1>
 
-  <p><strong>中文</strong> | <a href="README.md">English</a></p>
+  <p><strong>中文</strong> | <a href="README.md">English</a> | <a href="README_JA.md">日本語</a> | <a href="README_KO.md">한국어</a> | <a href="README_ES.md">Español</a> | <a href="README_FR.md">Français</a> | <a href="README_DE.md">Deutsch</a> | <a href="README_PT_BR.md">Português (Brasil)</a> | <a href="README_RU.md">Русский</a></p>
 
   <p><strong>Connect AI to Your Code.</strong></p>
   <p>面向直接执行与可审查多任务编排的 AI 原生工程工作台。</p>
