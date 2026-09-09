@@ -1,10 +1,9 @@
 .dock-workbench { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: rgb(var(--background)); }
 .dock-panel, .dock-terminal { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: rgb(var(--background)); }
 .dock-panel-content { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-.dock-divider { position: absolute; padding: 0; border: 0; background: rgb(var(--border) / .3); touch-action: none; z-index: 25; cursor: col-resize; }
-.dock-divider[aria-orientation=horizontal] { cursor: row-resize; }
+.dock-divider { position: absolute; padding: 0; border: 0; background: rgb(var(--border) / .3); touch-action: none; z-index: 25; }
 .dock-divider:hover, .dock-divider:focus-visible { background: rgb(var(--accent) / .55); }
-.dock-interaction-shield { position: absolute; inset: 0; z-index: 40; cursor: col-resize; user-select: none; }
+.dock-interaction-shield { position: absolute; inset: 0; z-index: 40; user-select: none; }
 .dock-resize-preview { position: absolute; z-index: 42; pointer-events: none; background: rgb(var(--accent)); }
 .dock-terminal { container-type: inline-size; }
 .terminal-more-actions { display: none; }

@@ -25,7 +25,7 @@ export default function DockWorkbench({ layout, visible, focused, language, pane
   const gestureCleanup = useRef<(() => void) | null>(null)
   const lastRects = useRef<Partial<Record<WorkbenchPanel, PanelRect>>>({})
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [resizePreview, setResizePreview] = useState<PanelRect | null>(null)
+  const [resizePreview, setResizePreview] = useState<(PanelRect & { horizontal: boolean }) | null>(null)
   const shown = focused && visible.includes(focused) ? [focused] : visible
   const geometry = useMemo(() => measureWorkbench(layout, shown, size.width, size.height, terminalVisible, terminalCollapsed), [layout, shown.join(','), size, terminalVisible, terminalCollapsed])
 
@@ -62,7 +62,7 @@ export default function DockWorkbench({ layout, visible, focused, language, pane
       delta = divider === 'terminal'
         ? Math.max((terminalRect?.height || 0) - Math.max(100, terminalParent - 135), Math.min((terminalRect?.height || 0) - 100, raw))
         : Math.max((divider.minRatio - divider.ratio) * divider.available, Math.min((divider.maxRatio - divider.ratio) * divider.available, raw))
-      setResizePreview({ ...rect, x: rect.x + (horizontal ? delta : 0), y: rect.y + (horizontal ? 0 : delta) })
+      setResizePreview({ ...rect, horizontal, x: rect.x + (horizontal ? delta : 0), y: rect.y + (horizontal ? 0 : delta) })
     }
     const cleanup = () => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', finish); window.removeEventListener('pointercancel', cancel)
@@ -83,7 +83,7 @@ export default function DockWorkbench({ layout, visible, focused, language, pane
     gestureCleanup.current = cleanup
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', finish); window.addEventListener('pointercancel', cancel)
     window.addEventListener('keydown', keydown); window.addEventListener('blur', cancel)
-    setResizePreview(rect)
+    setResizePreview({ ...rect, horizontal })
   }
 
   return (
@@ -97,21 +97,21 @@ export default function DockWorkbench({ layout, visible, focused, language, pane
         </DecorativeAnimationScope>
       })}
       <DecorativeAnimationScope paused={!geometry.terminal} className="dock-terminal" style={rectStyle(geometry.terminal)} data-dock-terminal aria-hidden={!geometry.terminal || undefined}>{terminal}</DecorativeAnimationScope>
-      {geometry.dividers.map(divider => <button key={divider.path} type="button" className="dock-divider" style={rectStyle(divider)} role="separator" aria-label={t(divider.direction === 'horizontal' ? 'workbench.resizeWidth' : 'workbench.resizeHeight', language)} aria-orientation={divider.direction === 'horizontal' ? 'vertical' : 'horizontal'} aria-valuenow={Math.round(divider.ratio * 100)} aria-valuemin={Math.round(divider.minRatio * 100)} aria-valuemax={Math.round(divider.maxRatio * 100)} onPointerDown={event => startResize(event, divider)} onDoubleClick={() => onLayoutChange({ ...layout, preset: 'custom', tree: resizeLayout(layout.tree, divider.path, .5) })} onKeyDown={event => {
+      {geometry.dividers.map(divider => <button key={divider.path} type="button" className={`dock-divider ${divider.direction === 'horizontal' ? 'cursor-col-resize' : 'cursor-row-resize'}`} style={rectStyle(divider)} role="separator" aria-label={t(divider.direction === 'horizontal' ? 'workbench.resizeWidth' : 'workbench.resizeHeight', language)} aria-orientation={divider.direction === 'horizontal' ? 'vertical' : 'horizontal'} aria-valuenow={Math.round(divider.ratio * 100)} aria-valuemin={Math.round(divider.minRatio * 100)} aria-valuemax={Math.round(divider.maxRatio * 100)} onPointerDown={event => startResize(event, divider)} onDoubleClick={() => onLayoutChange({ ...layout, preset: 'custom', tree: resizeLayout(layout.tree, divider.path, .5) })} onKeyDown={event => {
         const keys = divider.direction === 'horizontal' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown']
         if (!keys.includes(event.key)) return
         event.preventDefault()
         const ratio = Math.max(divider.minRatio, Math.min(divider.maxRatio, divider.ratio + (event.key === keys[1] ? .025 : -.025)))
         onLayoutChange({ ...layout, preset: 'custom', tree: resizeLayout(layout.tree, divider.path, ratio) })
       }} />)}
-      {geometry.terminalDivider && !terminalCollapsed && <button type="button" className="dock-divider" style={rectStyle(geometry.terminalDivider)} role="separator" aria-orientation="horizontal" aria-label={t('workbench.resizeTerminal', language)} aria-valuenow={Math.round(geometry.terminal!.height)} onPointerDown={event => startResize(event, 'terminal')} onKeyDown={event => {
+      {geometry.terminalDivider && !terminalCollapsed && <button type="button" className="dock-divider cursor-row-resize" style={rectStyle(geometry.terminalDivider)} role="separator" aria-orientation="horizontal" aria-label={t('workbench.resizeTerminal', language)} aria-valuenow={Math.round(geometry.terminal!.height)} onPointerDown={event => startResize(event, 'terminal')} onKeyDown={event => {
         if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return
         event.preventDefault()
         const current = geometry.terminal!.height
         const total = current + (layout.terminalPosition === 'bottom' ? size.height - current : geometry.panels[layout.terminalPosition]!.height)
         onLayoutChange({ ...layout, terminalHeight: Math.max(100, Math.min(total - 135, current + (event.key === 'ArrowUp' ? 20 : -20))) })
       }} />}
-      {resizePreview && <div className="dock-interaction-shield" aria-hidden="true" />}
+      {resizePreview && <div className={`dock-interaction-shield ${resizePreview.horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`} aria-hidden="true" />}
       {resizePreview && <div className="dock-resize-preview" style={rectStyle(resizePreview)} />}
     </div>
   )
