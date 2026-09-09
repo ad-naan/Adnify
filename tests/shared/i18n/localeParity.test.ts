@@ -19,13 +19,14 @@ const SOURCE_ROOT = path.resolve(__dirname, '../../../src')
 /**
  * `src` 下所有 ts/tsx 里出现过的字符串字面量（单引号、双引号、反引号都算）。
  * locale 表本身要排掉 —— 键在那里的定义处当然是字面量，算进来这条守卫就永远是空的。
+ * 测试文件也要排掉，避免测试数据中的同名字面量被误判为实际引用。
  */
 function collectQuotedLiterals(dir: string, into: Set<string>): Set<string> {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      if (entry.name !== 'locales') collectQuotedLiterals(full, into)
-    } else if (/\.tsx?$/.test(entry.name)) {
+      if (entry.name !== 'locales' && entry.name !== '__tests__') collectQuotedLiterals(full, into)
+    } else if (/\.tsx?$/.test(entry.name) && !/\.(test|spec)\.tsx?$/.test(entry.name)) {
       const source = fs.readFileSync(full, 'utf8')
       for (const match of source.matchAll(/['"`]([A-Za-z][A-Za-z0-9_.]*)['"`]/g)) into.add(match[1])
     }
