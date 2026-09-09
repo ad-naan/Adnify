@@ -10,8 +10,10 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { mcpService } from '@services/mcpService'
-import { Button, Modal, Switch } from '@components/ui'
+import { api } from '@services/electronAPI'
+import { Button, Input, Modal, Switch } from '@components/ui'
 import type { McpServerConfig, McpServerState, McpServerStatus } from '@shared/types/mcp'
+import type { ExtensionChangeSet } from '@shared/types/extensions'
 import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
@@ -42,10 +44,33 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
   const [actionError, setActionError] = useState<string | null>(null)
   // 追踪正在等待浏览器授权的服务器（OAuth pending）
   const [oauthPendingServers, setOauthPendingServers] = useState<Set<string>>(new Set())
+  const [pendingCredentialChanges, setPendingCredentialChanges] = useState<ExtensionChangeSet[]>([])
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
+  const [credentialSaving, setCredentialSaving] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfigPaths()
+    void loadPendingCredentialChanges()
   }, [])
+
+  const loadPendingCredentialChanges = async () => {
+    const result = await api.extensions.pendingCredentials()
+    setPendingCredentialChanges(result.success ? result.changes || [] : [])
+  }
+
+  const savePendingCredential = async (reference: string) => {
+    const secret = credentialValues[reference]
+    if (!secret) return
+    setCredentialSaving(reference)
+    const result = await api.extensions.credentialSet({ reference, secret })
+    if (result.success) {
+      setCredentialValues(previous => ({ ...previous, [reference]: '' }))
+      await loadPendingCredentialChanges()
+    } else {
+      setActionError(result.error || t('mcpSettings.credentialSaveFailed', language))
+    }
+    setCredentialSaving(null)
+  }
 
   // 当服务器状态变为 connected/error/disconnected/needs_auth 时，清除 OAuth pending 标记
   useEffect(() => {
@@ -764,6 +789,68 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             {t('mcpSettings.dismiss', language)}
           </button>
         </div>
+      )}
+
+      {pendingCredentialChanges.length > 0 && (
+        <section className="space-y-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Key className="mt-0.5 h-4 w-4 text-amber-400" />
+              <div>
+                <h4 className="text-sm font-medium text-text-primary">
+                  {t('mcpSettings.completeAgentMcpSetup', language)}
+                </h4>
+                <p className="mt-1 text-xs text-text-muted">
+                  {t('mcpSettings.credentialsStayInMainProcess', language)}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void loadPendingCredentialChanges()}
+              title={t('mcpSettings.refreshCredentialStatus', language)}
+              aria-label={t('mcpSettings.refreshCredentialStatus', language)}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          {pendingCredentialChanges.map(change => (
+            <div key={change.id} className="space-y-3 rounded-lg border border-border bg-background/40 p-4">
+              <div className="text-xs font-semibold text-text-primary">{change.displayName}</div>
+              {change.credentialRequirements.map(requirement => requirement.reference && (
+                <div key={requirement.reference} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="min-w-0 flex-1 space-y-1">
+                    <span className="block text-[11px] text-text-muted">{requirement.name}</span>
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      disabled={requirement.configured}
+                      value={credentialValues[requirement.reference] || ''}
+                      placeholder={requirement.configured
+                        ? t('mcpSettings.securelyConfigured', language)
+                        : (requirement.description || requirement.name)}
+                      onChange={event => setCredentialValues(previous => ({ ...previous, [requirement.reference!]: event.target.value }))}
+                    />
+                  </label>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={requirement.configured || !credentialValues[requirement.reference] || credentialSaving === requirement.reference}
+                    onClick={() => void savePendingCredential(requirement.reference!)}
+                    className="w-full sm:w-auto"
+                  >
+                    {credentialSaving === requirement.reference
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : requirement.configured
+                        ? <Check className="h-4 w-4 text-green-400" />
+                        : t('mcpSettings.saveSecurely', language)}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </section>
       )}
 
       {/* Server List */}

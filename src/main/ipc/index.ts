@@ -21,6 +21,7 @@ import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 import { registerSkillsHandlers } from './skills' // Skills
+import { registerExtensionHandlers } from './extensions'
 import { registerProviderCredentialHandlers } from './providerCredentials'
 import { registerSessionStorageHandlers } from './sessionStorage'
 import { registerFormatterHandlers } from './formatter'
@@ -138,6 +139,12 @@ export function registerAllHandlers(context: IPCContext) {
 
   // Skills
   registerSkillsHandlers()
+
+  // Agent-managed MCP / Skill transactions
+  registerExtensionHandlers(event => resolveWorkspaceFromEvent(event, {
+    getWindowWorkspace: context.getWindowWorkspace,
+    workspaceMetaStore,
+  }))
 
   registerProviderCredentialHandlers()
   registerAssetHandlers(context)

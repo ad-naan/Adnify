@@ -6,6 +6,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
 import * as os from 'os'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
@@ -304,14 +305,19 @@ export class McpConfigLoader {
   }
 
   private async saveConfigFile(filePath: string, config: McpConfig): Promise<void> {
+    let temporaryPath: string | undefined
     try {
       const dir = path.dirname(filePath)
       await fs.promises.mkdir(dir, { recursive: true })
 
       const content = JSON.stringify(config, null, 2)
-      await fs.promises.writeFile(filePath, content, 'utf-8')
+      temporaryPath = path.join(dir, `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`)
+      await fs.promises.writeFile(temporaryPath, content, { encoding: 'utf-8', mode: 0o600 })
+      await fs.promises.rename(temporaryPath, filePath)
+      temporaryPath = undefined
       logger.mcp?.info(`[McpConfigLoader] Saved config: ${filePath}`)
     } catch (err) {
+      if (temporaryPath) await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined)
       const error = toAppError(err)
       logger.mcp?.error(`[McpConfigLoader] Failed to save config: ${filePath} - ${error.code}`, error)
       throw error

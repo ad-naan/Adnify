@@ -9,6 +9,9 @@ export * from './llm'
 // MCP 相关类型
 export * from './mcp'
 
+// Agent-managed MCP / Skill extension transactions
+export * from './extensions'
+
 // Preview 相关类型
 export * from './preview'
 

@@ -36,6 +36,7 @@ import {
   normalizeLocalCommandArgs,
   extractImportantStderr,
 } from './McpEnvHelper'
+import { extensionCredentialBroker } from '../extensions/ExtensionCredentialBroker'
 
 export { normalizeLocalCommandArgs }
 
@@ -113,19 +114,21 @@ export class McpClient extends EventEmitter {
     const { config } = this.state
 
     try {
-      if (isRemoteConfig(config)) {
-        await this.connectRemote(config)
+      const resolvedConfig = extensionCredentialBroker.resolveConfig(config)
+      if (isRemoteConfig(resolvedConfig)) {
+        await this.connectRemote(resolvedConfig)
       } else {
-        await this.connectLocal(config)
+        await this.connectLocal(resolvedConfig)
       }
     } catch (err) {
       const error = toAppError(err)
-      logger.mcp?.error(`[MCP:${config.id}] Connection failed: ${error.code}`, error)
+      const safeMessage = extensionCredentialBroker.redact(error.message)
+      logger.mcp?.error(`[MCP:${config.id}] Connection failed: ${error.code}`, { code: error.code, message: safeMessage })
       if (this.state.status !== 'needs_auth' && this.state.status !== 'needs_registration') {
-        this.updateStatus('error', error.message)
+        this.updateStatus('error', safeMessage)
         this.scheduleReconnect()
       }
-      throw error
+      throw new Error(safeMessage)
     }
   }
 
@@ -148,7 +151,7 @@ export class McpClient extends EventEmitter {
       const text = data.toString().trim()
       if (text) {
         stderrOutput += text + '\n'
-        logger.mcp?.warn(`[MCP:${config.id}] stderr: ${text}`)
+        logger.mcp?.warn(`[MCP:${config.id}] stderr: ${extensionCredentialBroker.redact(text)}`)
       }
     })
 
@@ -167,10 +170,10 @@ export class McpClient extends EventEmitter {
     } catch (err) {
       const refinedError = extractImportantStderr(stderrOutput)
       if (stderrOutput) {
-        logger.mcp?.error(`[MCP:${config.id}] Process stderr output:\n${stderrOutput}`)
+        logger.mcp?.error(`[MCP:${config.id}] Process stderr output:\n${extensionCredentialBroker.redact(stderrOutput)}`)
       }
       if (refinedError) {
-        const errorWithDetails = new Error(`${toAppError(err).message} (${refinedError})`)
+        const errorWithDetails = new Error(extensionCredentialBroker.redact(`${toAppError(err).message} (${refinedError})`))
         throw errorWithDetails
       }
       throw err

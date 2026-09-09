@@ -98,6 +98,11 @@ export function fileApprovalScope(filePath: string, access: 'read' | 'write' | '
   return `file:${access}:${normalizeApprovalPath(filePath)}`
 }
 
+/** Bind an approval to one immutable, server-side extension change set. */
+export function extensionApprovalScope(changeSetId: string): string {
+  return `extension-change:${changeSetId.trim()}`
+}
+
 export function isRecentAgentApprovalProof(value: unknown, expectedScope?: string, now = Date.now()): value is AgentApprovalProof {
   if (!value || typeof value !== 'object') return false
   const proof = value as Partial<AgentApprovalProof>

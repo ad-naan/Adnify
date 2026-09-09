@@ -545,6 +545,19 @@ export interface ElectronAPI {
   skillsDeleteGlobalSkill: (skillDir: string) => Promise<boolean>
   skillsImportExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => Promise<{ success: boolean; targetDir?: string; error?: string }>
 
+  // Agent-managed extension transactions
+  extensionsSearch: (request: import('@shared/types/extensions').ExtensionSearchRequest) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsList: () => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsHistory: (limit?: number) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsPrepare: (request: import('@shared/types/extensions').ExtensionPrepareRequest) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsApply: (request: import('@shared/types/extensions').ExtensionApplyRequest) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsVerify: (changeSetId: string) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsGet: (changeSetId: string) => Promise<import('@shared/types/extensions').ExtensionOperationResult>
+  extensionsCredentialStatus: (references: string[]) => Promise<{ success: boolean; credentials?: import('@shared/types/extensions').ExtensionCredentialStatus[]; error?: string }>
+  extensionsCredentialSet: (request: import('@shared/types/extensions').ExtensionCredentialSetRequest) => Promise<{ success: boolean; error?: string }>
+  extensionsCredentialRemove: (reference: string) => Promise<{ success: boolean; error?: string }>
+  extensionsPendingCredentials: () => Promise<{ success: boolean; changes?: import('@shared/types/extensions').ExtensionChangeSet[]; error?: string }>
+
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
 
@@ -1018,6 +1031,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skillsGetGlobalDirs: () => ipcRenderer.invoke('skills:getGlobalDirs'),
   skillsDeleteGlobalSkill: (skillDir: string) => ipcRenderer.invoke('skills:deleteGlobalSkill', skillDir),
   skillsImportExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => ipcRenderer.invoke('skills:importExternalSkill', sourceSkillDir, level, workspacePath),
+
+  // Agent-managed extension transactions
+  extensionsSearch: (request: import('@shared/types/extensions').ExtensionSearchRequest) => ipcRenderer.invoke('extensions:search', request),
+  extensionsList: () => ipcRenderer.invoke('extensions:list'),
+  extensionsHistory: (limit?: number) => ipcRenderer.invoke('extensions:history', limit),
+  extensionsPrepare: (request: import('@shared/types/extensions').ExtensionPrepareRequest) => ipcRenderer.invoke('extensions:prepare', request),
+  extensionsApply: (request: import('@shared/types/extensions').ExtensionApplyRequest) => ipcRenderer.invoke('extensions:apply', request),
+  extensionsVerify: (changeSetId: string) => ipcRenderer.invoke('extensions:verify', changeSetId),
+  extensionsGet: (changeSetId: string) => ipcRenderer.invoke('extensions:get', changeSetId),
+  extensionsCredentialStatus: (references: string[]) => ipcRenderer.invoke('extensions:credentials:status', references),
+  extensionsCredentialSet: (request: import('@shared/types/extensions').ExtensionCredentialSetRequest) => ipcRenderer.invoke('extensions:credentials:set', request),
+  extensionsCredentialRemove: (reference: string) => ipcRenderer.invoke('extensions:credentials:remove', reference),
+  extensionsPendingCredentials: () => ipcRenderer.invoke('extensions:pendingCredentials'),
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => {

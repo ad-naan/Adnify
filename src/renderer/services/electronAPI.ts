@@ -346,6 +346,21 @@ function createGroupedAPI() {
       importExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => raw.skillsImportExternalSkill(sourceSkillDir, level, workspacePath),
     },
 
+    // Agent-managed extension transactions
+    extensions: {
+      search: (request: import('@shared/types/extensions').ExtensionSearchRequest) => raw.extensionsSearch(request),
+      list: () => raw.extensionsList(),
+      history: (limit?: number) => raw.extensionsHistory(limit),
+      prepare: (request: import('@shared/types/extensions').ExtensionPrepareRequest) => raw.extensionsPrepare(request),
+      apply: (request: import('@shared/types/extensions').ExtensionApplyRequest) => raw.extensionsApply(request),
+      verify: (changeSetId: string) => raw.extensionsVerify(changeSetId),
+      get: (changeSetId: string) => raw.extensionsGet(changeSetId),
+      credentialStatus: (references: string[]) => raw.extensionsCredentialStatus(references),
+      credentialSet: (request: import('@shared/types/extensions').ExtensionCredentialSetRequest) => raw.extensionsCredentialSet(request),
+      credentialRemove: (reference: string) => raw.extensionsCredentialRemove(reference),
+      pendingCredentials: () => raw.extensionsPendingCredentials(),
+    },
+
     // LSP
     lsp: {
       start: (workspacePath: string) => raw.lspStart(workspacePath),
