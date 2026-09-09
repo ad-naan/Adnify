@@ -179,6 +179,12 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
 // ============================================
 
 export interface AgentConfigSchema {
+  retryBackoffMultiplier?: number
+  pruneMinimumTokens?: number
+  pruneProtectTokens?: number
+  enableAutoContext?: boolean
+  summaryMaxContextChars?: { quick?: number; detailed?: number; handoff?: number }
+  dynamicConcurrency?: { enabled?: boolean; minConcurrency?: number; maxConcurrency?: number; cpuMultiplier?: number }
   maxToolLoops?: number
   maxHistoryMessages?: number
   enableAutoFix?: boolean
@@ -213,7 +219,8 @@ export function cleanAgentConfig(config: Record<string, unknown>): AgentConfigSc
     'maxToolLoops', 'maxHistoryMessages', 'maxToolResultChars', 'maxFileContentChars',
     'maxTotalContextChars', 'maxContextTokens', 'maxContextFiles',
     'maxSemanticResults', 'maxTerminalChars', 'maxRetries', 'retryDelayMs', 'toolTimeoutMs',
-    'keepRecentTurns', 'deepCompressionTurns', 'maxImportantOldTurns'
+    'keepRecentTurns', 'deepCompressionTurns', 'maxImportantOldTurns',
+    'retryBackoffMultiplier', 'pruneMinimumTokens', 'pruneProtectTokens'
   ] as const
 
   for (const field of numFields) {
@@ -241,6 +248,22 @@ export function cleanAgentConfig(config: Record<string, unknown>): AgentConfigSc
   // ignoredDirectories 数组
   if (Array.isArray(config.ignoredDirectories)) {
     cleaned.ignoredDirectories = config.ignoredDirectories.filter(d => typeof d === 'string')
+  }
+
+  if (config.summaryMaxContextChars && typeof config.summaryMaxContextChars === 'object') {
+    cleaned.summaryMaxContextChars = {}
+    for (const key of ['quick', 'detailed', 'handoff'] as const) {
+      const value = (config.summaryMaxContextChars as Record<string, unknown>)[key]
+      if (typeof value === 'number' && Number.isFinite(value)) cleaned.summaryMaxContextChars[key] = value
+    }
+  }
+  if (config.dynamicConcurrency && typeof config.dynamicConcurrency === 'object') {
+    const value = config.dynamicConcurrency as Record<string, unknown>
+    cleaned.dynamicConcurrency = {}
+    if (typeof value.enabled === 'boolean') cleaned.dynamicConcurrency.enabled = value.enabled
+    for (const key of ['minConcurrency', 'maxConcurrency', 'cpuMultiplier'] as const) {
+      if (typeof value[key] === 'number' && Number.isFinite(value[key])) cleaned.dynamicConcurrency[key] = value[key] as number
+    }
   }
 
   return cleaned

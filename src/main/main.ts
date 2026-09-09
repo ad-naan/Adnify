@@ -971,7 +971,7 @@ app.whenReady().then(async () => {
   if (proxySettings) {
     try {
       const { applyProxy } = await import('./ipc/settings')
-      applyProxy(proxySettings)
+      await applyProxy(proxySettings)
     } catch (err) {
       logger.system.error('[Main] Failed to import/apply proxy:', err)
     }

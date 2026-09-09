@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { safeIpcHandle } from './safeHandle'
 import { NotificationRuntime, type NotificationContext } from '../services/notifications/runtime'
-import { editorEventSchema } from '../services/notifications/config'
+import { editorEventSchema, notificationSettingsSchema, defaultNotificationSettings } from '../services/notifications/config'
+import { settingsAdapter } from '../services/extensions/SettingsAdapter'
+import { settingsSchema } from '@shared/config/agentSettings'
 import type { EditorEvent } from '@shared/types/notifications'
 import { logger } from '@shared/utils/Logger'
 import { asLanguage, t } from '@shared/i18n'
@@ -20,6 +22,19 @@ function owner(event: IpcMainInvokeEvent): BrowserWindow {
 export function registerNotificationHandlers(context: NotificationContext): void {
   runtime = new NotificationRuntime(context)
   ready = runtime.initialize()
+  void ready.then(() => {
+    const defaults = defaultNotificationSettings()
+    settingsAdapter.register({
+      key: 'notifications', storageKey: 'notifications', defaults,
+      description: 'System notifications, sound, event filters and webhook channels. 通知 声音 事件 Webhook',
+      schema: z.object({
+        cooldownSeconds: z.number().int().min(0).max(3600).optional(),
+        system: settingsSchema(defaults.system, 'notifications.system').optional(),
+        webhooks: z.array(z.unknown()).max(5).optional(),
+      }).strict(),
+      validate: value => notificationSettingsSchema.parse(value),
+    }, { read: () => runtime!.settings(), write: value => { runtime!.saveSettings(value) } })
+  }).catch(() => {})
   void ready.catch(() => logger.system.error('[Notifications] Initialization failed'))
   const handle = (name: string, handler: (window: BrowserWindow, raw: unknown) => unknown) =>
     safeIpcHandle(`notifications:${name}`, async (event, raw: unknown) => {

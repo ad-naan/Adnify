@@ -175,9 +175,9 @@ export function createPersistentPreference<T>(
   }
 
   const handleExternalChange = ({ key, value }: { key: string; value: unknown }) => {
-    if (key !== options.storageKey || value === undefined || value === null) return
+    if (key !== options.storageKey) return
     if (!hydrated) return
-    const next = options.normalize(value)
+    const next = options.normalize(value ?? options.fallback)
     if (JSON.stringify(next) === JSON.stringify(cache)) return
     let merged = next
     if (pendingFullValue !== null) merged = options.normalize({ ...merged, ...pendingFullValue })

@@ -1,6 +1,6 @@
 import type { AgentApprovalProof } from '@shared/security/executionPolicy'
 
-export type ExtensionKind = 'mcp' | 'skill'
+export type ExtensionKind = 'mcp' | 'skill' | 'settings'
 export type ExtensionScope = 'user' | 'workspace'
 export type ExtensionChangeState =
   | 'prepared'
@@ -31,6 +31,8 @@ export interface ExtensionPrepareRequest {
   source: string
   scope: ExtensionScope
   workspacePath?: string | null
+  /** Partial object or scalar for the exact registered application setting. */
+  value?: unknown
 }
 
 export interface ExtensionCredentialRequirement {
@@ -84,10 +86,14 @@ export interface ExtensionVerification {
 
 export interface ExtensionOperationResult {
   success: boolean
+  warnings?: string[]
+  partial?: boolean
+  settings?: unknown[]
   changeSet?: ExtensionChangeSet
   results?: ExtensionSearchResult[]
   verification?: ExtensionVerification
   installed?: InstalledExtensionSummary[]
+  external?: InstalledExtensionSummary[]
   auditEvents?: ExtensionAuditEvent[]
   error?: string
 }

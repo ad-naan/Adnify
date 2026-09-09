@@ -323,7 +323,9 @@ export interface ToolDefinition {
 }
 
 export interface ToolPropertySchema {
-    type: string
+    type?: string
+    anyOf?: ToolPropertySchema[]
+    additionalProperties?: boolean | ToolPropertySchema
     description?: string
     enum?: string[]
     items?: ToolPropertySchema

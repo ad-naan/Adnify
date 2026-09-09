@@ -44,6 +44,12 @@ import { convertArrayToReadableStream } from '@ai-sdk/provider-utils/test'
 import { StreamingService } from '@main/services/llm/services/StreamingService'
 import { forEachStreamChunk } from '@shared/utils/llmStreamBatch'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
+import { ConfigurationToolProvider } from '../../src/renderer/agent/tools/providers/ConfigurationToolProvider'
+import { api } from '../../src/renderer/services/electronAPI'
+import { SettingsAdapter, type SettingsPayload } from '@main/services/extensions/SettingsAdapter'
+import { ExtensionTransactionService } from '@main/services/extensions/ExtensionTransactionService'
+import { extensionApprovalScope } from '@shared/security/executionPolicy'
+import type { ExtensionOperationResult, ToolExecutionContext } from '@shared/types'
 
 const REQUEST_ID = 'req-contract'
 
@@ -102,12 +108,78 @@ function harness() {
       return out
     })
 
-  return { service, shape, rawCount: () => raw.length }
+  const toolArguments = () => {
+    const calls: Record<string, unknown>[] = []
+    for (const { channel, payload } of raw) {
+      if (!channel.startsWith('llm:stream')) continue
+      forEachStreamChunk(payload, chunk => {
+        if (chunk.type === 'tool_call_available') calls.push(chunk.arguments)
+      })
+    }
+    return calls
+  }
+
+  return { service, shape, rawCount: () => raw.length, toolArguments }
 }
 
 describe('StreamingService.generate 与 AI SDK 的契约', () => {
   beforeEach(() => {
     modelState.model = null
+  })
+
+  it.each(['native object', 'JSON-encoded object'])('prepares and applies font settings from SDK streaming through the tool provider: %s', async encoding => {
+    const provider = new ConfigurationToolProvider()
+    const fontFamily = "'JetBrains Mono', 'Cascadia Code', Consolas, 'Microsoft YaHei', monospace"
+    const patch = { fontFamily, fontSize: 14, terminal: { fontFamily } }
+    const args = { kind: 'settings', source: 'editorConfig', scope: 'user', value: encoding === 'native object' ? patch : JSON.stringify(patch) }
+    const input = JSON.stringify(args)
+    modelState.model = new MockLanguageModelV3({
+      doStream: async () => streamOf([
+        { type: 'stream-start', warnings: [] },
+        { type: 'tool-input-start', id: 'font-call', toolName: 'configuration_prepare' },
+        { type: 'tool-input-delta', id: 'font-call', delta: input.slice(0, 60) },
+        { type: 'tool-input-delta', id: 'font-call', delta: input.slice(60) },
+        { type: 'tool-input-end', id: 'font-call' },
+        { type: 'tool-call', toolCallId: 'font-call', toolName: 'configuration_prepare', input },
+        { type: 'finish', finishReason: 'tool-calls', usage: V3_USAGE },
+      ]),
+    })
+    const h = harness()
+    await h.service.generate({ config: CONFIG, messages: MESSAGES, tools: provider.getToolDefinitions(), requestId: REQUEST_ID })
+    // The native object stays an object; this path does not stringify its value.
+    expect(h.toolArguments()).toEqual([args])
+
+    const data: Record<string, unknown> = { editorConfig: { wordWrap: 'off' } }
+    const settings = new SettingsAdapter()
+    settings.configure({ read: key => data[key], write: (key, value) => { data[key] = structuredClone(value) } })
+    const transactions = new ExtensionTransactionService({
+      search: async () => [], list: async () => [],
+      prepare: async request => settings.prepare(request),
+      apply: async (_, payload) => settings.apply(payload as SettingsPayload),
+      verify: async (_, payload) => settings.verify(payload as SettingsPayload),
+      rollback: async (_, payload) => settings.rollback(payload as SettingsPayload),
+    })
+    // Simulate Electron's structured-clone IPC boundary, keeping the actual
+    // tool provider and main-process transaction/validation code on both sides.
+    const prepareSpy = vi.spyOn(api.extensions, 'prepare').mockImplementation(async request => ({
+      success: true, changeSet: await transactions.prepare(structuredClone(request)),
+    }))
+    const applySpy = vi.spyOn(api.extensions, 'apply').mockImplementation(request => transactions.apply(structuredClone(request)))
+    try {
+      const prepared = await provider.execute('configuration_prepare', h.toolArguments()[0], {} as ToolExecutionContext)
+      expect(prepared.success).toBe(true)
+      const { changeSet } = JSON.parse(prepared.result as string) as ExtensionOperationResult
+      expect(changeSet?.summary).toContain('JetBrains Mono')
+      expect(data.editorConfig).toEqual({ wordWrap: 'off' })
+      const applied = await provider.execute('configuration_apply', { change_set_id: changeSet!.id }, {
+        securityApproval: { requestId: 'approval-test', toolCallId: 'apply-font', approvedAt: Date.now(), scope: extensionApprovalScope(changeSet!.id) },
+      } as ToolExecutionContext)
+      expect(applied.success).toBe(true)
+      expect(data.editorConfig).toMatchObject({ ...patch, wordWrap: 'off' })
+    } finally {
+      prepareSpy.mockRestore()
+      applySpy.mockRestore()
+    }
   })
 
   it('纯文本响应：SDK 的 text-* part 翻成一条 stream:text，最后一条 done', async () => {

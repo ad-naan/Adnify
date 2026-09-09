@@ -16,6 +16,8 @@ import { McpClient, mcpManager, mcpRegistry } from '../mcp'
 import { extensionCredentialBroker } from './ExtensionCredentialBroker'
 import type { ExtensionTransactionAdapter, PreparedExtension } from './ExtensionTransactionService'
 import { parseSkillSource } from './SkillSource'
+import { searchSkills } from './SkillCatalog'
+import { settingsAdapter, type SettingsPayload } from './SettingsAdapter'
 
 interface McpPayload {
   kind: 'mcp'
@@ -33,7 +35,7 @@ interface SkillPayload {
   installed: boolean
 }
 
-type ExtensionPayload = McpPayload | SkillPayload
+type ExtensionPayload = McpPayload | SkillPayload | SettingsPayload
 
 function normalizePath(value: string): string {
   const resolved = path.resolve(value)
@@ -94,21 +96,6 @@ function normalizeMcpConfig(raw: McpServerConfig, name: string): McpServerConfig
     : { ...raw, type: 'local', name: raw.name || name }
 }
 
-async function searchSkills(query: string): Promise<ExtensionSearchResult[]> {
-  const response = await fetch(`https://skills.sh/api/search?q=${encodeURIComponent(query)}`, {
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (!response.ok) throw new Error(`Skills marketplace returned HTTP ${response.status}`)
-  const data = await response.json() as { skills?: Array<{ name: string; source: string; installs: number; skillId: string }> }
-  return (data.skills || []).slice(0, 20).map(skill => ({
-    kind: 'skill',
-    id: `${skill.source}@${skill.skillId}`,
-    name: skill.name,
-    description: `Skill from ${skill.source}`,
-    source: `${skill.source}@${skill.skillId}`,
-    installs: skill.installs,
-  }))
-}
 
 export class MainExtensionAdapter implements ExtensionTransactionAdapter {
   redactError(message: string): string {
@@ -116,6 +103,7 @@ export class MainExtensionAdapter implements ExtensionTransactionAdapter {
   }
 
   async search(request: ExtensionSearchRequest): Promise<ExtensionSearchResult[]> {
+    if (request.kind === 'settings') throw new Error('Use settings discovery for application settings')
     if (request.kind === 'skill') return searchSkills(request.query)
     const results = await mcpRegistry.search(request.query)
     return results.slice(0, 20).map(server => ({
@@ -137,31 +125,41 @@ export class MainExtensionAdapter implements ExtensionTransactionAdapter {
       status: server.config.disabled ? 'disabled' : server.status,
       sourcePath: server.config.sourcePath,
     }))
-    const roots: Array<{ root: string; scope: 'user' | 'workspace' }> = [
+    const roots: Array<{ root: string; scope: 'user' | 'workspace'; external?: boolean }> = [
       { root: path.join(getUserConfigDir(), 'skills'), scope: 'user' },
+      ...['.cursor', '.codex', '.claude'].map(dir => ({ root: path.join(os.homedir(), dir, 'skills'), scope: 'user' as const, external: true })),
     ]
-    if (workspacePath) roots.push({ root: path.join(ensureKnownWorkspace(workspacePath), '.adnify', 'skills'), scope: 'workspace' })
+    // The IPC handler resolves the caller's workspace. Do not validate read-only
+    // discovery against the MCP manager's process-wide active workspace.
+    if (workspacePath) {
+      roots.push({ root: path.join(workspacePath, '.adnify', 'skills'), scope: 'workspace' })
+      for (const dir of ['skills', '.cursor/skills', '.codex/skills', '.claude/skills']) {
+        roots.push({ root: path.join(workspacePath, dir), scope: 'workspace', external: true })
+      }
+    }
     const skills: InstalledExtensionSummary[] = []
-    for (const { root, scope } of roots) {
+    for (const { root, scope, external } of roots) {
       let entries: fs.Dirent[] = []
       try { entries = await fs.promises.readdir(root, { withFileTypes: true }) } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
       for (const entry of entries) {
-        if (!entry.isDirectory() || !fs.existsSync(path.join(root, entry.name, 'SKILL.md'))) continue
-        skills.push({ kind: 'skill', id: entry.name, name: entry.name, scope, status: 'installed', sourcePath: path.join(root, entry.name) })
+        if (entry.name.startsWith('.') || !entry.isDirectory() || !fs.existsSync(path.join(root, entry.name, 'SKILL.md'))) continue
+        skills.push({ kind: 'skill', id: entry.name, name: entry.name, scope, status: external ? 'available-for-import' : 'installed', sourcePath: path.join(root, entry.name) })
       }
     }
     return [...mcp, ...skills]
   }
 
   async prepare(request: ExtensionPrepareRequest): Promise<PreparedExtension> {
+    if (request.kind === 'settings') return settingsAdapter.prepare(request)
     if (request.scope === 'workspace') ensureKnownWorkspace(request.workspacePath)
     return request.kind === 'mcp' ? this.prepareMcp(request) : this.prepareSkill(request)
   }
 
   async apply(changeSet: ExtensionChangeSet, rawPayload: unknown): Promise<void> {
     const payload = rawPayload as ExtensionPayload
+    if (payload.kind === 'settings') return settingsAdapter.apply(payload)
     if (payload.kind === 'mcp') {
       const staged = new McpClient(payload.config)
       try {
@@ -180,6 +178,7 @@ export class MainExtensionAdapter implements ExtensionTransactionAdapter {
 
   async verify(_changeSet: ExtensionChangeSet, rawPayload: unknown): Promise<ExtensionVerification> {
     const payload = rawPayload as ExtensionPayload
+    if (payload.kind === 'settings') return settingsAdapter.verify(payload)
     if (payload.kind === 'mcp') {
       const state = (await mcpManager.getServersState()).find(item => item.id === payload.config.id)
       return {
@@ -195,6 +194,7 @@ export class MainExtensionAdapter implements ExtensionTransactionAdapter {
 
   async rollback(changeSet: ExtensionChangeSet, rawPayload: unknown): Promise<void> {
     const payload = rawPayload as ExtensionPayload
+    if (payload.kind === 'settings') return settingsAdapter.rollback(payload)
     if (!payload.installed) return
     if (payload.kind === 'mcp') {
       await mcpManager.removeServer(payload.config.id, changeSet.scope)

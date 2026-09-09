@@ -132,7 +132,7 @@ export class ExtensionTransactionService {
       return {
         success: false,
         changeSet: { ...stored.public },
-        error: 'This extension requires credentials. Agent-managed secret injection is not enabled yet; configure this extension manually.',
+        error: 'This extension requires credentials. Enter the missing values in the extension credential prompt, then apply this prepared change set again before it expires.',
       }
     }
 

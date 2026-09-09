@@ -4,6 +4,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
+import { catalogJson } from '../extensions/CatalogClient'
 
 const REGISTRY_BASE_URL = 'https://registry.modelcontextprotocol.io/v0.1'
 
@@ -115,16 +116,13 @@ export class McpRegistryService {
             if (trimmed) {
                 // 1. 服务端检索：直接调用官方 Registry search 参数获取精准匹配（如 serena 等）
                 const searchUrl = `${REGISTRY_BASE_URL}/servers?search=${encodeURIComponent(trimmed)}`
-                const response = await fetch(searchUrl)
-                if (response.ok) {
-                    const data = (await response.json()) as RegistryListResponse
-                    for (const item of data.servers || []) {
-                        const server = item.server
-                        const meta = item._meta?.['io.modelcontextprotocol.registry/official']
-                        // 只过滤明确废弃或非最新的版本
-                        if (meta && (meta.status === 'deprecated' || meta.isLatest === false)) continue
-                        results.push(this.toSearchResult(server))
-                    }
+                const data = await catalogJson<RegistryListResponse>(searchUrl)
+                for (const item of data.servers || []) {
+                    const server = item.server
+                    const meta = item._meta?.['io.modelcontextprotocol.registry/official']
+                    // 只过滤明确废弃或非最新的版本
+                    if (meta && (meta.status === 'deprecated' || meta.isLatest === false)) continue
+                    results.push(this.toSearchResult(server))
                 }
             } else {
                 // 2. 浏览全部：拉取官方活跃推荐列表
@@ -135,7 +133,7 @@ export class McpRegistryService {
             return results
         } catch (err) {
             logger.mcp?.error('[McpRegistry] Search failed:', err)
-            return []
+            throw err
         }
     }
 
@@ -145,14 +143,11 @@ export class McpRegistryService {
     async getServerDetails(serverName: string): Promise<RegistryServer | null> {
         try {
             const url = `${REGISTRY_BASE_URL}/servers/${encodeURIComponent(serverName)}/versions/latest`
-            const response = await fetch(url)
-            if (!response.ok) return null
-
-            const data = await response.json() as any
+            const data = await catalogJson<{ server?: RegistryServer }>(url)
             return data?.server || null
         } catch (err) {
             logger.mcp?.error(`[McpRegistry] Failed to get details for ${serverName}:`, err)
-            return null
+            throw err
         }
     }
 
@@ -338,10 +333,7 @@ export class McpRegistryService {
                 ? `${REGISTRY_BASE_URL}/servers?cursor=${encodeURIComponent(cursor)}`
                 : `${REGISTRY_BASE_URL}/servers`
 
-            const response = await fetch(url)
-            if (!response.ok) break
-
-            const data = await response.json() as RegistryListResponse
+            const data = await catalogJson<RegistryListResponse>(url)
 
             for (const item of data.servers) {
                 const server = item.server

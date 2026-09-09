@@ -7,16 +7,17 @@ import type {
 import { extensionAuditService, extensionTransactionService } from '../services/extensions'
 import { extensionCredentialBroker } from '../services/extensions/ExtensionCredentialBroker'
 import { safeIpcHandle } from './safeHandle'
+import { settingsAdapter } from '../services/extensions/SettingsAdapter'
 
 function assertSearchRequest(request: ExtensionSearchRequest): void {
-  if (!request || !['mcp', 'skill'].includes(request.kind) || typeof request.query !== 'string' || !request.query.trim() || request.query.length > 200) {
+  if (!request || !['mcp', 'skill', 'settings'].includes(request.kind) || typeof request.query !== 'string' || !request.query.trim() || request.query.length > 200) {
     throw new Error('Invalid extension search request')
   }
 }
 
 function assertPrepareRequest(request: ExtensionPrepareRequest): void {
   if (!request
-    || !['mcp', 'skill'].includes(request.kind)
+    || !['mcp', 'skill', 'settings'].includes(request.kind)
     || !['user', 'workspace'].includes(request.scope)
     || typeof request.source !== 'string'
     || !request.source.trim()
@@ -30,13 +31,18 @@ export function registerExtensionHandlers(
 ): void {
   safeIpcHandle('extensions:search', async (_, request: ExtensionSearchRequest) => {
     assertSearchRequest(request)
+    if (request.kind === 'settings') return { success: true, settings: settingsAdapter.discover(request.query) }
     return { success: true, results: await extensionTransactionService.search(request) }
   })
 
-  safeIpcHandle('extensions:list', async (event) => ({
-    success: true,
-    installed: await extensionTransactionService.list(resolveWorkspace(event)?.roots[0]),
-  }))
+  safeIpcHandle('extensions:list', async (event) => {
+    const items = await extensionTransactionService.list(resolveWorkspace(event)?.roots[0])
+    return {
+      settings: settingsAdapter.discover(), success: true,
+      installed: items.filter(item => item.status !== 'available-for-import'),
+      external: items.filter(item => item.status === 'available-for-import'),
+    }
+  })
 
   safeIpcHandle('extensions:history', async (_, limit?: number) => ({
     success: true,

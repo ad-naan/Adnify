@@ -329,6 +329,16 @@ class ThemeManager {
     this.listeners.forEach(listener => listener(theme))
   }
 
+  /** Apply a persisted change without writing it back and creating an IPC loop. */
+  syncFromSettings(key: 'themeId' | 'customThemes', value: unknown) {
+    if (key === 'customThemes') this.customThemes = normalizeCustomThemes(value)
+    const id = key === 'themeId' && typeof value === 'string' ? value : this.currentTheme.id
+    const theme = this.getThemeById(id) || builtinThemes[0]
+    this.currentTheme = theme
+    this.applyTheme(theme)
+    this.listeners.forEach(listener => listener(theme))
+  }
+
   addCustomTheme(theme: Theme) {
     this.customThemes = [...this.customThemes.filter(item => item.id !== theme.id), theme]
     this.persistCustomThemes()

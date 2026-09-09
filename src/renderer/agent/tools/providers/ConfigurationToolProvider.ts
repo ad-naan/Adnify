@@ -18,11 +18,11 @@ const APPLY_TOOL = 'configuration_apply'
 const definitions: ToolDefinition[] = [
   {
     name: DISCOVER_TOOL,
-    description: 'Inspect installed Agent configurations when query is omitted, or search the available configuration catalogs when query is provided. Current adapters support MCP servers and Skills.',
+    description: 'Inspect installed MCP servers, Adnify Skills and application settings without a query, or search catalogs / setting keys with a query. Use kind=settings for current values, defaults and supported fields; use kind=skill with owner/repository to inspect a GitHub Skill repository directly. Partial catalog failures do not mean no packages exist.',
     parameters: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['mcp', 'skill'], description: 'Optional configuration type filter.' },
+        kind: { type: 'string', enum: ['mcp', 'skill', 'settings'], description: 'Optional configuration type filter. Use settings for software preferences, models, editor, network, security and other settings.' },
         query: { type: 'string', description: 'Optional capability or package name. Omit it to inspect installed configurations.' },
       },
     },
@@ -33,9 +33,13 @@ const definitions: ToolDefinition[] = [
     parameters: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['mcp', 'skill'], description: 'Configuration type.' },
-        source: { type: 'string', description: 'Exact catalog source, owner/repository@skill-id, or direct GitHub repository URL.' },
+        kind: { type: 'string', enum: ['mcp', 'skill', 'settings'], description: 'Configuration type.' },
+        source: { type: 'string', description: 'Exact catalog source, owner/repository@skill-id, direct GitHub repository URL, or exact setting key returned by discovery.' },
         scope: { type: 'string', enum: ['user', 'workspace'], description: 'Configure for the user or only the current workspace.' },
+        value: {
+          anyOf: [{ type: 'object', additionalProperties: true }, { type: 'string' }, { type: 'number' }, { type: 'boolean' }, { type: 'array', items: {} }],
+          description: 'Required for settings: partial object or scalar; JSON-encoded values are also accepted when the setting expects an object or array. Example: source="editorConfig", value={"fontFamily":"Consolas, monospace"}. Do not wrap value in editorConfig or use a dotted source. Objects merge recursively; arrays replace. Settings use user scope. Discover the key first and correct validation errors before retrying.',
+        },
       },
       required: ['kind', 'source', 'scope'],
     },
@@ -51,7 +55,7 @@ const definitions: ToolDefinition[] = [
   },
 ]
 
-const configurationKind = z.enum(['mcp', 'skill'])
+const configurationKind = z.enum(['mcp', 'skill', 'settings'])
 const configurationScope = z.enum(['user', 'workspace'])
 const schemas: Record<string, z.ZodTypeAny> = {
   [DISCOVER_TOOL]: z.object({
@@ -62,25 +66,39 @@ const schemas: Record<string, z.ZodTypeAny> = {
     kind: configurationKind,
     source: z.string().trim().min(1).max(500),
     scope: configurationScope,
-  }).strict(),
+    value: z.unknown().optional(),
+  }).strict().superRefine((request, ctx) => {
+    if (request.kind === 'settings' && (request.value === undefined || request.scope !== 'user')) {
+      ctx.addIssue({ code: 'custom', message: 'Settings require value and user scope' })
+    }
+    if (request.kind !== 'settings' && request.value !== undefined) ctx.addIssue({ code: 'custom', message: 'value is only valid for settings' })
+  }),
   [APPLY_TOOL]: z.object({ change_set_id: z.string().uuid() }).strict(),
 }
 
 async function discoverConfigurations(args: { kind?: ExtensionKind; query?: string }): Promise<ExtensionOperationResult> {
   const query = args.query
   if (!query) {
+    if (args.kind === 'settings') return api.extensions.search({ kind: 'settings', query: '*' })
     const result = await api.extensions.list()
     if (!args.kind || !result.installed) return result
-    return { ...result, installed: result.installed.filter(item => item.kind === args.kind) }
+    return { ...result, settings: undefined, installed: result.installed.filter(item => item.kind === args.kind), external: result.external?.filter(item => item.kind === args.kind) }
   }
 
-  const kinds: ExtensionKind[] = args.kind ? [args.kind] : ['mcp', 'skill']
-  const responses = await Promise.all(kinds.map(kind => api.extensions.search({ kind, query })))
-  const errors = responses.flatMap(response => response.error ? [response.error] : [])
+  const repositoryQuery = /^(?:https:\/\/github\.com\/)?[\w.-]+\/[\w.-]+\/?$/.test(query)
+  const kinds: ExtensionKind[] = args.kind ? [args.kind] : repositoryQuery ? ['skill'] : ['settings', 'mcp', 'skill']
+  const settled = await Promise.allSettled(kinds.map(kind => api.extensions.search({ kind, query })))
+  const responses = settled.map((response, i): ExtensionOperationResult => response.status === 'fulfilled'
+    ? response.value : { success: false, error: `${kinds[i]}: ${response.reason instanceof Error ? response.reason.message : String(response.reason)}` })
+  const errors = responses.flatMap((response, i) => !response.success ? [`${kinds[i]}: ${response.error || 'Discovery failed'}`] : [])
+  const hasResults = responses.some(response => (response.results?.length || 0) + (response.settings?.length || 0) > 0)
   return {
-    success: errors.length === 0,
+    success: errors.length === 0 || hasResults,
     results: responses.flatMap(response => response.results || []),
-    error: errors.length > 0 ? errors.join('; ') : undefined,
+    settings: responses.flatMap(response => response.settings || []),
+    partial: errors.length > 0 && hasResults,
+    warnings: errors.length ? errors : undefined,
+    error: errors.length > 0 && !hasResults ? errors.join('; ') : undefined,
   }
 }
 
@@ -151,7 +169,7 @@ export class ConfigurationToolProvider implements ToolProvider {
         result = await discoverConfigurations(parsed as { kind?: ExtensionKind; query?: string })
         break
       case PREPARE_TOOL: {
-        const request = parsed as { kind: ExtensionKind; source: string; scope: 'user' | 'workspace' }
+        const request = parsed as { kind: ExtensionKind; source: string; scope: 'user' | 'workspace'; value?: unknown }
         result = await api.extensions.prepare({ ...request, workspacePath: ctx.workspacePath })
         break
       }

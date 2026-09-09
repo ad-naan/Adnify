@@ -8,6 +8,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
+import { isDeepStrictEqual } from 'node:util'
 import Store from 'electron-store'
 import { getBootstrapStore, getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
@@ -17,6 +18,9 @@ import { isSystemPermissionError } from '@shared/utils/permissionError'
 import { mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
 import { isSensitiveSettingsKey, sensitiveSettingsKeyError } from './sensitiveSettings'
 import { asLanguage } from '@shared/i18n'
+import { settingsAdapter } from '../services/extensions/SettingsAdapter'
+import { mcpManager } from '../services/mcp'
+import { setGoogleSearchConfig } from './http'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -63,14 +67,12 @@ async function readRecentLogTail(filePath: string, maxBytes = RECENT_LOG_MAX_BYT
   }
 }
 
-export function applyProxy(proxySettings: any) {
+export async function applyProxy(proxySettings: any): Promise<void> {
   if (proxySettings && proxySettings.enabled && proxySettings.rules) {
     logger.ipc.info('[Proxy] Applying proxy rules:', proxySettings.rules)
-    session.defaultSession.setProxy({
+    await session.defaultSession.setProxy({
       proxyRules: proxySettings.rules,
       proxyBypassRules: proxySettings.bypassRules || '',
-    }).catch(err => {
-      logger.ipc.error('[Proxy] Failed to apply proxy:', err)
     })
     
     // Set environment variables for subprocesses (like git, language servers, terminal tools)
@@ -83,10 +85,8 @@ export function applyProxy(proxySettings: any) {
     }
   } else {
     logger.ipc.info('[Proxy] Disabling proxy (direct connection)')
-    session.defaultSession.setProxy({
+    await session.defaultSession.setProxy({
       mode: 'direct',
-    }).catch(err => {
-      logger.ipc.error('[Proxy] Failed to disable proxy:', err)
     })
     
     delete process.env.HTTP_PROXY
@@ -125,7 +125,7 @@ export function registerSettingsHandlers(
     }
   })
 
-  ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
+  const writeSetting = async (key: string, value: unknown) => {
     try {
       if (isSensitiveSettingsKey(key)) {
         logger.ipc.warn('[Settings] Blocked sensitive settings write', { key })
@@ -137,6 +137,7 @@ export function registerSettingsHandlers(
         throw new Error(`Config store not ready for key: ${key}`)
       }
       const cleanedValue = cleanConfigValue(key, value)
+      const previousAppSettings = key === 'app-settings' ? store.get(key) as { proxySettings?: unknown } | undefined : undefined
 
       if (cleanedValue === undefined) {
         store.delete(key as any)
@@ -146,7 +147,7 @@ export function registerSettingsHandlers(
 
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) {
-          win.webContents.send('settings:changed', { key, value })
+          win.webContents.send('settings:changed', { key, value: cleanedValue })
         }
       })
 
@@ -165,8 +166,11 @@ export function registerSettingsHandlers(
 
       if (key === 'app-settings') {
         const appSettings = (cleanedValue || value) as any
-        if (appSettings && appSettings.proxySettings) {
-          applyProxy(appSettings.proxySettings)
+        if (securityRef) securityRef.securityManager.setLanguage(asLanguage(appSettings?.language))
+        mcpManager.setAutoConnectEnabled(appSettings?.mcpConfig?.autoConnect ?? true)
+        setGoogleSearchConfig(appSettings?.webSearchConfig?.googleApiKey || '', appSettings?.webSearchConfig?.googleCx || '')
+        if (!isDeepStrictEqual(previousAppSettings?.proxySettings, appSettings?.proxySettings)) {
+          await applyProxy(appSettings?.proxySettings)
         }
       }
 
@@ -175,7 +179,9 @@ export function registerSettingsHandlers(
       logger.ipc.error('[Settings] settings:set failed', { key, error: e })
       throw e
     }
-  })
+  }
+  settingsAdapter.configure({ read: key => resolveStore(key).get(key), write: async (key, value) => { await writeSetting(key, value) } })
+  ipcMain.handle('settings:set', (_event, key: string, value: unknown) => writeSetting(key, value))
 
   ipcMain.handle('settings:resetWhitelist', () => {
     const defaultShellCommands = [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands]

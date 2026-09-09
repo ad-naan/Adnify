@@ -42,6 +42,12 @@ export class ToolConverter {
   private buildZodType(prop: Record<string, any>): z.ZodTypeAny {
     let zodType: z.ZodTypeAny
 
+    if (Array.isArray(prop.anyOf) && prop.anyOf.length >= 2) {
+      const alternatives = prop.anyOf.map((item: Record<string, any>) => this.buildZodType(item))
+      const union = z.union(alternatives as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+      return prop.description ? union.describe(prop.description) : union
+    }
+
     switch (prop.type) {
       case 'string':
         if (Array.isArray(prop.enum) && prop.enum.length > 0) {
@@ -78,6 +84,10 @@ export class ToolConverter {
           shape[key] = fieldSchema
         }
         zodType = z.object(shape)
+        if (prop.additionalProperties === true) zodType = z.object(shape).passthrough()
+        else if (prop.additionalProperties && typeof prop.additionalProperties === 'object') {
+          zodType = z.object(shape).catchall(this.buildZodType(prop.additionalProperties))
+        }
         break
       default:
         zodType = z.any()

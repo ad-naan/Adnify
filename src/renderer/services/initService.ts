@@ -219,11 +219,32 @@ export async function initializeApp(
 
 export function registerSettingsSync(): () => void {
   const store = useStore.getState()
+  let reloadPending = false
+  let reloading = false
+  let disposed = false
+  const reloadSettings = async () => {
+    reloadPending = true
+    if (reloading) return
+    reloading = true
+    try {
+      do {
+        reloadPending = false
+        await useStore.getState().load()
+      } while (reloadPending && !disposed)
+    } finally { reloading = false }
+  }
 
-  return api.settings.onChanged(({ key, value }: { key: string; value: unknown }) => {
+  const unsubscribe = api.settings.onChanged(({ key, value }: { key: string; value: unknown }) => {
     logger.system.debug(`[Init] Setting changed: ${key}`)
 
     switch (key) {
+      case 'app-settings':
+      case 'editorConfig':
+      case 'securitySettings':
+        // Reload through the canonical resolver so model credentials, defaults,
+        // nested editor settings and the persistence cache stay consistent.
+        void reloadSettings()
+        break
       case 'llmConfig':
         if (isLLMConfig(value)) {
           store.update('llmConfig', value)
@@ -245,9 +266,9 @@ export function registerSettingsSync(): () => void {
         }
         break
       case 'themeId':
-        if (isThemeName(value)) {
-          store.setTheme(value)
-        }
+      case 'customThemes':
+        themeManager.syncFromSettings(key, value)
+        store.setTheme(themeManager.getCurrentTheme().id)
         break
       case 'enableFileLogging':
         if (typeof value === 'boolean') {
@@ -256,6 +277,7 @@ export function registerSettingsSync(): () => void {
         break
     }
   })
+  return () => { disposed = true; unsubscribe() }
 }
 
 function isLLMConfig(value: unknown): value is Partial<import('@store').LLMConfig> {
@@ -267,8 +289,7 @@ function isAutoApproveSettings(value: unknown): value is Partial<import('@store'
 }
 
 function isThemeName(value: unknown): value is import('@store').ThemeName {
-  const validThemes = ['adnify-dark', 'midnight', 'cyberpunk', 'dawn']
-  return typeof value === 'string' && validThemes.includes(value)
+  return typeof value === 'string' && Boolean(themeManager.getThemeById(value))
 }
 
 export function registerAppErrorListener(): () => void {
