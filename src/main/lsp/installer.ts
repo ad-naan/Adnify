@@ -398,7 +398,7 @@ async function extractZip(zipPath: string, destDir: string): Promise<boolean> {
       logger.lsp.debug(`[LSP Installer] Created extract directory: ${destDir}`)
     }
 
-    // Reject archive traversal and pre-existing destination symlinks.
+    // Reject archive traversal and directory symlinks; replace file symlinks without following them.
     const { extract } = await import('@electron-internal/extract-zip')
     await extract(zipPath, { dir: path.resolve(destDir) })
     logger.lsp.info(`[LSP Installer] ZIP extracted successfully to ${destDir}`)

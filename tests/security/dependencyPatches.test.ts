@@ -74,21 +74,26 @@ describe('dependency security patches', () => {
     expect(await fs.readFile(path.join(outside, 'target.txt'), 'utf8')).toBe('original')
   })
 
-  it.skipIf(process.platform === 'win32')('rejects pre-existing destination file symlinks', async () => {
+  it.skipIf(process.platform === 'win32')('replaces pre-existing destination file symlinks without overwriting outside files', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
     tempRoots.push(root)
     const destination = path.join(root, 'destination')
     await fs.mkdir(destination)
     const outside = path.join(root, 'outside.txt')
     await fs.writeFile(outside, 'original')
-    await fs.symlink(outside, path.join(destination, 'target.txt'))
+    const outputPath = path.join(destination, 'target.txt')
+    await fs.symlink(outside, outputPath)
     const archive = new JSZip()
     archive.file('target.txt', 'attacker data')
     const archivePath = path.join(root, 'file-link.zip')
     await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer' }))
 
-    await expect(extract(archivePath, { dir: destination })).rejects.toThrow()
+    // The native extractor unlinks existing files and creates them exclusively,
+    // replacing the symlink itself without opening its outside target.
+    await extract(archivePath, { dir: destination })
     expect(await fs.readFile(outside, 'utf8')).toBe('original')
+    expect((await fs.lstat(outputPath)).isFile()).toBe(true)
+    expect(await fs.readFile(outputPath, 'utf8')).toBe('attacker data')
   })
 
   it('overwrites regular files and preserves executable permissions for language servers', async () => {
