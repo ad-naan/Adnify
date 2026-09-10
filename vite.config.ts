@@ -8,6 +8,8 @@ const EXTERNAL_DEPS = [
   'electron',
   'electron-store',
   'electron-updater',
+  // Keep the native ZIP extractor and its platform binaries together at runtime.
+  '@electron-internal/extract-zip',
   // Native image processing must resolve its binaries from the installed package.
   // Bundling sharp's ESM entry into CJS breaks createRequire(import.meta.url).
   'sharp',

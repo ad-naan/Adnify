@@ -398,14 +398,9 @@ async function extractZip(zipPath: string, destDir: string): Promise<boolean> {
       logger.lsp.debug(`[LSP Installer] Created extract directory: ${destDir}`)
     }
 
-    const AdmZip = (await import('adm-zip')).default
-    const zip = new AdmZip(zipPath)
-
-    // 获取 ZIP 内容信息
-    const entries = zip.getEntries()
-    logger.lsp.debug(`[LSP Installer] ZIP contains ${entries.length} entries`)
-
-    zip.extractAllTo(destDir, true)
+    // Reject archive traversal and pre-existing destination symlinks.
+    const { extract } = await import('@electron-internal/extract-zip')
+    await extract(zipPath, { dir: path.resolve(destDir) })
     logger.lsp.info(`[LSP Installer] ZIP extracted successfully to ${destDir}`)
 
     return true

@@ -55,6 +55,60 @@ describe('dependency security patches', () => {
     await expect(fs.lstat(path.join(destination, 'nested/link'))).rejects.toThrow()
   })
 
+  it('rejects pre-existing destination directory links without overwriting outside files', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
+    tempRoots.push(root)
+    const destination = path.join(root, 'destination')
+    const outside = path.join(root, 'outside')
+    await fs.mkdir(destination)
+    await fs.mkdir(outside)
+    await fs.writeFile(path.join(outside, 'target.txt'), 'original')
+    // Junctions exercise Windows reparse points without requiring symlink privileges.
+    await fs.symlink(outside, path.join(destination, 'nested'), process.platform === 'win32' ? 'junction' : 'dir')
+    const archive = new JSZip()
+    archive.file('nested/target.txt', 'attacker data')
+    const archivePath = path.join(root, 'destination-link.zip')
+    await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer' }))
+
+    await expect(extract(archivePath, { dir: destination })).rejects.toThrow()
+    expect(await fs.readFile(path.join(outside, 'target.txt'), 'utf8')).toBe('original')
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects pre-existing destination file symlinks', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
+    tempRoots.push(root)
+    const destination = path.join(root, 'destination')
+    await fs.mkdir(destination)
+    const outside = path.join(root, 'outside.txt')
+    await fs.writeFile(outside, 'original')
+    await fs.symlink(outside, path.join(destination, 'target.txt'))
+    const archive = new JSZip()
+    archive.file('target.txt', 'attacker data')
+    const archivePath = path.join(root, 'file-link.zip')
+    await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer' }))
+
+    await expect(extract(archivePath, { dir: destination })).rejects.toThrow()
+    expect(await fs.readFile(outside, 'utf8')).toBe('original')
+  })
+
+  it('overwrites regular files and preserves executable permissions for language servers', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
+    tempRoots.push(root)
+    const destination = path.join(root, 'destination')
+    await fs.mkdir(path.join(destination, 'bin'), { recursive: true })
+    await fs.writeFile(path.join(destination, 'bin/server'), 'old version')
+    const archive = new JSZip()
+    archive.file('bin/server', 'new version', { unixPermissions: 0o100755 })
+    const archivePath = path.join(root, 'server.zip')
+    await fs.writeFile(archivePath, await archive.generateAsync({ type: 'nodebuffer', platform: 'UNIX' }))
+
+    await extract(archivePath, { dir: destination })
+    expect(await fs.readFile(path.join(destination, 'bin/server'), 'utf8')).toBe('new version')
+    if (process.platform !== 'win32') {
+      expect((await fs.stat(path.join(destination, 'bin/server'))).mode & 0o777).toBe(0o755)
+    }
+  })
+
   // Windows requires symlink privileges; Linux CI exercises real links without mocking the extractor.
   it.skipIf(process.platform === 'win32')('preserves internal relative symlinks needed by Electron archives', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'adnify-extract-audit-'))
