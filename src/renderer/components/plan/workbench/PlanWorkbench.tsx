@@ -13,6 +13,8 @@ import { PlanWorkbenchProcessing } from './PlanWorkbenchProcessing'
 import { useStore } from '@/renderer/store'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
 import { t, type Language } from '@shared/i18n'
+import { Button } from '@/renderer/components/ui'
+import '../plan-workspace.css'
 
 const focusDot = (tone: PlanActivityStatus) => {
   if (tone === 'blocked') return 'bg-red-400'
@@ -36,20 +38,31 @@ function formatElapsed(ms: number) {
 
 interface PlanWorkbenchProps {
   onOverlayChange?: (open: boolean) => void
+  canvas?: boolean
+  overlayHost?: HTMLElement | null
 }
 
-export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: PlanWorkbenchProps) {
+export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange, canvas = false, overlayHost }: PlanWorkbenchProps) {
   const providerConfigs = useStore(state => state.providerConfigs)
   const { language, plan, model, history, starting, startPlan, submitClarification, approve, reject, openThread, openHistoryEntry, deleteHistoryEntry, createNewPlan, acceptValidation, requestValidationChanges, revisePlan } = usePlanWorkbenchController()
   const selectedStage = usePlanViewStore(state => plan ? state.selectedStageByPlanId[plan.id] : undefined)
   const displayStage = selectedStage || model.stage
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const historyOpen = usePlanViewStore(state => state.historyOpen)
+  const setHistoryOpen = usePlanViewStore(state => state.setHistoryOpen)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const revealPlan = usePlanViewStore(state => state.revealPlan)
+  const setSidebarView = usePlanViewStore(state => state.setSidebarView)
+
+  const openBoard = () => {
+    if (!plan) return
+    revealPlan(plan.id)
+    setSidebarView('discussion')
+  }
 
   useEffect(() => {
-    onOverlayChange?.(historyOpen)
+    onOverlayChange?.(historyOpen && !overlayHost)
     return () => onOverlayChange?.(false)
-  }, [historyOpen, onOverlayChange])
+  }, [historyOpen, onOverlayChange, overlayHost])
 
   useEffect(() => {
     if (!model.isProcessing) {
@@ -98,7 +111,15 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
     return { failed, files, duration }
   }, [plan])
 
-  if (!model.hasSession) return <div className="plan-readable relative h-full bg-background">
+  if (canvas && plan && !model.isProcessing) return <div className="plan-surface relative h-full"><div className="plan-ready">
+    <div className="text-xs font-medium text-accent">{t('planWorkbench.planIsReady', language)}</div>
+    <h2>{plan.name}</h2>
+    <p>{t('planDesign.readyDescription', language)}</p>
+    <span className="text-xs text-text-muted">{model.tasks.length} {t('common.tasks', language)} · {plan.executionMode === 'parallel' ? t('taskBoard.parallel', language) : t('taskBoard.serial', language)}</span>
+    <Button onClick={openBoard}>{t('planDesign.viewPlan', language)}</Button>
+  </div><PlanHistoryDrawer portalTarget={overlayHost} open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} /></div>
+
+  if (!model.hasSession) return <div className="plan-surface plan-readable relative h-full bg-background">
     <div className="absolute right-3 top-3 z-10 flex items-center gap-1">
       <button
         onClick={createNewPlan}
@@ -118,11 +139,11 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
       </button>
     </div>
     <PlanWorkbenchEmpty language={language} recent={history} onOpenHistory={() => setHistoryOpen(true)} onSelectHistory={openHistoryEntry} />
-    <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} />
+    <PlanHistoryDrawer portalTarget={overlayHost} open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} />
   </div>
 
-  return <div className="plan-readable relative flex h-full min-h-0 flex-col bg-background">
-    <header className="shrink-0 border-b border-border/45 px-4 py-4">
+  return <div className="plan-surface plan-readable relative flex h-full min-h-0 flex-col bg-background">
+    <header className="plan-workbench-heading shrink-0">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 truncate text-[12px] font-semibold text-text-primary">{displayStage === 'execution' && model.stage === 'execution' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}{panelTitle(displayStage, language)}</div>
@@ -150,7 +171,7 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
     </header>
 
     <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-      <div className="px-3.5 pb-5 pt-3.5">
+      <div className="plan-workbench-body">
         {model.isProcessing && <PlanWorkbenchProcessing planningState={model.planningState} stage={model.stage} activities={model.activities} elapsedSeconds={elapsedSeconds} language={language} />}
 
         {!model.isProcessing && visibleFocus && displayStage === 'requirements' && visibleFocus.stage === 'requirements' && <section className="border-b border-border/40 pb-3.5">
@@ -170,7 +191,7 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
           {model.answeredClarification && <div className="mt-2.5 flex items-start gap-2 text-[11px] leading-4 text-text-muted"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" /><span>{model.answeredClarification.answers.join('、')}</span></div>}
         </section>}
 
-        {model.clarification && displayStage === 'requirements' && <div className="py-3.5"><PlanWorkbenchQuestion language={language} content={model.clarification.content} onSubmit={submitClarification} /></div>}
+        {model.clarification && displayStage === 'requirements' && <div className="py-3.5"><PlanWorkbenchQuestion key={model.clarification.messageId} language={language} content={model.clarification.content} onSubmit={submitClarification} /></div>}
 
         {plan && model.canStart && displayStage === 'plan' && <section className="mt-3">
           <div className="text-[11px] font-medium text-text-muted">{t('planWorkbench.planSummary', language)}</div>
@@ -219,7 +240,7 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
         {!model.isProcessing && displayStage === 'requirements' && <PlanWorkbenchActivity activities={model.activities.filter(activity => activity.stage === 'requirements')} language={language} />}
       </div>
     </div>
-    <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} />
+    <PlanHistoryDrawer portalTarget={overlayHost} open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} />
   </div>
 })
 

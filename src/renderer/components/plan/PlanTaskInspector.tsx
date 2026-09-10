@@ -41,7 +41,7 @@ export const PlanTaskInspector = memo(function PlanTaskInspector({ task, tasks, 
     if (!wouldCreateDependencyCycle(tasks, task.id, next)) onChange({ dependencies: next })
   }
 
-  return <aside className="absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-[92%] flex-col border-l border-border/55 bg-background/98 shadow-[-20px_0_42px_-30px_rgba(15,23,42,0.34)] backdrop-blur-sm">
+  return <aside className="plan-task-inspector absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-[92%] flex-col bg-background shadow-[-20px_0_42px_-30px_rgba(15,23,42,0.34)]">
     <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/45 px-3.5">
       <Settings2 className="h-3.5 w-3.5 text-text-muted" />
       <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-text-primary">{t('planTaskInspector.taskSetup', language)}</span>

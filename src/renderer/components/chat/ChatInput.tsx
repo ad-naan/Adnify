@@ -38,6 +38,7 @@ interface ChatInputProps {
   hasApiKey: boolean
   hasPendingToolCall: boolean
   compact?: boolean
+  placeholder?: string
   onSubmit: () => void
   onAbort: () => void
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
@@ -61,6 +62,7 @@ const ChatInput = memo(function ChatInput({
   hasApiKey,
   hasPendingToolCall,
   compact = false,
+  placeholder,
   onSubmit,
   onAbort,
   onInputChange,
@@ -321,7 +323,7 @@ const ChatInput = memo(function ChatInput({
             onPaste={onPaste}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
+            placeholder={hasApiKey ? placeholder || t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey || isOptimizingPrompt}
             className={`w-full bg-transparent border-none p-0
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none

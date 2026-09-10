@@ -1,0 +1,92 @@
+/* Plan uses the existing theme tokens. These rules never affect Agent mode. */
+.plan-surface { font-size: 13px; container-type: inline-size; }
+.plan-surface :is(section, header, aside, main, div, nav) { border-color: transparent; }
+.plan-surface :where(section, header, aside, main) { box-shadow: none; }
+.plan-surface button:focus-visible,
+.plan-surface input:focus-visible,
+.plan-surface textarea:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 3px; }
+.plan-board-header { padding: 24px 36px 18px; }
+.plan-board-meta { height: auto; min-height: 34px; padding-bottom: 14px; }
+.plan-board-meta h1 { font-size: 24px; line-height: 1.5; }
+.plan-board-stagebar { flex-wrap: wrap; row-gap: 16px; }
+.plan-board-stagebar > :first-child { max-width: 420px; }
+.plan-board-stagebar > :last-child { flex-wrap: wrap; }
+.plan-board-title { margin-top: 6px; font-size: 26px; font-weight: 650; line-height: 1.5; }
+.plan-board-view-switch { display: flex; align-items: center; gap: 8px; padding: 8px 36px; }
+.plan-board-view-switch button { padding: 7px 10px; border-radius: 7px; color: rgb(var(--text-muted)); font-size: 12px; }
+.plan-board-view-switch button[aria-pressed='true'] { color: rgb(var(--accent)); background: rgb(var(--accent) / .07); }
+.plan-review-list { min-height: 0; flex: 1; overflow-y: auto; padding: 10px 36px 36px; }
+.plan-review-row { width: 100%; display: grid; grid-template-columns: 24px minmax(0,1fr) auto 16px; align-items: center; gap: 14px; text-align: left; padding: 17px 12px; border-radius: 8px; }
+.plan-review-row:hover { background: rgb(var(--surface-hover) / .5); }
+.plan-review-row[aria-expanded='true'] { background: rgb(var(--accent) / .055); }
+.plan-review-row strong { display: block; font-size: 14px; font-weight: 550; line-height: 1.6; }
+.plan-review-row small { display: block; color: rgb(var(--text-muted)); font-size: 12px; line-height: 1.7; margin-top: 4px; }
+.plan-review-detail { padding: 18px 12px 24px 50px; font-size: 13px; line-height: 1.9; }
+.plan-review-detail h3 { color: rgb(var(--text-muted)); font-size: 12px; margin: 16px 0 6px; }
+.plan-review-detail p { color: rgb(var(--text-secondary)); white-space: pre-wrap; }
+.plan-review-detail ul { list-style: disc; padding-left: 18px; color: rgb(var(--text-secondary)); }
+.plan-review-detail code { font-size: 12px; overflow-wrap: anywhere; color: rgb(var(--text-muted)); }
+.plan-execution-list { padding: 18px 36px 36px; }
+.plan-execution-detail { padding: 24px 12px 28px 50px; }
+.plan-execution-detail > div > section:first-child h2 { font-size: 16px; }
+.plan-task-inspector { background: rgb(var(--background)) !important; }
+.plan-board-graph-summary { background: transparent; border-radius: 0; margin: 12px 36px 0; padding: 12px 0; }
+.plan-board-graph-host { margin-left: 36px; margin-right: 36px; }
+.plan-stage-nav > span { visibility: hidden; }
+.plan-stage-nav button { padding: 5px 8px; font-size: 12px; }
+.plan-stage-nav button > span { box-shadow: none; }
+.plan-workbench-body { padding: 26px 26px 32px; }
+.plan-workbench-body > section { padding-top: 20px; padding-bottom: 20px; }
+.plan-workbench-heading { padding: 19px 26px; }
+.plan-question { padding: 10px 0 22px; }
+.plan-question-title { margin-top: 10px; margin-bottom: 22px; font-size: 22px; line-height: 1.5; font-weight: 600; }
+.plan-question-options { display: flex; flex-direction: column; gap: 6px; }
+.plan-question-option { display: flex; align-items: flex-start; width: 100%; gap: 14px; padding: 16px 13px; border-radius: 8px; text-align: left; }
+.plan-question-option[aria-pressed='true'] { background: rgb(var(--accent) / .065); }
+.plan-question-option:hover { background: rgb(var(--surface-hover) / .45); }
+.plan-question-option strong { display: block; font-size: 14px; font-weight: 550; }
+.plan-question-option small { display: block; margin-top: 5px; font-size: 12px; line-height: 1.8; color: rgb(var(--text-muted)); }
+.plan-question textarea { background: rgb(var(--surface) / .35); border: 0; border-radius: 8px; padding: 12px; font-size: 13px; }
+.plan-empty-content { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 35px 24px 25px; }
+.plan-empty-content h2 { font-size: clamp(24px, 3cqi, 34px); font-weight: 650; line-height: 1.5; margin-top: 24px; }
+.plan-empty-content p { max-width: 440px; margin-top: 14px; font-size: 14px; line-height: 1.9; color: rgb(var(--text-muted)); }
+.plan-empty-recent { width: 100%; max-width: 520px; margin-top: 28px; }
+.plan-ready { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; max-width:680px; margin:auto; padding:40px; gap:20px; height:100%; }
+.plan-ready h2 { font-size:28px; font-weight:600; line-height:1.5; }
+.plan-ready p { color:rgb(var(--text-muted)); font-size:14px; line-height:1.9; }
+.plan-chat-surface { background: rgb(var(--background)); }
+.plan-chat-toolbar { height:42px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 20px; background:rgb(var(--background)); }
+.plan-chat-toolbar button { font-size:12px; padding:6px 10px; border-radius:6px; color:rgb(var(--text-muted)); }
+.plan-chat-toolbar button[aria-pressed='true'] { background:rgb(var(--accent)/.07); color:rgb(var(--accent)); }
+.plan-chat-toolbar button:focus-visible { outline:2px solid rgb(var(--accent)); outline-offset:2px; }
+.plan-chat-surface .process-fluid-input { border-color:transparent; box-shadow:none; background:rgb(var(--surface)/.32); }
+.plan-chat-surface .process-fluid-input::before,
+.plan-chat-surface .process-fluid-input::after { display:none; }
+.plan-chat-surface .process-fluid-input:focus-within { outline:1px solid rgb(var(--accent)/.4); outline-offset:2px; }
+.plan-chat-canvas .plan-chat-body { width:min(100%,800px); margin-inline:auto; }
+.plan-chat-canvas .plan-chat-composer { padding-inline:22px; margin-bottom:12px; }
+.plan-chat-canvas .plan-workbench-heading { padding-top:30px; }
+.plan-chat-canvas.plan-chat-empty .plan-chat-body { justify-content:center; padding-bottom:clamp(20px,12vh,130px); }
+.plan-chat-canvas.plan-chat-empty .plan-chat-messages { flex:0 1 auto; min-height:270px; overflow:auto; }
+.plan-chat-canvas.plan-chat-empty .plan-chat-composer { max-height:45%; overflow:visible; }
+.plan-chat-canvas.plan-chat-empty .process-fluid-input { background:transparent; }
+.plan-chat-canvas.plan-chat-empty .plan-empty-content { padding-top:36px; }
+.plan-chat-examples { display:flex; justify-content:center; gap:22px; flex-wrap:wrap; padding:14px 20px 0; }
+.plan-chat-examples button { display:flex; align-items:center; gap:8px; color:rgb(var(--text-muted)); font-size:12px; }
+.plan-chat-examples button:hover { color:rgb(var(--accent)); }
+.plan-discussion-target { display:flex; align-items:center; gap:8px; padding:8px 12px; color:rgb(var(--accent)); font-size:12px; }
+.plan-discussion-target span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.plan-chat-surface .plan-chat-composer { background:rgb(var(--background)); }
+@container (max-width: 720px) {
+  .plan-board-header { padding:20px; }
+  .plan-review-list { padding:8px 20px 24px; }
+  .plan-execution-list { padding:12px 20px 24px; }
+  .plan-execution-detail { padding-left:20px; }
+  .plan-board-graph-summary { margin-inline:20px; }
+  .plan-board-graph-host { margin-inline:20px; }
+  .plan-review-row { grid-template-columns:20px minmax(0,1fr) 16px; gap:10px; }
+  .plan-review-row .plan-review-dependencies { display:none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-surface *, .plan-chat-surface * { scroll-behavior:auto; }
+}

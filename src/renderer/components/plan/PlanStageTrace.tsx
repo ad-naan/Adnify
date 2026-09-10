@@ -25,7 +25,7 @@ interface PlanStageTraceProps {
 export function PlanStageTrace({ stage, selectedStage = stage, language, compact = false, onStageChange }: PlanStageTraceProps) {
   const activeIndex = STAGES.indexOf(stage)
 
-  return <nav className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={t('planStageTrace.planStages', language)}>
+  return <nav className={`plan-stage-nav flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={t('planStageTrace.planStages', language)}>
     {STAGES.map((item, index) => {
       const completed = index < activeIndex
       const current = index === activeIndex

@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle, Check, CheckCircle2, Circle, ExternalLink, FileCode2, FileOutput, FileText, GitBranch, History, LoaderCircle, Pause, Play, Rows3, Settings2, ShieldAlert, Square, TerminalSquare, X, MessageSquareText, } from 'lucide-react'
+  AlertTriangle, ChevronDown, Check, CheckCircle2, Circle, ExternalLink, FileCode2, FileOutput, FileText, GitBranch, History, LoaderCircle, Pause, Play, Rows3, Settings2, ShieldAlert, Square, TerminalSquare, X, MessageSquareText, } from 'lucide-react'
 import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
@@ -26,6 +26,10 @@ import { t, type Language } from '@shared/i18n'
 import { legacyRequirementsToStageContent } from '@/renderer/agent/plan/planStageContent'
 import { getPlanProviderDisplayName } from '@/renderer/agent/plan/planProviderCatalog'
 import { summarizeProofGraph } from '@/renderer/agent/plan/proofGraph'
+import { PlanTaskList } from './PlanTaskList'
+import './plan-workspace.css'
+import { toFullPath } from '@shared/utils/pathUtils'
+import { changedReviewTasks, snapshotTasksForReview, type TaskReviewSnapshot } from '@/renderer/agent/plan/planTaskReview'
 
 interface TaskBoardProps {
   planId: string
@@ -57,7 +61,7 @@ function formatDuration(ms: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-function ProofMatrix({ tasks, language }: { tasks: PlanTask[]; language: Language }) {
+function ProofMatrix({ tasks, language, onOpenFile, onOpenThread }: { tasks: PlanTask[]; language: Language; onOpenFile: (file: string) => void; onOpenThread: (id: string) => void }) {
   const evidenceById = new Map(tasks.flatMap(task => task.evidence || []).map(item => [item.id, item]))
   const summary = summarizeProofGraph(tasks)
   return <section>
@@ -68,7 +72,11 @@ function ProofMatrix({ tasks, language }: { tasks: PlanTask[]; language: Languag
         const tone = criterion.status === 'proven' ? 'text-emerald-500' : criterion.status === 'failed' ? 'text-red-400' : 'text-amber-500'
         return <div key={`${task.id}:${criterion.id}`} className="grid grid-cols-[minmax(180px,.8fr)_minmax(260px,1.4fr)_100px] gap-4 border-b border-border/35 px-4 py-3 last:border-0 max-md:grid-cols-1">
           <div><div className="text-[11px] text-text-muted">{task.title}</div><div className="mt-1 text-[12px] font-medium leading-5 text-text-primary">{criterion.text}</div></div>
-          <div className="space-y-1.5">{evidence.length ? evidence.map(item => <div key={item!.id} className="flex items-start gap-2 text-[11px] leading-5 text-text-secondary"><span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${item!.status === 'passed' ? 'bg-emerald-500' : item!.status === 'failed' ? 'bg-red-400' : 'bg-text-muted'}`} /><span><strong className="font-medium">{item!.label}</strong>{item!.summary ? ` · ${item!.summary}` : ''}</span></div>) : <span className="text-[11px] text-text-muted">{t('taskBoard.noEvidenceCollected', language)}</span>}</div>
+          <div className="space-y-1.5">{evidence.length ? evidence.map(item => <div key={item!.id} className="flex items-start gap-2 text-[11px] leading-5 text-text-secondary"><span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${item!.status === 'passed' ? 'bg-emerald-500' : item!.status === 'failed' ? 'bg-red-400' : 'bg-text-muted'}`} /><details className="min-w-0 flex-1"><summary className="cursor-pointer"><strong className="font-medium">{item!.label}</strong>{item!.summary ? ` · ${item!.summary}` : ''}</summary>
+            {item!.command && <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words text-xs">{item!.command}</pre>}
+            {item!.path && <button type="button" onClick={() => onOpenFile(item!.path!)} className="mt-2 block break-all text-left text-accent">{item!.path}</button>}
+            {item!.sourceThreadId && <button type="button" onClick={() => onOpenThread(item!.sourceThreadId!)} className="mt-2 block text-accent">{t('taskBoard.fullLog', language)}</button>}
+          </details></div>) : <span className="text-[11px] text-text-muted">{t('taskBoard.noEvidenceCollected', language)}</span>}</div>
           <span className={`text-[11px] font-semibold ${tone}`}>{criterion.status === 'proven' ? t('taskBoard.proven2', language) : criterion.status === 'failed' ? t('taskBoard.failed', language) : t('taskBoard.pending', language)}</span>
         </div>
       })}
@@ -228,6 +236,13 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const [requirementsContent, setRequirementsContent] = useState('')
   const [showRequirements, setShowRequirements] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [reviewLayout, setReviewLayout] = useState<'list' | 'graph'>('list')
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+  const [validationTaskId, setValidationTaskId] = useState<string | null>(null)
+  const reviewBaselines = useRef(new Map<string, TaskReviewSnapshot[]>())
+  const reviewSnapshot = useMemo(() => snapshotTasksForReview(plan?.tasks || []), [plan?.tasks])
+  if (plan?.tasks.length && !reviewBaselines.current.has(planId)) reviewBaselines.current.set(planId, reviewSnapshot)
+  const changedTasks = changedReviewTasks(reviewBaselines.current.get(planId) || reviewSnapshot, reviewSnapshot)
   const selectedViewStage = usePlanViewStore(state => state.selectedStageByPlanId[planId])
   const selectViewStage = usePlanViewStore(state => state.selectStage)
 
@@ -326,6 +341,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
     const result = await startPlanExecution(plan.id)
     if (!result.success) toast.error(t('common.failedToStart', language), result.message)
+    else reviewBaselines.current.set(plan.id, snapshotTasksForReview(plan.tasks))
   }, [language, plan])
   const pause = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).pausePlanExecution(planId), [planId])
   const stop = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).stopPlanExecution(planId), [planId])
@@ -335,131 +351,23 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     if (result.success) toast.info(result.message)
     else toast.error(t('common.unableToRevise', language), result.message)
   }, [language, planId])
+  const openArtifact = useCallback(async (file: string) => {
+    if (!workspacePath) return
+    const fullPath = toFullPath(file, workspacePath)
+    try {
+      const content = await api.file.readFull(fullPath)
+      if (typeof content !== 'string') throw new Error(fullPath)
+      useStore.getState().openFile(fullPath, content)
+    } catch {
+      toast.error(t('common.failed', language), file)
+    }
+  }, [language, workspacePath])
 
   if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('taskBoard.planNotFound', language)}</div>
 
   const promptOptions = getPromptTemplateSummary().map(item => ({ value: item.id, label: t(item.nameKey, language) }))
 
-  return <div className="plan-readable relative flex h-full min-h-0 flex-col bg-background">
-    <header className="shrink-0 border-b border-border/50 px-5 pb-3.5 pt-3">
-      <div className="flex h-8 items-center gap-3 border-b border-border/35 pb-3">
-        <History className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-        <span className="shrink-0 text-[10px] text-text-muted">{t('common.planHistory', language)}</span>
-        {planOptions.length > 0 && onPlanChange
-          ? <Select className="w-[290px] border-0 bg-transparent font-semibold" options={planOptions} value={plan.id} onChange={onPlanChange} />
-          : <h1 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text-primary">{plan.name}</h1>}
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-5">
-        <div className="w-full max-w-[520px]"><PlanStageTrace stage={actualStage} selectedStage={stage} language={language} onStageChange={nextStage => selectViewStage(plan.id, nextStage)} /></div>
-        <div className="flex shrink-0 items-center gap-2">
-          <ModeToggle language={language} mode={plan.executionMode} disabled={isLive || isPaused} onChange={mode => updatePlan(plan.id, { executionMode: mode })} />
-          <Button variant="ghost" size="sm" onClick={() => setShowRequirements(true)} leftIcon={<FileText className="h-3.5 w-3.5" />}>{t('common.brief', language)}</Button>
-          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{t('taskBoard.pause', language)}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', language)}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('taskBoard.resume', language)}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', language)}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('common.approveAndRun', language)}</Button> : null}
-        </div>
-      </div>
-      {(isLive || isPaused || actualStage === 'validation') && <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-text-primary/[0.05]"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} /></div>}
-    </header>
-
-    {stage === 'requirements' ? <main className="min-h-0 flex-1 overflow-y-auto bg-background custom-scrollbar">
-      <div className="mx-auto min-h-full max-w-5xl px-6 py-5">
-        <div className="border-b border-border/45 pb-4">
-          <h2 className="text-[16px] font-semibold text-text-primary">{t('taskBoard.requirementBrief', language)}</h2>
-          <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{t('taskBoard.thisReviewIsGenerated', language)}</p>
-        </div>
-        <div className="mt-5"><PlanStageContentView content={requirementStageContent} hideHeader /></div>
-        <section className="hidden mt-5 overflow-hidden rounded-xl border border-border/50 bg-surface/[0.06]">
-          <div className="flex items-center gap-3 border-b border-border/40 px-4 py-3.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"><FileText className="h-4 w-4" /></span>
-            <div className="min-w-0"><div className="text-[11px] font-medium text-text-muted">{t('common.objective', language)}</div><h3 className="mt-0.5 truncate text-[12px] font-semibold text-text-primary">{requirementDocument.title}</h3></div>
-          </div>
-          {requirementDocument.sections.length > 0 ? <div className="divide-y divide-border/40">
-            {requirementDocument.sections.map((section, sectionIndex) => <div key={`${section.title}:${sectionIndex}`} className="grid grid-cols-[150px_minmax(0,1fr)] gap-5 px-4 py-3.5 max-md:grid-cols-1 max-md:gap-2">
-              <div className="flex items-start gap-2 text-[10px] font-semibold text-text-secondary"><span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-500"><Check className="h-2.5 w-2.5" /></span><span>{section.title}</span></div>
-              <div className="space-y-2">{section.items.map((item, itemIndex) => <div key={`${item}:${itemIndex}`} className="flex items-start gap-2 text-[10px] leading-5 text-text-secondary"><span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-text-muted/55" /><span>{item}</span></div>)}</div>
-            </div>)}
-          </div> : <div className="flex min-h-48 items-center justify-center text-[10px] text-text-muted">{t('taskBoard.theBriefIsBeing', language)}</div>}
-        </section>
-        <div className="mt-4 flex items-center justify-between rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-4 py-3">
-          <div className="flex items-center gap-2 text-[10px] font-medium text-emerald-500"><CheckCircle2 className="h-4 w-4" />{t('taskBoard.requirementsConfirmedAndStructured', language)}</div>
-          <button type="button" onClick={requestChanges} className="text-[11px] font-medium text-text-muted hover:text-accent">{t('taskBoard.requestRevision', language)}</button>
-        </div>
-      </div>
-    </main> : stage === 'validation' && actualStage !== 'validation' ? <main className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
-      <div className="max-w-sm"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/[0.04] text-text-muted"><CheckCircle2 className="h-5 w-5" /></span><h2 className="mt-3 text-[12px] font-semibold text-text-primary">{t('taskBoard.validationHasNotStarted', language)}</h2><p className="mt-1.5 text-[11px] leading-4 text-text-muted">{t('taskBoard.deliveryResultsFailuresAnd', language)}</p></div>
-    </main> : stage === 'validation' ? <main className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
-      <div className="mx-auto max-w-5xl">
-        <section className="border-b border-border/45 pb-5">
-          <div className="flex items-start justify-between gap-5"><div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{plan.validation?.status === 'accepted' ? t('taskBoard.resultsAccepted', language) : stats.failed ? t('taskBoard.executionFinishedWithFailures', language) : t('taskBoard.planCompleteAndReady', language)}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {t('common.tasksCompleted', language)} · {stats.files.length} {t('taskBoard.plannedResources', language)} · {formatDuration(stats.duration)}</p></div></div>
-            {plan.validation?.status === 'accepted' ? <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/[0.04] px-3 text-[11px] font-medium text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" />{t('taskBoard.accepted', language)}</span> : <div className="flex shrink-0 gap-2"><Button variant="secondary" size="sm" onClick={requestChanges} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>{t('common.requestChanges', language)}</Button><Button size="sm" disabled={stats.failed > 0 || (proofSummary.total > 0 && (proofSummary.pending > 0 || proofSummary.failed > 0))} onClick={() => updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })} leftIcon={<Check className="h-3.5 w-3.5" />}>{t('taskBoard.accept', language)}</Button></div>}
-          </div>
-        </section>
-        <div className="mt-5"><ProofMatrix tasks={plan.tasks} language={language} /></div>
-        <div className="mt-5 grid grid-cols-[minmax(0,1.25fr)_minmax(280px,.75fr)] gap-6 max-lg:grid-cols-1">
-          <section><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.validationResults', language)}</div><div className="divide-y divide-border/40 border-y border-border/40">{plan.tasks.map(task => <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-start gap-3 py-3 text-left hover:bg-surface/[0.12]"><span className="mt-0.5">{task.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-red-400" />}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-secondary">{task.title}</strong><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-muted">{task.error || task.output || task.description}</span></span><time className="text-[10px] tabular-nums text-text-muted">{task.startedAt ? formatDuration((task.completedAt || now) - task.startedAt) : '—'}</time></button>)}</div></section>
-          <aside><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.deliveredResources', language)}</div>{stats.files.length ? <div className="divide-y divide-border/35 border-y border-border/35">{stats.files.map(file => <div key={file} className="flex items-center gap-2 py-2.5 text-[11px] text-text-secondary"><FileCode2 className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate">{file}</span></div>)}</div> : <p className="border-y border-border/35 py-3 text-[11px] leading-4 text-text-muted">{t('taskBoard.noOutputFilesWere', language)}</p>}</aside>
-        </div>
-      </div>
-    </main> : stage === 'plan' ? <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <section className="mx-5 mt-4 shrink-0 rounded-xl border border-border/55 bg-surface/[0.08] px-4 py-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${graphStats.hasCycle || graphStats.missingDependencies ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-400/10 text-emerald-500'}`}>
-              {graphStats.hasCycle || graphStats.missingDependencies ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-[12px] font-semibold text-text-primary">{graphStats.hasCycle || graphStats.missingDependencies
-                ? t('taskBoard.planDependenciesNeedAttention', language)
-                : t('taskBoard.planIsReadyFor', language)}</h2>
-              <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('taskBoard.nodesAndEdgesAre', language)}</p>
-            </div>
-          </div>
-          <div className="grid shrink-0 grid-cols-4 divide-x divide-border/50 text-center">
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{plan.tasks.length}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.tasks', language)}</span></div>
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.maxParallelism}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.maxParallel', language)}</span></div>
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.roles}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.roles', language)}</span></div>
-            <div className="min-w-[84px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.estimatedTokens ? graphStats.estimatedTokens.toLocaleString() : '—'}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.tokenBudget', language)}</span></div>
-          </div>
-        </div>
-      </section>
-      <div className="mx-5 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
-        <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/45 px-3.5 text-[11px] text-text-muted">
-          <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{t('taskBoard.taskDependencyGraph', language)}</span>
-          <div className="flex items-center gap-3"><span>{graphStats.models} {t('taskBoard.modelConfigurations', language)} · {plan.executionMode === 'parallel' ? t('taskBoard.parallelScheduling', language) : t('taskBoard.sequentialScheduling', language)}</span>{!inspectorOpen && selectedTask && <button type="button" onClick={() => setInspectorOpen(true)} className="inline-flex h-6 items-center gap-1 rounded-md border border-border/55 px-2 text-[10px] text-text-secondary hover:border-accent/30 hover:text-accent"><Settings2 className="h-3 w-3" />{t('taskBoard.configure', language)}</button>}</div>
-        </div>
-        <div className="relative flex min-h-0 flex-1">
-          <PlanDependencyGraph
-            tasks={plan.tasks}
-            selectedTaskId={selectedTask?.id}
-            waitingApprovalTaskIds={waitingApprovalTaskIds}
-            language={language}
-            onSelectTask={taskId => { setSelectedTaskId(taskId); setInspectorOpen(true) }}
-          />
-          {inspectorOpen && selectedTask && <PlanTaskInspector task={selectedTask} tasks={plan.tasks} language={language} disabled={isLive || isPaused} onClose={() => setInspectorOpen(false)} onChange={updates => updateTask(plan.id, selectedTask.id, updates)} />}
-        </div>
-      </div>
-      <div className="h-4 shrink-0" />
-    </main> : <div className="flex min-h-0 flex-1">
-      <aside className="w-[310px] shrink-0 overflow-y-auto border-r border-border/55 bg-surface/[0.08] px-3 py-3 custom-scrollbar max-lg:w-[275px]">
-        <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-medium text-text-muted"><span>{t('common.taskOrchestration', language)}</span><span>{plan.executionMode === 'parallel' ? t('taskBoard.parallel', language) : t('taskBoard.serial', language)}</span></div>
-        <div className="space-y-1">
-          {plan.tasks.map((task, index) => {
-            const runtime = runtimeByTask.get(task.id)
-            const meta = statusMeta(task, Boolean(runtime?.waitingApproval), language)
-            const Icon = meta.icon
-            const active = selectedTask?.id === task.id
-            const depth = depths.get(task.id) || 0
-            return <div key={task.id} className="relative" style={{ paddingLeft: `${depth * 14}px` }}>
-              {depth > 0 && <span className="absolute left-[3px] top-0 h-1/2 w-[10px] rounded-bl border-b border-l border-border/70" style={{ transform: `translateX(${(depth - 1) * 14}px)` }} />}
-              <button onClick={() => setSelectedTaskId(task.id)} className={`relative z-[1] w-full rounded-lg border px-2.5 py-2.5 text-left transition-colors ${active ? 'border-accent/35 bg-accent/[0.065]' : 'border-transparent hover:border-border/60 hover:bg-surface/35'}`}>
-                <div className="flex items-start gap-2.5"><div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${meta.bg} ${meta.tone}`}>{task.status === 'pending' && !runtime?.waitingApproval ? <span className="text-[11px] font-semibold tabular-nums">{index + 1}</span> : <Icon className={`h-3.5 w-3.5 ${task.status === 'running' && !runtime?.waitingApproval ? 'animate-spin' : ''}`} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-medium text-text-primary">{task.title}</span><span className={`shrink-0 text-[10px] ${meta.tone}`}>{meta.label}</span></div><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-muted">{runtime?.currentTool?.name || runtime?.statusText || task.description}</p>{task.dependencies.length > 0 && <div className="mt-1.5 truncate text-[10px] text-text-muted/55">{t('common.depends', language)} · {task.dependencies.map(id => plan.tasks.find(item => item.id === id)?.title || id).join('、')}</div>}</div></div>
-              </button>
-            </div>
-          })}
-        </div>
-      </aside>
-
-      <main className="min-w-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
-        {selectedTask && <div className="mx-auto max-w-4xl">
+  const taskDetails = selectedTask && <div className="mx-auto max-w-4xl">
           <section className="border-b border-border/45 pb-5">
             <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="mb-2 flex items-center gap-2">{(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-3.5 w-3.5 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-[11px] font-medium ${meta.tone}`}>{meta.label}</span>{selectedTask.startedAt && <span className="text-[10px] tabular-nums text-text-muted">{formatDuration((selectedTask.completedAt || now) - selectedTask.startedAt)}</span>}</> })()}</div><h2 className="text-[18px] font-semibold text-text-primary">{selectedTask.title}</h2><p className="mt-2 max-w-3xl text-[11px] leading-5 text-text-secondary">{selectedTask.description}</p></div>{selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{t('taskBoard.fullLog', language)}</Button>}</div>
             <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}{selectedTask.modelRecommendation && <span className="rounded bg-accent/[0.08] px-2 py-1 text-accent">{t('taskBoard.historyPick', language)} · {Math.round(selectedTask.modelRecommendation.successRate * 100)}% · n={selectedTask.modelRecommendation.sampleSize}</span>}{selectedTask.worktreeLane && <LaneStatusChip status={selectedTask.worktreeLane.status} language={language} />}</div>
@@ -513,9 +421,147 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
             {selectedRuntime?.currentTool && <div className="mb-2 flex items-center gap-2 border-y border-border/35 py-2 text-[11px] text-text-secondary"><LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" /><span className="font-medium">{selectedRuntime.currentTool.name}</span><span className="truncate text-text-muted">{selectedRuntime.statusText}</span></div>}
             <div className={`whitespace-pre-wrap break-words text-[10px] leading-5 ${selectedTask.error ? 'text-red-400' : 'text-text-secondary'}`}>{selectedTask.error || selectedRuntime?.latestText || selectedTask.output || selectedRuntime?.statusText}</div>
           </section>}
-        </div>}
-      </main>
-    </div>}
+        </div>
+
+  return <div className="plan-surface plan-readable relative flex h-full min-h-0 flex-col bg-background">
+    <header className="plan-board-header shrink-0">
+      <div className="plan-board-meta flex items-center gap-3">
+        <History className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+        <span className="shrink-0 text-[10px] text-text-muted">{t('common.planHistory', language)}</span>
+        {planOptions.length > 0 && onPlanChange
+          ? <Select className="w-[290px] border-0 bg-transparent font-semibold" options={planOptions} value={plan.id} onChange={onPlanChange} />
+          : <span className="min-w-0 flex-1 truncate text-[12px] text-text-muted">{plan.name}</span>}
+      </div>
+      <h1 className="plan-board-title break-words text-text-primary">{plan.name}</h1>
+      <div className="plan-board-stagebar mt-4 flex items-center justify-between gap-5">
+        <div className="w-full max-w-[520px]"><PlanStageTrace stage={actualStage} selectedStage={stage} language={language} onStageChange={nextStage => selectViewStage(plan.id, nextStage)} /></div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModeToggle language={language} mode={plan.executionMode} disabled={isLive || isPaused} onChange={mode => updatePlan(plan.id, { executionMode: mode })} />
+          <Button variant="ghost" size="sm" onClick={() => setShowRequirements(true)} leftIcon={<FileText className="h-3.5 w-3.5" />}>{t('common.brief', language)}</Button>
+          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{t('taskBoard.pause', language)}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', language)}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('taskBoard.resume', language)}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', language)}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('common.approveAndRun', language)}</Button> : null}
+        </div>
+      </div>
+      {(isLive || isPaused || actualStage === 'validation') && <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-text-primary/[0.05]"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} /></div>}
+    </header>
+
+    {plan.status === 'draft' && changedTasks.length > 0 && <details className="mx-9 mb-3 text-xs text-accent">
+      <summary className="cursor-pointer py-2">{t('planDesign.revised', language)}</summary>
+      <ul className="space-y-1 pb-2 pl-4 text-text-secondary">{changedTasks.map(task => <li key={task.id}>{task.title}</li>)}</ul>
+    </details>}
+
+    {stage === 'requirements' ? <main className="min-h-0 flex-1 overflow-y-auto bg-background custom-scrollbar">
+      <div className="mx-auto min-h-full max-w-5xl px-6 py-5">
+        <div className="border-b border-border/45 pb-4">
+          <h2 className="text-[16px] font-semibold text-text-primary">{t('taskBoard.requirementBrief', language)}</h2>
+          <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{t('taskBoard.thisReviewIsGenerated', language)}</p>
+        </div>
+        <div className="mt-5"><PlanStageContentView content={requirementStageContent} hideHeader /></div>
+        <section className="hidden mt-5 overflow-hidden rounded-xl border border-border/50 bg-surface/[0.06]">
+          <div className="flex items-center gap-3 border-b border-border/40 px-4 py-3.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"><FileText className="h-4 w-4" /></span>
+            <div className="min-w-0"><div className="text-[11px] font-medium text-text-muted">{t('common.objective', language)}</div><h3 className="mt-0.5 truncate text-[12px] font-semibold text-text-primary">{requirementDocument.title}</h3></div>
+          </div>
+          {requirementDocument.sections.length > 0 ? <div className="divide-y divide-border/40">
+            {requirementDocument.sections.map((section, sectionIndex) => <div key={`${section.title}:${sectionIndex}`} className="grid grid-cols-[150px_minmax(0,1fr)] gap-5 px-4 py-3.5 max-md:grid-cols-1 max-md:gap-2">
+              <div className="flex items-start gap-2 text-[10px] font-semibold text-text-secondary"><span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-500"><Check className="h-2.5 w-2.5" /></span><span>{section.title}</span></div>
+              <div className="space-y-2">{section.items.map((item, itemIndex) => <div key={`${item}:${itemIndex}`} className="flex items-start gap-2 text-[10px] leading-5 text-text-secondary"><span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-text-muted/55" /><span>{item}</span></div>)}</div>
+            </div>)}
+          </div> : <div className="flex min-h-48 items-center justify-center text-[10px] text-text-muted">{t('taskBoard.theBriefIsBeing', language)}</div>}
+        </section>
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-4 py-3">
+          <div className="flex items-center gap-2 text-[10px] font-medium text-emerald-500"><CheckCircle2 className="h-4 w-4" />{t('taskBoard.requirementsConfirmedAndStructured', language)}</div>
+          <button type="button" onClick={requestChanges} className="text-[11px] font-medium text-text-muted hover:text-accent">{t('taskBoard.requestRevision', language)}</button>
+        </div>
+      </div>
+    </main> : stage === 'validation' && actualStage !== 'validation' ? <main className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
+      <div className="max-w-sm"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/[0.04] text-text-muted"><CheckCircle2 className="h-5 w-5" /></span><h2 className="mt-3 text-[12px] font-semibold text-text-primary">{t('taskBoard.validationHasNotStarted', language)}</h2><p className="mt-1.5 text-[11px] leading-4 text-text-muted">{t('taskBoard.deliveryResultsFailuresAnd', language)}</p></div>
+    </main> : stage === 'validation' ? <main className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
+      <div className="mx-auto max-w-5xl">
+        <section className="border-b border-border/45 pb-5">
+          <div className="flex items-start justify-between gap-5"><div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{plan.validation?.status === 'accepted' ? t('taskBoard.resultsAccepted', language) : stats.failed ? t('taskBoard.executionFinishedWithFailures', language) : t('taskBoard.planCompleteAndReady', language)}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {t('common.tasksCompleted', language)} · {stats.files.length} {t('taskBoard.plannedResources', language)} · {formatDuration(stats.duration)}</p></div></div>
+            {plan.validation?.status === 'accepted' ? <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/[0.04] px-3 text-[11px] font-medium text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" />{t('taskBoard.accepted', language)}</span> : <div className="flex shrink-0 gap-2"><Button variant="secondary" size="sm" onClick={requestChanges} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>{t('common.requestChanges', language)}</Button><Button size="sm" disabled={stats.failed > 0 || (proofSummary.total > 0 && (proofSummary.pending > 0 || proofSummary.failed > 0))} onClick={() => updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })} leftIcon={<Check className="h-3.5 w-3.5" />}>{t('taskBoard.accept', language)}</Button></div>}
+          </div>
+        </section>
+        <div className="mt-5"><ProofMatrix tasks={plan.tasks} language={language} onOpenFile={openArtifact} onOpenThread={switchThread} /></div>
+        <div className="mt-5 grid grid-cols-[minmax(0,1.25fr)_minmax(280px,.75fr)] gap-6 max-lg:grid-cols-1">
+          <section><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.validationResults', language)}</div><div className="divide-y divide-border/40 border-y border-border/40">{plan.tasks.map(task => <div key={task.id}><button aria-expanded={validationTaskId === task.id} onClick={() => { setSelectedTaskId(task.id); setValidationTaskId(validationTaskId === task.id ? null : task.id) }} className="flex w-full items-start gap-3 py-3 text-left hover:bg-surface/[0.12]"><span className="mt-0.5">{task.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-red-400" />}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-secondary">{task.title}</strong><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-muted">{task.error || task.output || task.description}</span></span><time className="text-[10px] tabular-nums text-text-muted">{task.startedAt ? formatDuration((task.completedAt || now) - task.startedAt) : '—'}</time></button>{validationTaskId === task.id && <div className="pb-4 pl-7"><p className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-text-secondary">{task.error || task.output || task.description}</p>{task.threadId && <button type="button" className="mt-3 text-xs text-accent" onClick={() => switchThread(task.threadId!)}>{t('taskBoard.fullLog', language)}</button>}</div>}</div>)}</div></section>
+          <aside><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.deliveredResources', language)}</div>{stats.files.length ? <div className="divide-y divide-border/35 border-y border-border/35">{stats.files.map(file => <button type="button" key={file} onClick={() => void openArtifact(file)} className="flex w-full items-center gap-2 py-2.5 text-left text-xs text-text-secondary hover:text-accent"><FileCode2 className="h-3.5 w-3.5 shrink-0 text-text-muted" /><span className="min-w-0 flex-1 truncate">{file}</span><ExternalLink className="h-3 w-3 shrink-0" /></button>)}</div> : <p className="border-y border-border/35 py-3 text-[11px] leading-4 text-text-muted">{t('taskBoard.noOutputFilesWere', language)}</p>}</aside>
+        </div>
+      </div>
+    </main> : stage === 'plan' ? <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <section className="plan-board-graph-summary shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${graphStats.hasCycle || graphStats.missingDependencies ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-400/10 text-emerald-500'}`}>
+              {graphStats.hasCycle || graphStats.missingDependencies ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[12px] font-semibold text-text-primary">{graphStats.hasCycle || graphStats.missingDependencies
+                ? t('taskBoard.planDependenciesNeedAttention', language)
+                : t('taskBoard.planIsReadyFor', language)}</h2>
+              <p className="mt-1 text-[11px] leading-4 text-text-muted">{reviewLayout === 'graph' ? t('taskBoard.nodesAndEdgesAre', language) : plan.stageContent?.plan?.summary}</p>
+            </div>
+          </div>
+          <div className="grid shrink-0 grid-cols-4 divide-x divide-border/50 text-center">
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{plan.tasks.length}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.tasks', language)}</span></div>
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.maxParallelism}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.maxParallel', language)}</span></div>
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.roles}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.roles', language)}</span></div>
+            <div className="min-w-[84px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.estimatedTokens ? graphStats.estimatedTokens.toLocaleString() : '—'}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.tokenBudget', language)}</span></div>
+          </div>
+        </div>
+      </section>
+      <div className="plan-board-view-switch">
+        <button type="button" aria-pressed={reviewLayout === 'list'} onClick={() => setReviewLayout('list')}>{t('planDesign.taskList', language)}</button>
+        <button type="button" aria-pressed={reviewLayout === 'graph'} onClick={() => setReviewLayout('graph')}>{t('taskBoard.taskDependencyGraph', language)}</button>
+      </div>
+      {reviewLayout === 'list' && <div className="relative flex min-h-0 flex-1">
+        <PlanTaskList tasks={plan.tasks} language={language} expandedTaskId={expandedTaskId}
+          onExpand={id => { setExpandedTaskId(id); if (id) setSelectedTaskId(id) }}
+          onConfigure={task => { setSelectedTaskId(task.id); setInspectorOpen(true) }}
+          canDiscuss={Boolean(plan.originThreadId && threads[plan.originThreadId])}
+          onDiscuss={task => {
+            if (!plan.originThreadId || !threads[plan.originThreadId]) return
+            usePlanViewStore.getState().setDiscussionTarget({ planId: plan.id, taskId: task.id, title: task.title, threadId: plan.originThreadId })
+            switchThread(plan.originThreadId)
+            useStore.getState().setChatVisible(true)
+          }} />
+        {inspectorOpen && selectedTask && <PlanTaskInspector task={selectedTask} tasks={plan.tasks} language={language} disabled={isLive || isPaused} onClose={() => setInspectorOpen(false)} onChange={updates => updateTask(plan.id, selectedTask.id, updates)} />}
+      </div>}
+      <div className={`plan-board-graph-host mt-3 min-h-0 flex-1 flex-col overflow-hidden bg-background ${reviewLayout === 'graph' ? 'flex' : 'hidden'}`}>
+        <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/45 px-3.5 text-[11px] text-text-muted">
+          <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{t('taskBoard.taskDependencyGraph', language)}</span>
+          <div className="flex items-center gap-3"><span>{graphStats.models} {t('taskBoard.modelConfigurations', language)} · {plan.executionMode === 'parallel' ? t('taskBoard.parallelScheduling', language) : t('taskBoard.sequentialScheduling', language)}</span>{!inspectorOpen && selectedTask && <button type="button" onClick={() => setInspectorOpen(true)} className="inline-flex h-6 items-center gap-1 rounded-md border border-border/55 px-2 text-[10px] text-text-secondary hover:border-accent/30 hover:text-accent"><Settings2 className="h-3 w-3" />{t('taskBoard.configure', language)}</button>}</div>
+        </div>
+        <div className="relative flex min-h-0 flex-1">
+          <PlanDependencyGraph
+            tasks={plan.tasks}
+            selectedTaskId={selectedTask?.id}
+            waitingApprovalTaskIds={waitingApprovalTaskIds}
+            language={language}
+            onSelectTask={taskId => { setSelectedTaskId(taskId); setInspectorOpen(true) }}
+          />
+          {reviewLayout === 'graph' && inspectorOpen && selectedTask && <PlanTaskInspector task={selectedTask} tasks={plan.tasks} language={language} disabled={isLive || isPaused} onClose={() => setInspectorOpen(false)} onChange={updates => updateTask(plan.id, selectedTask.id, updates)} />}
+        </div>
+      </div>
+      <div className="h-4 shrink-0" />
+    </main> : <main className="plan-execution-list min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      <div className="mb-4 flex items-center justify-between text-xs text-text-muted"><span>{t('common.taskOrchestration', language)}</span><span>{stats.completed}/{stats.total} · {plan.executionMode === 'parallel' ? t('taskBoard.parallel', language) : t('taskBoard.serial', language)}</span></div>
+      {plan.tasks.map((task, index) => {
+        const runtime = runtimeByTask.get(task.id)
+        const meta = statusMeta(task, Boolean(runtime?.waitingApproval), language)
+        const Icon = meta.icon
+        const active = selectedTask?.id === task.id
+        const depth = depths.get(task.id) || 0
+        return <section key={task.id}>
+          <button type="button" onClick={() => setSelectedTaskId(task.id)} aria-expanded={active} className="plan-review-row">
+            <span className={`self-start pt-1 ${meta.tone}`}>{task.status === 'pending' ? <span className="font-mono text-xs">{String(index + 1).padStart(2, '0')}</span> : <Icon className={`h-4 w-4 ${task.status === 'running' && !runtime?.waitingApproval ? 'animate-spin' : ''}`} />}</span>
+            <span className="min-w-0" style={{ paddingLeft: depth * 8 }}><strong>{task.title}</strong><small className="line-clamp-2">{runtime?.currentTool?.name || runtime?.statusText || task.description}</small>{task.dependencies.length > 0 && <small>{t('common.depends', language)} · {task.dependencies.map(id => plan.tasks.find(item => item.id === id)?.title || id).join('、')}</small>}</span>
+            <span className={`text-xs ${meta.tone}`}>{meta.label}</span><ChevronDown className={`h-4 w-4 text-text-muted ${active ? 'rotate-180' : ''}`} />
+          </button>
+          {active && <div className="plan-execution-detail">{taskDetails}</div>}
+        </section>
+      })}
+    </main>}
 
     {showRequirements && <div className="absolute inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-[1px]" onPointerDown={() => setShowRequirements(false)}><section className="flex h-full w-[min(700px,72vw)] flex-col border-l border-border bg-background shadow-2xl" onPointerDown={event => event.stopPropagation()}><div className="flex h-12 shrink-0 items-center justify-between border-b border-border/55 px-4"><div className="flex items-center gap-2 text-[11px] font-semibold text-text-primary"><FileText className="h-3.5 w-3.5 text-text-muted" />{t('taskBoard.planBrief', language)}</div><button onClick={() => setShowRequirements(false)} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3.5 w-3.5" /></button></div><div className="relative min-h-0 flex-1 overflow-auto">{requirementsContent ? <MarkdownPreview content={requirementsContent} fontSize={13} sourcePath={workspacePath ? `${workspacePath}/.adnify/plan/${plan.requirementsDoc}` : undefined} /> : <div className="flex h-full items-center justify-center text-[10px] text-text-muted">{t('taskBoard.noBriefContent', language)}</div>}</div></section></div>}
   </div>

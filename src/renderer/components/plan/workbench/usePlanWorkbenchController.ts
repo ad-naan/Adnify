@@ -9,6 +9,7 @@ import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
 import { buildInteractiveResponse } from '@/renderer/agent/utils/interactiveResponse'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 import { t, asLanguage } from '@shared/i18n'
+import { usePlanViewStore } from '@/renderer/agent/plan/planViewStore'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
@@ -56,7 +57,10 @@ export function usePlanWorkbenchController() {
   }, [model.clarification])
 
   const openHistoryEntry = useCallback((entry: PlanHistoryEntry) => {
-    if (entry.planId) setActivePlan(entry.planId)
+    if (entry.planId) {
+      setActivePlan(entry.planId)
+      usePlanViewStore.getState().revealPlan(entry.planId)
+    }
     if (entry.threadId) switchThread(entry.threadId)
     const state = useStore.getState()
     if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
@@ -83,6 +87,7 @@ export function usePlanWorkbenchController() {
   }, [deletePlan, deleteThread])
 
   const createNewPlan = useCallback(() => {
+    usePlanViewStore.getState().setDiscussionTarget(null)
     setActivePlan(null)
     createThread({ activate: true, mode: 'plan', origin: 'user' })
     const state = useStore.getState()

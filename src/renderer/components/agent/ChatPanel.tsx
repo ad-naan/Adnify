@@ -3,7 +3,7 @@ import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { ChatVirtualList } from './ChatVirtualList'
 import {
-  AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, X, } from 'lucide-react'
+  AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, X, CodeXml, GitBranch, Search, CornerDownRight, ListChecks, History, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -51,13 +51,16 @@ import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
 import PlanWorkbench from '@/renderer/components/plan/workbench/PlanWorkbench'
-import { isPlanBoardPath } from '@/shared/types/planBoard'
+import { isPlanBoardPath, PLAN_BOARD_PATH } from '@/shared/types/planBoard'
 import { isPreviewDocumentPath } from '@/shared/types/preview'
 import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer/agent/threads/threadModeProjection'
 import type { WorkMode } from '@/shared/types/workMode'
 import { findThreadIdForMessage } from '@/renderer/agent/utils/interactiveResponse'
 import { supportsTaskApproval } from './ToolCallGroup'
 import { deriveThreadTaskStatus, isAgentTaskThread } from './taskCenterProjection'
+import { usePlanPresentation } from '../plan/usePlanPresentation'
+import { usePlanViewStore } from '@/renderer/agent/plan/planViewStore'
+import '../plan/plan-workspace.css'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -147,6 +150,13 @@ function ChatPanelContent() {
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
+  const planPresentation = usePlanPresentation()
+  const planSidebarView = usePlanViewStore(state => state.sidebarView)
+  const setPlanSidebarView = usePlanViewStore(state => state.setSidebarView)
+  const discussionTarget = usePlanViewStore(state => state.discussionTarget)
+  const [canvasDiscussion, setCanvasDiscussion] = useState(false)
+  const showPlanWorkbench = chatMode === 'plan' && (planPresentation.canvas || !planPresentation.plan
+    ? !canvasDiscussion : planSidebarView === 'details')
   const contextFilePath = activeFilePath && !isPlanBoardPath(activeFilePath) && !isPreviewDocumentPath(activeFilePath)
     ? activeFilePath
     : null
@@ -169,6 +179,9 @@ function ChatPanelContent() {
     messageListVersion,
     laneNotice,
   } = useAgentViewState()
+  const activeDiscussionTarget = chatMode === 'plan' && discussionTarget?.threadId === currentThreadId
+    && discussionTarget.planId === planPresentation.plan?.id ? discussionTarget : null
+  useEffect(() => { setCanvasDiscussion(false) }, [currentThreadId])
   const visibleContextItems = useMemo(() => contextItems.filter(item => !(
     item.type === 'File' && (isPlanBoardPath((item as FileContext).uri) || isPreviewDocumentPath((item as FileContext).uri))
   )), [contextItems])
@@ -214,6 +227,7 @@ function ChatPanelContent() {
   const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false)
   const optimizeRequestRef = useRef<{ requestId: string; cleanup: () => void } | null>(null)
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false)
+  const [planOverlayHost, setPlanOverlayHost] = useState<HTMLDivElement | null>(null)
   const imagesRef = useRef(images)
   imagesRef.current = images
   const checkpointMessageIds = useMemo(() => {
@@ -900,6 +914,14 @@ function ChatPanelContent() {
       }
     }
 
+    const target = usePlanViewStore.getState().discussionTarget
+    if (effectiveMode === 'plan' && !input.startsWith('/') && target?.threadId === currentThreadId
+      && useAgentStore.getState().plans.some(plan => plan.id === target.planId && plan.tasks.some(task => task.id === target.taskId))) {
+      const prefix = t('planDesign.taskContext', language, { title: target.title, id: target.taskId })
+      userMessage = typeof userMessage === 'string' ? `${prefix}\n${userMessage}` : [{ type: 'text', text: prefix }, ...userMessage]
+      usePlanViewStore.getState().setDiscussionTarget(null)
+    }
+
     setInput('')
     setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
 
@@ -1295,12 +1317,27 @@ function ChatPanelContent() {
 
   return (
     <div
-      className={`absolute inset-0 overflow-hidden bg-background-secondary transition-colors ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
+      className={`absolute inset-0 overflow-hidden bg-background-secondary transition-colors ${chatMode === 'plan' ? `plan-chat-surface ${planPresentation.canvas ? 'plan-chat-canvas' : ''} ${planPresentation.empty ? 'plan-chat-empty' : ''}` : ''} ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <div className="flex flex-col h-full">
+        {chatMode === 'plan' && <header className="plan-chat-toolbar">
+          {planPresentation.canvas && <ListChecks className="mr-1 h-4 w-4 text-accent" />}
+          <button type="button" aria-pressed={showPlanWorkbench} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details') }}>{t(planPresentation.canvas ? 'common.brief' : 'planDesign.details', language)}</button>
+          <button type="button" aria-pressed={!showPlanWorkbench} disabled={planPresentation.empty} onClick={() => { setCanvasDiscussion(true); setPlanSidebarView('discussion') }}>{t('planDesign.discussion', language)}</button>
+          {planPresentation.canvas && canvasDiscussion && planPresentation.plan && <button type="button" className="ml-auto" onClick={() => usePlanViewStore.getState().revealPlan(planPresentation.plan!.id)}>{t('planDesign.viewPlan', language)}</button>}
+          <button type="button" className="ml-auto" aria-label={t('common.planHistory', language)} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details'); usePlanViewStore.getState().setHistoryOpen(true) }}><History className="h-4 w-4" /></button>
+          <button type="button" aria-label={t('planWorkbench.startNewPlan', language)} onClick={() => {
+            usePlanViewStore.getState().setDiscussionTarget(null)
+            usePlanViewStore.getState().setHistoryOpen(false)
+            useAgentStore.getState().setActivePlan(null)
+            createThread({ mode: 'plan', origin: 'user' })
+            useStore.getState().openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+            setCanvasDiscussion(false)
+          }}><Plus className="h-4 w-4" /></button>
+        </header>}
 
         {/* Header - 简洁版 */}
         {chatMode !== 'plan' && <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background border-b border-border/30 select-none transition-colors duration-300">
@@ -1413,7 +1450,7 @@ function ChatPanelContent() {
         </AnimatePresence>
 
         {/* Messages Area */}
-        <div className={`flex-1 min-h-0 relative z-0 flex flex-col ${chatMode === 'plan' ? '' : 'pt-12'}`}>
+        <div className={`flex-1 min-h-0 relative z-0 flex flex-col ${chatMode === 'plan' ? 'plan-chat-body' : 'pt-12'}`}>
           {/* API Key Warning */}
           {!hasApiKey && (
             <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-xl flex gap-3 backdrop-blur-sm relative z-10">
@@ -1426,7 +1463,7 @@ function ChatPanelContent() {
           )}
 
           {/* Message List */}
-          <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+          <div className="plan-chat-messages flex-1 relative overflow-hidden flex flex-col min-h-0">
             {/* 过渡用的骨架屏 */}
             <AnimatePresence>
               {(isSwitchingThread || isHydratingActiveThread) && (
@@ -1447,8 +1484,8 @@ function ChatPanelContent() {
                 挂载完毕，初始位置不再二次生效，于是从第 0 条开始画（滚动条回顶），
                 只能靠事后的 scrollToIndex 一路补救。这段等待期本来就被上面的骨架屏
                 盖住，等数据齐了再挂载，首帧就直接落在底部。 */}
-            {chatMode === 'plan'
-              ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} />
+            {showPlanWorkbench
+              ? <PlanWorkbench canvas={planPresentation.canvas} overlayHost={planOverlayHost} onOverlayChange={setPlanOverlayOpen} />
               : isHydratingActiveThread
                 ? null
                 // Mount Virtuoso with real rows: its initial location and size
@@ -1501,7 +1538,7 @@ function ChatPanelContent() {
           }
 
           {/* Bottom Input Area - Unified Tray */}
-          <div className={`shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
+          <div className={`plan-chat-composer shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
             <div className="mx-4 mb-4 flex flex-col">
               {/* Dock 区域：无内容时不占空间，有内容时用动画平滑展开，
                   避免固定 min-h 造成的底部空白，同时通过过渡动画防止抖动。 */}
@@ -1548,6 +1585,7 @@ function ChatPanelContent() {
               )}
 
               {/* Input Component */}
+              {activeDiscussionTarget && <div className="plan-discussion-target"><CornerDownRight className="h-3.5 w-3.5 shrink-0" /><span>{activeDiscussionTarget.title}</span><button type="button" aria-label={t('planDesign.clearTaskContext', language)} onClick={() => usePlanViewStore.getState().setDiscussionTarget(null)}><X className="h-3.5 w-3.5" /></button></div>}
               <ChatInput
                 input={input}
                 setInput={setInput}
@@ -1557,6 +1595,7 @@ function ChatPanelContent() {
                 hasApiKey={hasApiKey}
                 hasPendingToolCall={!!pendingToolCall}
                 compact={chatMode === 'plan'}
+                placeholder={chatMode === 'plan' && planPresentation.empty ? t('planDesign.goalPlaceholder', language) : undefined}
                 onSubmit={handleSubmit}
                 onAbort={abort}
                 onInputChange={handleInputChange}
@@ -1576,10 +1615,18 @@ function ChatPanelContent() {
                 activeFilePath={contextFilePath}
                 onAddFile={handleAddCurrentFile}
               />
+              {chatMode === 'plan' && planPresentation.empty && <div className="plan-chat-examples">
+                {([
+                  ['planDesign.newFeature', 'planDesign.newFeaturePrompt', CodeXml],
+                  ['planDesign.refactor', 'planDesign.refactorPrompt', GitBranch],
+                  ['planDesign.fix', 'planDesign.fixPrompt', Search],
+                ] as const).map(([label, prompt, Icon]) => <button key={label} type="button" onClick={() => { setInput(input ? `${input}\n${t(prompt, language)}` : t(prompt, language)); textareaRef.current?.focus() }}><Icon className="h-3.5 w-3.5" />{t(label, language)}</button>)}
+              </div>}
             </div>
           </div>
         </div>
       </div>
+      <div ref={setPlanOverlayHost} className="pointer-events-none absolute inset-0 z-40" data-plan-overlay-host />
     </div >
   )
 }

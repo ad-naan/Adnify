@@ -1,9 +1,12 @@
 import { memo, useMemo } from 'react'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
-import { useStore } from '@/renderer/store'
+import { useStore, useModeStore } from '@/renderer/store'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { TaskBoard } from './TaskBoard'
 import { t, type TranslationKey, type Language } from '@shared/i18n'
+import { Button } from '@/renderer/components/ui'
+import { usePlanViewStore } from '@/renderer/agent/plan/planViewStore'
+import './plan-workspace.css'
 
 /**
  * 计划状态 → 文案 key。
@@ -42,12 +45,13 @@ export const PlanWorkspace = memo(function PlanWorkspace() {
     label: `${plan.name} · ${planStatusLabel(plan.status, language)}`,
   })), [language, sortedPlans])
 
-  return <div className="flex h-full min-h-0 flex-col bg-background">
+  return <div className="plan-surface flex h-full min-h-0 flex-col bg-background">
     <div className="min-h-0 flex-1">
-      {activePlan ? <TaskBoard planId={activePlan.id} planOptions={options} onPlanChange={setActivePlan} /> : <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/45 bg-surface/[0.12]"><OtterAsset asset="plans" className="h-11 w-11 object-contain" alt="" /></div>
-        <h2 className="text-sm font-semibold text-text-primary">{t('planWorkspace.waitingForAPlan', language)}</h2>
-        <p className="mt-2 max-w-md text-xs leading-5 text-text-muted">{t('planWorkspace.describeTheRequestOn', language)}</p>
+      {activePlan ? <TaskBoard planId={activePlan.id} planOptions={options} onPlanChange={id => { usePlanViewStore.getState().revealPlan(id); setActivePlan(id) }} /> : <div className="flex h-full flex-col items-center justify-center gap-5 px-8 pb-16 text-center">
+        <OtterAsset asset="creative" className="h-24 w-24 object-contain" alt="" />
+        <h2 className="text-2xl font-semibold text-text-primary">{t('planDesign.heading', language)}</h2>
+        <p className="max-w-md text-sm leading-6 text-text-muted">{t('planDesign.subtitle', language)}</p>
+        <Button onClick={() => { useModeStore.getState().setMode('plan'); useStore.getState().setChatVisible(true) }}>{t('planDesign.openDiscussion', language)}</Button>
       </div>}
     </div>
   </div>

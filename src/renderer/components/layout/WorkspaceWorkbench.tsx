@@ -7,6 +7,7 @@ import { EditorSkeleton, PanelSkeleton, ChatSkeleton } from '../ui/Loading'
 import { EmotionAmbientGlow } from '../agent/EmotionAmbientGlow'
 import DockWorkbench from './DockWorkbench'
 import { syncWorkbenchEditorVisibility } from './workbenchVisibility'
+import { usePlanPresentation } from '../plan/usePlanPresentation'
 
 const Editor = lazy(() => import('../editor/Editor'))
 const Sidebar = lazy(() => import('../sidebar/Sidebar'))
@@ -22,6 +23,7 @@ function LoadOnce({ active, children }: { active: boolean; children: ReactNode }
 }
 
 export default function WorkspaceWorkbench() {
+  const { canvas: planCanvas } = usePlanPresentation()
   const state = useStore(useShallow(s => ({
     layout: s.workbenchLayout, language: s.language, sidebar: s.activeSidePanel,
     editor: s.editorVisible, agent: s.chatVisible, terminal: s.terminalVisible, debug: s.debugVisible, focus: s.focusedPanel,
@@ -34,9 +36,9 @@ export default function WorkspaceWorkbench() {
   const [terminalCollapsed, setTerminalCollapsed] = useState(false)
   const visible = useMemo(() => ([
     ...(state.sidebar && !shell ? ['sidebar' as const] : []),
-    ...(state.editor || shell ? ['editor' as const] : []),
+    ...((state.editor && !planCanvas) || shell ? ['editor' as const] : []),
     ...(state.agent ? ['agent' as const] : []),
-  ]), [state.sidebar, state.editor, state.agent, shell])
+  ]), [state.sidebar, state.editor, state.agent, shell, planCanvas])
   const terminalVisible = state.terminal && !shell && (state.layout.terminalPosition === 'bottom' || (visible.includes(state.layout.terminalPosition) && (!state.focus || state.focus === state.layout.terminalPosition)))
   const panelContent = useMemo(() => ({
     sidebar: <ErrorBoundary><Suspense fallback={<PanelSkeleton />}><LoadOnce active={Boolean(state.sidebar && !shell)}><Sidebar panel={lastSidebar.current} /></LoadOnce></Suspense></ErrorBoundary>,

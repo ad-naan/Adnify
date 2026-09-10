@@ -1,5 +1,6 @@
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { t, type Language, type TranslationKey } from '@shared/i18n'
@@ -51,12 +52,15 @@ interface Props {
   onSelect: (entry: PlanHistoryEntry) => void
   onDelete: (entry: PlanHistoryEntry) => void
   onCreateNew: () => void
+  portalTarget?: HTMLElement | null
 }
 
-export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, onDelete, onCreateNew }: Props) {
+export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, onDelete, onCreateNew, portalTarget }: Props) {
   const [query, setQuery] = useState('')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   const filtered = useMemo(() => entries.filter(entry => entry.title.toLowerCase().includes(query.trim().toLowerCase())), [entries, query])
   const groups = useMemo(() => filtered.reduce<Array<{ label: string, entries: PlanHistoryEntry[] }>>((result, entry) => {
     const label = groupName(entry.updatedAt, language)
@@ -71,35 +75,44 @@ export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, 
       setConfirmingId(null)
       return
     }
+    const previousFocus = document.activeElement as HTMLElement | null
+    panelRef.current?.querySelector('input')?.focus()
     const closeOnPointerDown = (event: PointerEvent) => {
-      if (!panelRef.current?.contains(event.target as Node)) onClose()
+      if (!panelRef.current?.contains(event.target as Node)) closeRef.current()
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current() }
+      if (event.key === 'Tab') {
+        const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, [tabindex="0"]') || [])
+        const first = items[0], last = items.at(-1)
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+      }
     }
     document.addEventListener('pointerdown', closeOnPointerDown)
     document.addEventListener('keydown', closeOnEscape)
     return () => {
       document.removeEventListener('pointerdown', closeOnPointerDown)
       document.removeEventListener('keydown', closeOnEscape)
+      if (previousFocus?.isConnected) previousFocus.focus()
     }
-  }, [open, onClose])
+  }, [open, portalTarget])
 
   if (!open) return null
 
-  return <div className="absolute inset-0 z-40 bg-background">
-    <aside ref={panelRef} className="absolute inset-0 flex flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/45 px-3.5">
-        <div className="min-w-0 flex-1"><div className="text-[11px] font-semibold text-text-primary">{t('common.planHistory', language)}</div><div className="mt-1 text-[10px] text-text-muted">{t('planHistoryDrawer.separateFromAgentConversations', language)}</div></div>
+  const drawer = <div className="plan-history-overlay plan-readable pointer-events-auto absolute inset-0 z-40 bg-text-primary/5">
+    <aside ref={panelRef} role="dialog" aria-modal="true" aria-label={t('common.planHistory', language)} className="absolute inset-y-0 right-0 flex w-[480px] max-w-full flex-col bg-background shadow-[-16px_0_48px_-28px_rgba(15,23,42,0.3)]">
+      <header className="flex h-20 shrink-0 items-center gap-2 px-6">
+        <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-text-primary">{t('common.planHistory', language)}</div><div className="mt-1 text-xs text-text-muted">{t('planHistoryDrawer.separateFromAgentConversations', language)}</div></div>
         <button onClick={onClose} aria-label={t('closeTerminal', language)} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3.5 w-3.5" /></button>
       </header>
       <div className="shrink-0 px-3.5 py-3">
-        <label className="relative block"><Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted/55" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('planHistoryDrawer.searchPlanHistory', language)} className="h-8 w-full rounded-md border border-border/50 bg-surface/[0.1] pl-8 pr-3 text-[11px] text-text-primary outline-none placeholder:text-text-muted/45 focus:border-accent/35" /></label>
+        <label className="relative block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted/55" /><input value={query} onChange={event => setQuery(event.target.value)} aria-label={t('planHistoryDrawer.searchPlanHistory', language)} placeholder={t('planHistoryDrawer.searchPlanHistory', language)} className="h-10 w-full rounded-lg border-0 bg-surface/30 pl-9 pr-3 text-xs text-text-primary outline-none placeholder:text-text-muted/60 focus-visible:ring-1 focus-visible:ring-accent/40" /></label>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3 custom-scrollbar">
         {groups.length > 0 ? groups.map(group => <section key={group.label} className="mb-4 last:mb-0">
           <div className="mb-1.5 text-[10px] font-medium text-text-muted">{group.label}</div>
-          <div className="divide-y divide-border/35 border-y border-border/35">
+          <div>
             {group.entries.map(entry => <div key={entry.id} className="group flex items-start gap-1">
               <button onClick={() => { onSelect(entry); onClose() }} className="min-w-0 flex-1 py-3 text-left">
                 <div className="grid grid-cols-[8px_minmax(0,1fr)_auto_auto] items-center gap-2.5"><span className={`h-1.5 w-1.5 rounded-full ${dotTone(entry)}`} /><div className="min-w-0 truncate text-[10px] font-medium text-text-secondary">{entry.title}</div><span className={`text-[10px] font-medium ${entry.status === 'completed' ? 'text-emerald-500' : entry.status === 'failed' ? 'text-red-400' : 'text-amber-500'}`}>{statusText(entry.status, language)}</span><span className="flex items-center gap-2 text-[10px] text-text-muted">{entry.taskCount !== undefined && <span>{entry.completedCount}/{entry.taskCount}</span>}<time>{new Date(entry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></span></div>
@@ -110,13 +123,13 @@ export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, 
               </div> : <button onClick={() => setConfirmingId(entry.id)} aria-label={t('planHistoryDrawer.deletePlanHistory', language)} className="shrink-0 self-center rounded p-1.5 text-text-muted opacity-0 hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>}
             </div>)}
           </div>
-        </section>) : <div className="flex min-h-48 flex-col items-center justify-center text-center"><OtterAsset asset="sleepyFace" className="h-12 w-12 object-contain opacity-75" /><div className="mt-3 text-[10px] font-medium text-text-secondary">{t('planHistoryDrawer.noMatchingPlans', language)}</div><div className="mt-1 text-[10px] text-text-muted">{t('planHistoryDrawer.tryAnotherSearch', language)}</div></div>}
+        </section>) : <div className="flex min-h-48 h-full flex-col items-center justify-center text-center"><OtterAsset asset="sleepyFace" className="h-16 w-16 object-contain opacity-75" /><div className="mt-4 text-sm font-medium text-text-secondary">{t(entries.length ? 'planHistoryDrawer.noMatchingPlans' : 'planDesign.noHistory', language)}</div><div className="mt-2 text-xs text-text-muted">{t(entries.length ? 'planHistoryDrawer.tryAnotherSearch' : 'planDesign.historyHint', language)}</div></div>}
       </div>
-      <footer className="shrink-0 border-t border-border/40 p-3.5">
+      <footer className="shrink-0 p-3.5">
         <button
           type="button"
           onClick={() => { onCreateNew(); onClose() }}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border/55 text-[11px] font-medium text-text-secondary hover:border-accent/30 hover:bg-accent/[0.035] hover:text-accent"
+          className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-accent/[0.06] text-xs font-medium text-accent hover:bg-accent/10"
         >
           <Plus className="h-3 w-3" />
           {t('planHistoryDrawer.startANewPlan', language)}
@@ -125,4 +138,5 @@ export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, 
       </footer>
     </aside>
   </div>
+  return portalTarget ? createPortal(drawer, portalTarget) : drawer
 }
