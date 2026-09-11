@@ -20,10 +20,8 @@ export const en = {
   'planDesign.newFeaturePrompt': 'Help me plan a new feature for this project: ',
   'planDesign.refactorPrompt': 'Help me assess and plan a refactor of this module: ',
   'planDesign.fixPrompt': 'Help me investigate this issue and plan a fix: ',
-  'planDesign.assurance': 'You review the plan before execution starts.',
   'planDesign.openDiscussion': 'Open planning conversation',
   'planDesign.revised': 'Plan updated — review the changes before execution.',
-  'planDesign.changes': 'View plan changes',
   'workbench.layout': 'Workbench layout',
   'workbench.visiblePanels': 'Column order and visibility',
   'workbench.orderHint': 'Left to right',
@@ -2829,10 +2827,7 @@ export const en = {
   'planWorkbenchActivity.toolActions': 'tool actions',
 
   // planWorkbenchEmpty
-  'planWorkbenchEmpty.createdPlansWillBe': 'Created plans will be kept here automatically',
-  'planWorkbenchEmpty.describeWhatYouWant': 'Describe what you want to accomplish. AI will clarify the requirements before creating a reviewable plan.',
   'planWorkbenchEmpty.recentPlans': 'Recent plans',
-  'planWorkbenchEmpty.startWithAnObjective': 'Start with an objective',
 
   // planWorkbenchProcessing
   'planWorkbenchProcessing.execution': 'Executing plan tasks',
@@ -2871,14 +2866,12 @@ export const en = {
   'planWorkbenchRuntime.waitingForApproval': 'Waiting for approval',
 
   // planWorkspace
-  'planWorkspace.describeTheRequestOn': 'Describe the request on the right. After clarification, the plan will be created and shown here automatically.',
   'planWorkspace.statusDraft': 'Draft',
   'planWorkspace.statusPaused': 'Paused',
   'planWorkspace.statusPausing': 'Pausing',
   'planWorkspace.statusReady': 'Ready',
   'planWorkspace.statusStopped': 'Stopped',
   'planWorkspace.statusStopping': 'Stopping',
-  'planWorkspace.waitingForAPlan': 'Waiting for a plan',
 
   // problemsView
   'problemsView.errors': 'Errors',

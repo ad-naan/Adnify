@@ -20,10 +20,8 @@ export const zh = {
   'planDesign.newFeaturePrompt': '请帮我规划这个项目的新功能：',
   'planDesign.refactorPrompt': '请帮我评估并规划这个模块的重构：',
   'planDesign.fixPrompt': '请帮我排查以下问题并制定修复计划：',
-  'planDesign.assurance': '由你确认计划，再开始执行。',
   'planDesign.openDiscussion': '打开规划对话',
   'planDesign.revised': '计划已更新，请查看变动后再执行。',
-  'planDesign.changes': '查看计划变动',
   'workbench.layout': '工作台布局',
   'workbench.visiblePanels': '栏位与显示',
   'workbench.orderHint': '从左到右',
@@ -2830,10 +2828,7 @@ export const zh = {
   'planWorkbenchActivity.toolActions': '个工具动作',
 
   // planWorkbenchEmpty
-  'planWorkbenchEmpty.createdPlansWillBe': '创建后的计划会自动保留在这里',
-  'planWorkbenchEmpty.describeWhatYouWant': '描述你想完成的事情。AI 会先确认关键需求，再生成可审阅、可并行执行的计划。',
   'planWorkbenchEmpty.recentPlans': '最近计划',
-  'planWorkbenchEmpty.startWithAnObjective': '从一个目标开始',
 
   // planWorkbenchProcessing
   'planWorkbenchProcessing.execution': '正在执行计划任务',
@@ -2872,14 +2867,12 @@ export const zh = {
   'planWorkbenchRuntime.waitingForApproval': '等待工具审批',
 
   // planWorkspace
-  'planWorkspace.describeTheRequestOn': '请在右侧描述需求。完成必要的澄清后，计划会自动创建并显示在这里。',
   'planWorkspace.statusDraft': '待审核',
   'planWorkspace.statusPaused': '已暂停',
   'planWorkspace.statusPausing': '暂停中',
   'planWorkspace.statusReady': '待执行',
   'planWorkspace.statusStopped': '已停止',
   'planWorkspace.statusStopping': '停止中',
-  'planWorkspace.waitingForAPlan': '正在等待计划',
 
   // problemsView
   'problemsView.errors': '错误',
