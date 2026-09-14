@@ -1511,6 +1511,8 @@ export const zh = {
   'copyPath': '复制路径',
   'copyRelativePath': '复制相对路径',
   'chat.filePathHint': 'Ctrl / ⌘ + 点击打开文件；右键打开所在文件夹',
+  'chat.filePathOpenFailed': '无法打开路径，请检查文件是否存在及访问权限',
+  'chat.openContainingFolder': '打开所在文件夹',
   'revealInExplorer': '在资源管理器中显示',
   'openInBrowser': '在浏览器中打开',
   'pathCopied': '路径已复制',

@@ -3,6 +3,7 @@ import { FolderOpen } from 'lucide-react'
 import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
 import { isBinaryFile, safeOpenFile } from '@renderer/utils/fileUtils'
+import { t } from '@shared/i18n'
 import { toast } from '../common/ToastProvider'
 import { ContextMenu, useContextMenu } from '../ui/ContextMenu'
 import { resolveChatFilePath } from './chatFilePaths'
@@ -26,7 +27,7 @@ export async function activateChatFilePath(value: string, reveal = false): Promi
       }
     }
   } catch {
-    toast.error(language === 'zh' ? '无法打开路径，请检查文件是否存在及访问权限' : 'Cannot open path. Check that it exists and is accessible.', path || value)
+    toast.error(t('chat.filePathOpenFailed', language), path || value)
   }
 }
 
@@ -68,7 +69,7 @@ export function ChatFilePathBoundary({ children }: { children: React.ReactNode }
       {children}
       {menu && <ContextMenu x={menu.x} y={menu.y} onClose={hide} items={[{
         id: 'reveal-file',
-        label: language === 'zh' ? '打开所在文件夹' : 'Open Containing Folder',
+        label: t('chat.openContainingFolder', language),
         icon: FolderOpen,
         onClick: () => { if (menu.data) void activateChatFilePath(menu.data, true) },
       }]} />}

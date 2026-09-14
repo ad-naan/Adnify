@@ -1511,6 +1511,8 @@ export const en = {
   'copyPath': 'Copy Path',
   'copyRelativePath': 'Copy Relative Path',
   'chat.filePathHint': 'Ctrl / ⌘ + click to open file; right-click to open containing folder',
+  'chat.filePathOpenFailed': 'Cannot open path. Check that it exists and is accessible.',
+  'chat.openContainingFolder': 'Open Containing Folder',
   'revealInExplorer': 'Reveal in Explorer',
   'openInBrowser': 'Open in Browser',
   'pathCopied': 'Path copied',
