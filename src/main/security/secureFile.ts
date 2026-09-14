@@ -841,8 +841,20 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:showInFolder', async (_, filePath: string) => {
     try {
       await fsPromises.access(filePath)
-      shell.showItemInFolder(filePath)
+      shell.showItemInFolder(path.normalize(filePath))
       return true
+    } catch {
+      return false
+    }
+  })
+
+  // Explicit user action, like showInFolder. Accept only existing absolute paths,
+  // never URLs/commands; shell.openPath uses the OS file association.
+  ipcMain.handle('file:openWithDefault', async (_, filePath: string) => {
+    if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || /[\x00-\x1f]/.test(filePath)) return false
+    try {
+      await fsPromises.access(filePath)
+      return (await shell.openPath(path.normalize(filePath))) === ''
     } catch {
       return false
     }

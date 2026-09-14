@@ -45,16 +45,19 @@ describe('chat image references', () => {
   })
 
   it('keeps the default link sanitizer and thread links unchanged', () => {
-    for (const source of ['asset://image-1', 'file:///D:/poster.png', 'D:/poster.png', 'javascript:alert(1)']) {
+    for (const source of ['asset://image-1', 'javascript:alert(1)']) {
       expect(chatMarkdownUrlTransform(source, 'href', { tagName: 'a' })).toBe('')
     }
     expect(chatMarkdownUrlTransform('adnify://agent/thread/abc', 'href', { tagName: 'a' })).toBe('adnify://agent/thread/abc')
+    for (const source of ['file:///D:/poster.png', 'D:/poster.png']) {
+      expect(chatMarkdownUrlTransform(source, 'href', { tagName: 'a' })).toBe(source)
+    }
   })
 
-  it('passes a Windows or asset source through the real Markdown renderer only to the image component', () => {
+  it('passes a Windows or asset image source through the real Markdown renderer to the image component', () => {
     const seen: string[] = []
     const html = renderToStaticMarkup(<ReactMarkdown urlTransform={chatMarkdownUrlTransform} components={{ img: ({ src }) => { seen.push(src || ''); return <span>preview</span> } }}>
-      {'![poster](D:/project/poster.png)\n\n![asset](asset://image-1)\n\n[link](file:///D:/project/poster.png)'}
+      {'![poster](D:/project/poster.png)\n\n![asset](asset://image-1)'}
     </ReactMarkdown>)
     expect(seen).toEqual(['D:/project/poster.png', 'asset://image-1'])
     expect(html).not.toContain('<img')

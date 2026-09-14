@@ -415,6 +415,7 @@ export interface ElectronAPI {
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<boolean>
+  openWithDefault: (path: string) => Promise<boolean>
   authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
   openInBrowser: (path: string) => Promise<boolean>
   mkdir: (path: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>

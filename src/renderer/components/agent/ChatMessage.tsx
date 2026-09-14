@@ -35,7 +35,7 @@ import { t } from '@shared/i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
-import { toFullPath, getFileName } from '@shared/utils/pathUtils'
+import { getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import { selectLiveState, type LiveSelectorState } from './chatMessageLiveSelector'
 import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
@@ -53,6 +53,8 @@ import SmoothCollapse from './SmoothCollapse'
 import { useAssistantTurnView } from './useAssistantTurnView'
 import { StreamingPlainText } from './StreamingTail'
 import { useDisclosureState } from '@renderer/hooks'
+import { parseChatFilePath, parseChatFileHref, remarkChatFilePaths } from './chatFilePaths'
+import { ChatFilePathBoundary } from './ChatFilePathBoundary'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -84,7 +86,7 @@ interface RenderPartProps {
   messageId: string
 }
 
-const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath, remarkChatFilePaths]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
 
 function useTransientFlag(durationMs: number) {
@@ -625,19 +627,7 @@ const MarkdownContent = React.memo(({
     [contentWithoutAlert, isVisuallyStreaming, keepStreamingLayout, streamingPartitioner],
   )
 
-  const workspacePath = useStore(s => s.workspacePath)
-
-  const handleOpenFile = React.useCallback(async (filePath: string) => {
-    if (!workspacePath) return
-    const resolvedPath = toFullPath(filePath, workspacePath)
-
-    try {
-      await safeOpenFile(resolvedPath, { showWarning: false, confirmLargeFile: false })
-    } catch (err) {
-      console.warn('Failed to open file from markdown:', err)
-    }
-  }, [workspacePath])
-
+  const language = useStore(s => s.language)
   const markdownComponents = React.useMemo(() => ({
     img: ChatMarkdownImage,
     code({ className, children, node, ...props }: any) {
@@ -646,21 +636,16 @@ const MarkdownContent = React.memo(({
       const isCodeBlock = match || node?.position?.start?.line !== node?.position?.end?.line
       const isInline = !isCodeBlock && !codeContent.includes('\n')
 
-      const looksLikePath = isInline && (
-        codeContent.includes('/') ||
-        codeContent.includes('\\') ||
-        codeContent.match(/\.(ts|tsx|js|jsx|vue|uvue|md|json|css|scss|less|html|go|rs|py|java|c|cpp|h|hpp)$/i)
-      ) && !codeContent.includes(' ') && codeContent.length > 2
+      const filePath = isInline ? parseChatFilePath(codeContent) : null
 
-      if (isInline && looksLikePath) {
+      if (filePath) {
         return (
           <code
             className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all cursor-pointer hover:underline decoration-accent/50 underline-offset-2 transition-all"
-            onClick={(e) => {
-              e.preventDefault()
-              handleOpenFile(codeContent)
-            }}
-            title="Click to open file"
+            data-chat-file-path={filePath}
+            role="link"
+            tabIndex={0}
+            title={t('chat.filePathHint', language)}
             {...props}
           >
             {children}
@@ -688,6 +673,10 @@ const MarkdownContent = React.memo(({
       if (threadId) {
         return <a href={href} onClick={(event) => { event.preventDefault(); useAgentStore.getState().switchThread(threadId) }} className="rounded bg-accent/[0.08] px-1.5 py-0.5 font-medium text-accent hover:bg-accent/[0.13]">{children}</a>
       }
+      const filePath = href ? parseChatFileHref(href) : null
+      if (filePath) {
+        return <span data-chat-file-path={filePath} data-chat-file-link role="link" tabIndex={0} title={t('chat.filePathHint', language)} className="text-accent cursor-pointer hover:underline decoration-accent/50 underline-offset-2 font-medium break-all">{children}</span>
+      }
       return <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
     },
     strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
@@ -708,7 +697,7 @@ const MarkdownContent = React.memo(({
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
-  }), [fontSize, handleOpenFile])
+  }), [fontSize, language])
 
   if (!contentWithoutAlert && !systemAlert) {
     return null
@@ -725,46 +714,48 @@ const MarkdownContent = React.memo(({
         />
       )}
       {contentWithoutAlert && (
-        <div
-          style={{ fontSize: `${fontSize}px` }}
-          className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden"
-        >
-          {keepStreamingLayout && streamingPartition ? (
-            <>
-              {streamingPartition.completedBlocks.map((block, index) => (
-                <StableStreamingMarkdownBlock
-                  key={index}
-                  content={block}
-                  components={markdownComponents as any}
-                />
-              ))}
-              {streamingPartition.activeBlock && (
-                <div key={`active-block-${streamingPartition.completedBlocks.length}`}>
-                  {/* Keep the live write head structurally stable. Re-parsing the
-                      active Markdown block would remount its tail on every tick. */}
-                  {isVisuallyStreaming ? (
-                    <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
-                      <StreamingPlainText
-                        text={streamingPartition.activeBlock}
-                        active
+        <ChatFilePathBoundary>
+          <div
+            style={{ fontSize: `${fontSize}px` }}
+            className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden"
+          >
+            {keepStreamingLayout && streamingPartition ? (
+              <>
+                {streamingPartition.completedBlocks.map((block, index) => (
+                  <StableStreamingMarkdownBlock
+                    key={index}
+                    content={block}
+                    components={markdownComponents as any}
+                  />
+                ))}
+                {streamingPartition.activeBlock && (
+                  <div key={`active-block-${streamingPartition.completedBlocks.length}`}>
+                    {/* Keep the live write head structurally stable. Re-parsing the
+                        active Markdown block would remount its tail on every tick. */}
+                    {isVisuallyStreaming ? (
+                      <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
+                        <StreamingPlainText
+                          text={streamingPartition.activeBlock}
+                          active
+                        />
+                      </div>
+                    ) : (
+                      <StableStreamingMarkdownBlock
+                        content={streamingPartition.activeBlock}
+                        components={markdownComponents as any}
                       />
-                    </div>
-                  ) : (
-                    <StableStreamingMarkdownBlock
-                      content={streamingPartition.activeBlock}
-                      components={markdownComponents as any}
-                    />
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <StableStreamingMarkdownBlock
-              content={contentWithoutAlert}
-              components={markdownComponents as any}
-            />
-          )}
-        </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <StableStreamingMarkdownBlock
+                content={contentWithoutAlert}
+                components={markdownComponents as any}
+              />
+            )}
+          </div>
+        </ChatFilePathBoundary>
       )}
     </>
   )

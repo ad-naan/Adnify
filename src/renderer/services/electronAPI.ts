@@ -109,6 +109,7 @@ function createGroupedAPI() {
       rename: async (oldPath: string, newPath: string) => mutationSucceeded(await raw.renameFile(oldPath, newPath)),
       renameDetailed: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
+      openWithDefault: (path: string) => raw.openWithDefault(path),
       authorizeSettingsEdit: async (path: string, initialContent?: string) => mutationSucceeded(await raw.authorizeSettingsEdit(path, initialContent)),
       authorizeSettingsEditDetailed: (path: string, initialContent?: string) => raw.authorizeSettingsEdit(path, initialContent),
       openInBrowser: (path: string) => raw.openInBrowser(path),

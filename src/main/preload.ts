@@ -277,6 +277,7 @@ export interface ElectronAPI {
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<boolean>
+  openWithDefault: (path: string) => Promise<boolean>
   authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<FileMutationResult>
   mkdir: (path: string) => Promise<FileMutationResult>
   deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<FileMutationResult>
@@ -649,6 +650,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (content: string, path?: string, encoding?: string) => ipcRenderer.invoke('file:save', content, path, encoding),
   fileExists: (path: string) => ipcRenderer.invoke('file:exists', path),
   showItemInFolder: (path: string) => ipcRenderer.invoke('file:showInFolder', path),
+  openWithDefault: (path: string) => ipcRenderer.invoke('file:openWithDefault', path),
   authorizeSettingsEdit: (path: string, initialContent?: string) => ipcRenderer.invoke('file:authorizeSettingsEdit', path, initialContent),
   openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),

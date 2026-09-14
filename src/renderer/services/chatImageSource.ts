@@ -1,6 +1,7 @@
 import { defaultUrlTransform } from 'react-markdown'
 import { parseThreadDeepLink } from '@renderer/agent/threads/threadReference'
 import { assetService } from './assetService'
+import { parseChatFileHref } from '../components/agent/chatFilePaths'
 
 type ChatImageSource = { type: 'url'; url: string } | { type: 'asset'; id: string } | { type: 'path'; path: string }
 
@@ -41,6 +42,8 @@ export function parseChatImageSource(value: string): ChatImageSource | null {
 
 export function chatMarkdownUrlTransform(url: string, key: string, node: { tagName: string }): string {
   if (node.tagName === 'img' && key === 'src') return parseChatImageSource(url) ? url : ''
+  // ChatMessage renders local destinations as delegated spans, never native anchors.
+  if (node.tagName === 'a' && key === 'href' && parseChatFileHref(url)) return url
   return parseThreadDeepLink(url) ? url : defaultUrlTransform(url)
 }
 

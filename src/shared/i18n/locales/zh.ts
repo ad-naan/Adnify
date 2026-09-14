@@ -1510,6 +1510,7 @@ export const zh = {
   'paste': '粘贴',
   'copyPath': '复制路径',
   'copyRelativePath': '复制相对路径',
+  'chat.filePathHint': 'Ctrl / ⌘ + 点击打开文件；右键打开所在文件夹',
   'revealInExplorer': '在资源管理器中显示',
   'openInBrowser': '在浏览器中打开',
   'pathCopied': '路径已复制',

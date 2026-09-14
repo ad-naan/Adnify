@@ -1510,6 +1510,7 @@ export const en = {
   'paste': 'Paste',
   'copyPath': 'Copy Path',
   'copyRelativePath': 'Copy Relative Path',
+  'chat.filePathHint': 'Ctrl / ⌘ + click to open file; right-click to open containing folder',
   'revealInExplorer': 'Reveal in Explorer',
   'openInBrowser': 'Open in Browser',
   'pathCopied': 'Path copied',
