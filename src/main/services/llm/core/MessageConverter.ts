@@ -3,18 +3,21 @@
  * 使用 AI SDK 7 的标准类型，不使用 any
  */
 
-import type { JSONValue } from '@ai-sdk/provider'
 import type {
   AssistantModelMessage,
   FilePart,
   ModelMessage,
+  ReasoningPart,
   TextPart,
+  ToolCallPart,
   ToolModelMessage,
   UserModelMessage,
 } from '@ai-sdk/provider-utils'
 import type { LLMMessage, MessageContentPart } from '@shared/types'
 import type { LLMConfig } from '@shared/types/llm'
-import { getOpenAIProviderOptionKeys, usesOpenAIProtocol, usesAnthropicProtocol } from './ProviderCompatibility'
+import { isBuiltinProvider } from '@shared/config/providers'
+import { usesAnthropicProtocol } from './ProviderCompatibility'
+import { resolveCacheProtocol } from './cacheProtocol'
 
 export class MessageConverter {
   /**
@@ -177,10 +180,7 @@ export class MessageConverter {
     if (config && usesAnthropicProtocol(config) && config.thinkingBudget && config.thinkingBudget > 0 && msg.reasoning_content) {
       const signature = msg.reasoning_signature
       if (signature) {
-        const parts: Array<
-          | { type: 'reasoning'; text: string; providerOptions?: Record<string, Record<string, JSONValue>> }
-          | { type: 'text'; text: string }
-        > = [
+        const parts: Array<ReasoningPart | TextPart> = [
           {
             type: 'reasoning',
             text: msg.reasoning_content,
@@ -196,22 +196,21 @@ export class MessageConverter {
       }
     }
 
-    const result: AssistantModelMessage = { role: 'assistant', content: textContent }
-    if (msg.reasoning_content) {
-      result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
+    const reasoning = this.convertCompatibleReasoning(msg, config)
+    if (reasoning.length > 0) {
+      return {
+        role: 'assistant',
+        content: [...reasoning, ...(textContent.trim() ? [{ type: 'text' as const, text: textContent }] : [])],
+      }
     }
-    return result
+    return { role: 'assistant', content: textContent }
   }
 
   /**
    * 转换带工具调用的 assistant 消息
    */
   private convertAssistantWithToolCalls(msg: LLMMessage, config?: LLMConfig): AssistantModelMessage {
-    const content: Array<
-      | { type: 'text'; text: string }
-      | { type: 'reasoning'; text: string; providerOptions?: Record<string, Record<string, JSONValue>> }
-      | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
-    > = []
+    const content: Array<TextPart | ReasoningPart | ToolCallPart> = this.convertCompatibleReasoning(msg, config)
 
     // For Anthropic protocol with thinking enabled, always include a reasoning part
     // before tool calls. The signature is required by AI SDK's Anthropic provider
@@ -246,11 +245,7 @@ export class MessageConverter {
       }
     }
 
-    const result: AssistantModelMessage = { role: 'assistant', content }
-    if (msg.reasoning_content && !usesAnthropicProtocol(config || {} as LLMConfig)) {
-      result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
-    }
-    return result
+    return { role: 'assistant', content }
   }
 
   /**
@@ -279,16 +274,18 @@ export class MessageConverter {
     }
   }
 
-  private buildReasoningProviderOptions(
-    reasoningContent: string,
+  private convertCompatibleReasoning(
+    msg: LLMMessage,
     config?: LLMConfig,
-  ): Record<string, Record<string, JSONValue>> | undefined {
-    if (!reasoningContent || !config || !usesOpenAIProtocol(config)) {
-      return undefined
+  ): ReasoningPart[] {
+    // Match modelFactory's OpenAI-compatible route. AI SDK serializes reasoning
+    // content parts into reasoning_content; message-level customOpenai options
+    // are not read here. Replay saved reasoning even if thinking is now disabled.
+    if (!msg.reasoning_content || !config || isBuiltinProvider(config.provider)
+      || resolveCacheProtocol(config.protocol, config.provider) !== 'openai') {
+      return []
     }
 
-    return Object.fromEntries(
-      getOpenAIProviderOptionKeys(config).map(key => [key, { reasoning_content: reasoningContent }]),
-    )
+    return [{ type: 'reasoning', text: msg.reasoning_content }]
   }
 }

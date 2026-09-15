@@ -6,6 +6,7 @@
 import { logger } from '@shared/utils/Logger'
 import { t } from '@shared/i18n'
 import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
+import { hasAsciiControlCharacters } from '@shared/utils/pathUtils'
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
 import { pathToFileURL } from 'url'
@@ -851,7 +852,7 @@ export function registerSecureFileHandlers(
   // Explicit user action, like showInFolder. Accept only existing absolute paths,
   // never URLs/commands; shell.openPath uses the OS file association.
   ipcMain.handle('file:openWithDefault', async (_, filePath: string) => {
-    if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || /[\x00-\x1f]/.test(filePath)) return false
+    if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || hasAsciiControlCharacters(filePath)) return false
     try {
       await fsPromises.access(filePath)
       return (await shell.openPath(path.normalize(filePath))) === ''

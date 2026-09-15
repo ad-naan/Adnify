@@ -1,4 +1,4 @@
-import { resolvePathLexically } from '@shared/utils/pathUtils'
+import { hasAsciiControlCharacters, resolvePathLexically } from '@shared/utils/pathUtils'
 
 const MAX_PATH_LENGTH = 2048
 const FILE_NAME = /^(?:\.[\w-]+|[\p{L}\p{N}_ .@()+-]+\.(?:[cm]?[jt]sx?|vue|uvue|md|mdx|json|jsonc|ya?ml|toml|xml|txt|log|csv|tsv|css|scss|less|html?|go|rs|py|java|[ch]|[ch]pp|sh|ps1|sql|zip|tar|gz|rar|7z|pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|svg))$/iu
@@ -18,7 +18,7 @@ export function parseChatFilePath(value: string): string | null {
     return null
   }
   path = path.replace(/(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)$/, '').replace(/\\/g, '/')
-  if (!path || /[\x00-\x1f\x7f<>"|?*`=]/.test(path)) return null
+  if (!path || hasAsciiControlCharacters(path, true) || /[<>"|?*`=]/.test(path)) return null
   if (path.replace(/^[a-z]:\//i, '').includes(':')) return null
   // Avoid expressions, options and prose that happen to contain a slash.
   if (/\s\//.test(path) || /\/\s/.test(path) || /^[-@~]/.test(path) || /\(\)$/.test(path)) return null

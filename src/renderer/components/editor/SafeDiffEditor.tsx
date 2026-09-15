@@ -85,7 +85,12 @@ export function SafeDiffEditor({
       original={safeOriginal}
       modified={safeModified}
       theme="adnify-dynamic"
-      options={options}
+      options={{
+        ...options,
+        // Monaco 0.55.1's gutter menu renders stale diff ranges after lines are
+        // deleted (microsoft/monaco-editor#5184). Use the legacy revert arrows.
+        renderGutterMenu: false,
+      }}
       onMount={handleMount}
       loading={<div className="flex items-center justify-center h-full text-text-muted">Loading diff...</div>}
     />
