@@ -11,7 +11,7 @@ export function PlanRequirementContext({ request, answers, language }: { request
     </summary>
     <div className="plan-context-content">
       <p>{request}</p>
-      {!!answers?.length && <div className="plan-context-answers"><CheckCircle2 size={14} /><span>{answers.join(language === 'zh' ? '、' : ', ')}</span></div>}
+      {!!answers?.length && <div className="plan-context-answers"><CheckCircle2 size={14} /><span>{answers.join(t('planRequirementContext.answerSeparator', language))}</span></div>}
     </div>
   </details>
 }

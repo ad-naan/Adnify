@@ -2791,7 +2791,6 @@ export const zh = {
   'planWorkbench.approvals': '审批策略',
   'planWorkbench.artifacts': '声明产物',
   'planWorkbench.attention': '需要处理',
-  'planWorkbench.buildingTheBrief': '正在形成需求简报',
   'planWorkbench.complete': '已完成',
   'planWorkbench.confirmedRequirementsAreBecoming': '已确认的需求正在转换为任务、依赖与执行配置',
   'planWorkbench.creatingTheStructuredPlan': '正在生成结构化计划',
@@ -2828,7 +2827,6 @@ export const zh = {
   'planWorkbench.tasks': '项任务',
   'planWorkbench.tasks2': '项',
   'planWorkbench.tokenBudget': 'Token 预算',
-  'planWorkbench.total': '总耗时',
 
   // planWorkbenchActivity
   'planWorkbenchActivity.activity': '过程',
@@ -2844,7 +2842,6 @@ export const zh = {
   // planWorkbenchProcessing
   'planWorkbenchProcessing.execution': '正在执行计划任务',
   'planWorkbenchProcessing.executionDetail': '任务状态、工具动作、子代理与审批请求会持续更新',
-  'planWorkbenchProcessing.liveProcess': '实时过程',
   'planWorkbenchProcessing.needsClarification': '正在梳理需求与项目上下文',
   'planWorkbenchProcessing.needsClarificationDetail': '正在识别目标、约束和需要确认的关键决策',
   'planWorkbenchProcessing.planCreated': '计划已经生成',
@@ -2862,6 +2859,9 @@ export const zh = {
   'planWorkbenchProcessing.waitingForAnswerDetail': '收到回答后会继续生成结构化计划',
   'planWorkbenchProcessing.waitingForInput': '等待输入后继续',
 
+  // planRequirementContext
+  'planRequirementContext.answerSeparator': '、',
+
   // planWorkbenchQuestion
   'planWorkbenchQuestion.addDetails': '补充你的要求…',
   'planWorkbenchQuestion.confirm': '确认选择',
@@ -2870,7 +2870,6 @@ export const zh = {
 
   // planWorkbenchRuntime
   'planWorkbenchRuntime.approvalRequest': '命令请求',
-  'planWorkbenchRuntime.currentModelOperation': '当前模型操作',
   'planWorkbenchRuntime.openSubAgentLog': '查看子代理记录',
   'planWorkbenchRuntime.openTaskLog': '查看完整任务记录',
   'planWorkbenchRuntime.subAgents': '子代理',

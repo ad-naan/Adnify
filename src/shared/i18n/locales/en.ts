@@ -2790,7 +2790,6 @@ export const en = {
   'planWorkbench.approvals': 'Approvals',
   'planWorkbench.artifacts': 'Artifacts',
   'planWorkbench.attention': 'Attention',
-  'planWorkbench.buildingTheBrief': 'Building the brief',
   'planWorkbench.complete': 'Complete',
   'planWorkbench.confirmedRequirementsAreBecoming': 'Confirmed requirements are becoming tasks and dependencies',
   'planWorkbench.creatingTheStructuredPlan': 'Creating the structured plan',
@@ -2827,7 +2826,6 @@ export const en = {
   'planWorkbench.tasks': 'tasks',
   'planWorkbench.tasks2': 'tasks',
   'planWorkbench.tokenBudget': 'Token budget',
-  'planWorkbench.total': 'Total',
 
   // planWorkbenchActivity
   'planWorkbenchActivity.activity': 'Activity',
@@ -2843,7 +2841,6 @@ export const en = {
   // planWorkbenchProcessing
   'planWorkbenchProcessing.execution': 'Executing plan tasks',
   'planWorkbenchProcessing.executionDetail': 'Task state, tool activity, sub-agents, and approvals update continuously',
-  'planWorkbenchProcessing.liveProcess': 'Live process',
   'planWorkbenchProcessing.needsClarification': 'Reviewing requirements and project context',
   'planWorkbenchProcessing.needsClarificationDetail': 'Identifying goals, constraints, and decisions that need confirmation',
   'planWorkbenchProcessing.planCreated': 'Plan created',
@@ -2861,6 +2858,9 @@ export const en = {
   'planWorkbenchProcessing.waitingForAnswerDetail': 'The structured plan will continue after your response',
   'planWorkbenchProcessing.waitingForInput': 'Waiting for input',
 
+  // planRequirementContext
+  'planRequirementContext.answerSeparator': ', ',
+
   // planWorkbenchQuestion
   'planWorkbenchQuestion.addDetails': 'Add details…',
   'planWorkbenchQuestion.confirm': 'Confirm',
@@ -2869,7 +2869,6 @@ export const en = {
 
   // planWorkbenchRuntime
   'planWorkbenchRuntime.approvalRequest': 'Approval request',
-  'planWorkbenchRuntime.currentModelOperation': 'Current model operation',
   'planWorkbenchRuntime.openSubAgentLog': 'Open sub-agent log',
   'planWorkbenchRuntime.openTaskLog': 'Open task log',
   'planWorkbenchRuntime.subAgents': 'Sub-agents',
