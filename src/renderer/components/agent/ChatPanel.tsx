@@ -3,7 +3,8 @@ import { logger } from '@utils/Logger'
 import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { ChatVirtualList } from './ChatVirtualList'
 import {
-  AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, X, CodeXml, GitBranch, Search, CornerDownRight, ListChecks, History, } from 'lucide-react'
+  AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, X, CodeXml, GitBranch, Search, CornerDownRight, History, } from 'lucide-react'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -1244,6 +1245,7 @@ function ChatPanelContent() {
       <ChatMessageUI
         key={msg.id}
         message={msg}
+        presentation={chatMode === 'plan' ? 'plan' : 'default'}
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}
         onRestore={handleRestore}
@@ -1257,7 +1259,7 @@ function ChatPanelContent() {
         isAwaitingApproval={isAwaitingApproval}
       />
     )
-  }, [abort, canApprovePendingToolForTask, handleApprovePendingTool, handleApprovePendingToolForTask, handleEditMessage, handleRegenerate, handleRejectPendingTool, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, renderArchiveItem])
+  }, [abort, chatMode, canApprovePendingToolForTask, handleApprovePendingTool, handleApprovePendingToolForTask, handleEditMessage, handleRegenerate, handleRejectPendingTool, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, renderArchiveItem])
 
   const renderTimelineItemContent = useCallback((
     _index: number,
@@ -1324,17 +1326,22 @@ function ChatPanelContent() {
     >
       <div className="flex flex-col h-full">
         {chatMode === 'plan' && <header className="plan-chat-toolbar">
-          {planPresentation.canvas && <ListChecks className="mr-1 h-4 w-4 text-accent" />}
-          <button type="button" aria-pressed={showPlanWorkbench} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details') }}>{t(planPresentation.canvas ? 'common.brief' : 'planDesign.details', language)}</button>
+          {planPresentation.canvas && <OtterAsset asset="plans" className="mr-1 h-6 w-6 object-contain" />}
+          <button type="button" aria-pressed={showPlanWorkbench} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details') }}>{t(planPresentation.canvas ? 'planDesign.workspace' : 'planDesign.details', language)}</button>
           <button type="button" aria-pressed={!showPlanWorkbench} disabled={planPresentation.empty} onClick={() => { setCanvasDiscussion(true); setPlanSidebarView('discussion') }}>{t('planDesign.discussion', language)}</button>
-          {planPresentation.canvas && canvasDiscussion && planPresentation.plan && <button type="button" className="ml-auto" onClick={() => usePlanViewStore.getState().revealPlan(planPresentation.plan!.id)}>{t('planDesign.viewPlan', language)}</button>}
+          {(!planPresentation.canvas || (canvasDiscussion && planPresentation.plan)) && <button type="button" onClick={() => {
+            if (planPresentation.plan) usePlanViewStore.getState().revealPlan(planPresentation.plan.id)
+            const editor = useStore.getState()
+            editor.openFile(PLAN_BOARD_PATH, '')
+            editor.setEditorVisible(true)
+          }}><OtterAsset asset="plans" className="h-5 w-5 object-contain" />{t('planDesign.viewPlan', language)}</button>}
           <button type="button" className="ml-auto" aria-label={t('common.planHistory', language)} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details'); usePlanViewStore.getState().setHistoryOpen(true) }}><History className="h-4 w-4" /></button>
           <button type="button" aria-label={t('planWorkbench.startNewPlan', language)} onClick={() => {
             usePlanViewStore.getState().setDiscussionTarget(null)
             usePlanViewStore.getState().setHistoryOpen(false)
             useAgentStore.getState().setActivePlan(null)
             createThread({ mode: 'plan', origin: 'user' })
-            useStore.getState().openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+            useStore.getState().openFile(PLAN_BOARD_PATH, '')
             setCanvasDiscussion(false)
           }}><Plus className="h-4 w-4" /></button>
         </header>}
@@ -1485,7 +1492,7 @@ function ChatPanelContent() {
                 只能靠事后的 scrollToIndex 一路补救。这段等待期本来就被上面的骨架屏
                 盖住，等数据齐了再挂载，首帧就直接落在底部。 */}
             {showPlanWorkbench
-              ? <PlanWorkbench canvas={planPresentation.canvas} overlayHost={planOverlayHost} onOverlayChange={setPlanOverlayOpen} />
+              ? <PlanWorkbench canvas={planPresentation.canvas} showActions={false} overlayHost={planOverlayHost} onOverlayChange={setPlanOverlayOpen} />
               : isHydratingActiveThread
                 ? null
                 // Mount Virtuoso with real rows: its initial location and size
@@ -1594,7 +1601,7 @@ function ChatPanelContent() {
                 isStreaming={isStreaming}
                 hasApiKey={hasApiKey}
                 hasPendingToolCall={!!pendingToolCall}
-                compact={chatMode === 'plan'}
+                compact={chatMode === 'plan' && !planPresentation.empty}
                 placeholder={chatMode === 'plan' && planPresentation.empty ? t('planDesign.goalPlaceholder', language) : undefined}
                 onSubmit={handleSubmit}
                 onAbort={abort}

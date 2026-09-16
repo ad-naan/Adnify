@@ -8,17 +8,21 @@ function createFileStore() {
 }
 
 describe('fileSlice pinned tabs', () => {
-  it('keeps a pinned plan board open during normal close operations', () => {
+  it('closes a legacy pinned plan board without losing files or unsaved content', () => {
     const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial')
+    store.getState().updateFileContent('E:/workspace/app.ts', 'unsaved changes')
+    store.getState().updateFileDirtyState('E:/workspace/app.ts', 2)
     store.getState().openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
 
     store.getState().closeFile(PLAN_BOARD_PATH)
 
-    expect(store.getState().openFiles.map(file => file.path)).toContain(PLAN_BOARD_PATH)
-    expect(store.getState().activeFilePath).toBe(PLAN_BOARD_PATH)
+    expect(store.getState().openFiles).toHaveLength(1)
+    expect(store.getState().openFiles[0]).toMatchObject({ path: 'E:/workspace/app.ts', content: 'unsaved changes', isDirty: true })
+    expect(store.getState().activeFilePath).toBe('E:/workspace/app.ts')
   })
 
-  it('allows the mode lifecycle to force-remove a pinned plan board', () => {
+  it('can remove an inactive board without changing the active file', () => {
     const store = createFileStore()
     store.getState().openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
     store.getState().openFile('E:/workspace/README.md', '# Project')
@@ -27,6 +31,44 @@ describe('fileSlice pinned tabs', () => {
 
     expect(store.getState().openFiles.map(file => file.path)).toEqual(['E:/workspace/README.md'])
     expect(store.getState().activeFilePath).toBe('E:/workspace/README.md')
+  })
+
+  it('still protects ordinary pinned files from normal close operations', () => {
+    const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial', undefined, { pinned: true })
+    store.getState().closeFile('E:/workspace/app.ts')
+    expect(store.getState().openFiles).toHaveLength(1)
+  })
+
+  it('opens and reuses a background board without stealing the active file', () => {
+    const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial')
+    store.getState().openFile(PLAN_BOARD_PATH, '', undefined, { activate: false })
+    store.getState().openFile(PLAN_BOARD_PATH, '', undefined, { activate: false })
+    expect(store.getState().activeFilePath).toBe('E:/workspace/app.ts')
+    expect(store.getState().openFiles).toHaveLength(2)
+    store.getState().openFile(PLAN_BOARD_PATH, '')
+    expect(store.getState().activeFilePath).toBe(PLAN_BOARD_PATH)
+  })
+
+  it('returns to the most recently used file after closing the active board', () => {
+    const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial')
+    store.getState().openFile('E:/workspace/README.md', '# Project')
+    store.getState().openFile(PLAN_BOARD_PATH, '')
+    store.setState({ openFiles: store.getState().openFiles.map(file => ({ ...file, lastAccessed: file.path.endsWith('app.ts') ? 20 : 10 })) })
+    store.getState().closeFile(PLAN_BOARD_PATH)
+    expect(store.getState().activeFilePath).toBe('E:/workspace/app.ts')
+  })
+
+  it('does not evict the active buffer when the board opens in the background', () => {
+    const store = createFileStore()
+    for (let index = 0; index < 30; index += 1) store.getState().openFile(`E:/workspace/file-${index}.ts`, `content ${index}`)
+    store.setState({ activeFilePath: 'E:/workspace/file-0.ts', openFiles: store.getState().openFiles.map((file, index) => ({ ...file, lastAccessed: index })) })
+    store.getState().openFile(PLAN_BOARD_PATH, '', undefined, { activate: false })
+    expect(store.getState().openFiles[0]).toMatchObject({ content: 'content 0', contentState: 'loaded' })
+    expect(store.getState().activeFilePath).toBe('E:/workspace/file-0.ts')
+    expect(store.getState().openFiles.filter(file => file.contentState === 'loaded')).toHaveLength(30)
   })
 })
 

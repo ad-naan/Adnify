@@ -5,18 +5,19 @@ import { useDisclosureState } from '@renderer/hooks/useDisclosureState'
 import { deriveAssistantActivity } from './assistantActivity'
 
 /** Render the received parts directly. Only disclosure is local UI state. */
-export function useAssistantTurnView({ parts, isTransportActive, isAwaitingApproval, hasContextMeta }: {
+export function useAssistantTurnView({ parts, isTransportActive, isAwaitingApproval, hasContextMeta, autoExpandProcess = true }: {
   parts: AssistantPart[]
   isTransportActive: boolean
   isAwaitingApproval: boolean
   hasContextMeta: boolean
+  autoExpandProcess?: boolean
 }) {
   const active = isTransportActive || isAwaitingApproval
   const visibleParts = useMemo(() => active ? parts : parts.map(part =>
     (part.type === 'reasoning' || part.type === 'search') && part.isStreaming
       ? { ...part, isStreaming: false } : part), [parts, active])
   const projection = useMemo(() => projectAssistantTurn(visibleParts, { hasContextMeta }), [visibleParts, hasContextMeta])
-  const { isOpen: processExpanded, toggle: toggleProcess } = useDisclosureState({ automaticOpen: active })
+  const { isOpen: processExpanded, toggle: toggleProcess } = useDisclosureState({ automaticOpen: isAwaitingApproval || (autoExpandProcess && active) })
   return {
     visibleParts,
     processParts: new Set(projection.processParts),

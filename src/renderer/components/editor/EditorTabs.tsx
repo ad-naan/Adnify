@@ -2,7 +2,9 @@
  * 编辑器标签栏组件
  */
 import { memo } from 'react'
-import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe, ListChecks } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe } from 'lucide-react'
+import { OtterAsset } from '../brand/OtterAsset'
+import { EDITOR_TAB_BAR_HEIGHT } from '../layout/workbenchLayout'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
@@ -53,7 +55,8 @@ export const EditorTabs = memo(function EditorTabs({
 
   return (
     <div
-      className="h-[42px] flex items-center bg-background border-b border-border/50 overflow-x-auto overflow-y-hidden scrollbar-none select-none px-2 gap-1.5 py-1.5"
+      className="shrink-0 flex items-center bg-background border-b border-border/50 overflow-x-auto overflow-y-hidden scrollbar-none select-none px-2 gap-1.5 py-1.5"
+      style={{ height: EDITOR_TAB_BAR_HEIGHT }}
       onWheel={(e) => {
         if (e.deltaY !== 0 && e.currentTarget) {
           e.currentTarget.scrollLeft += e.deltaY
@@ -63,6 +66,7 @@ export const EditorTabs = memo(function EditorTabs({
       {openFiles.map((file) => {
         const isActive = file.path === activeFilePath
         const isPlanBoard = isPlanBoardPath(file.path)
+        const isPinned = file.pinned && !isPlanBoard
 
         // 计算显示名称
         let fileName = isPlanBoard ? (t('editorTabs.planBoard', language)) : getTabDisplayName(file.path)
@@ -103,7 +107,7 @@ export const EditorTabs = memo(function EditorTabs({
             onClick={() => onSelectFile(file.path)}
             onContextMenu={(e) => {
               e.preventDefault()
-              if (!file.pinned) onContextMenu(e, file.path)
+              if (!isPinned) onContextMenu(e, file.path)
             }}
           >
 
@@ -116,12 +120,12 @@ export const EditorTabs = memo(function EditorTabs({
 
             {isDiff && <FileDiff className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
             {isPreview && <Globe className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />}
-            {isPlanBoard && <ListChecks className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
+            {isPlanBoard && <OtterAsset asset="plans" className="h-5 w-5 shrink-0 object-contain" />}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
-            {file.pinned && <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[8px] font-medium text-accent">{t('editorTabs.pinned', language)}</span>}
+            {isPinned && <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[8px] font-medium text-accent">{t('editorTabs.pinned', language)}</span>}
 
-            {!file.pinned && <div
+            {!isPinned && <button type="button" aria-label={`${t('tabContextMenu.close', language)} ${fileName}`}
               className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-surface-hover transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
@@ -132,7 +136,7 @@ export const EditorTabs = memo(function EditorTabs({
                 <div className="w-2 h-2 rounded-full bg-accent group-hover:hidden" />
               ) : null}
               <X className={`w-3.5 h-3.5 ${file.isDirty ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'} transition-opacity`} />
-            </div>}
+            </button>}
           </div>
         )
       })}

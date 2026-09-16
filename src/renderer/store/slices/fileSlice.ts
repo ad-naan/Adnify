@@ -9,6 +9,7 @@ import { normalizePath } from '@shared/utils/pathUtils'
 import type { LargeFileInfo } from '@shared/types/largeFile'
 import type { TextFileChunk } from '@shared/types/fileChunk'
 import type { EditorDocumentKind } from '@shared/types/editorDocument'
+import { isPlanBoardPath } from '@shared/types/planBoard'
 
 export interface WorkspaceConfig {
   configPath: string | null
@@ -78,6 +79,7 @@ export interface FileSlice {
     kind?: OpenFile['kind']
     preview?: OpenFile['preview']
     pinned?: boolean
+    activate?: boolean
   }) => void
   openPreview: (preview: OpenPreviewMetadata, options?: { activate?: boolean }) => void
   restoreOpenFiles: (files: Array<{
@@ -224,7 +226,8 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       const loadedFileOverflow = loadedFileCount - MAX_OPEN_FILES_WITH_CONTENT
       if (loadedFileOverflow > 0) {
         const evictCandidates = resultFiles
-          .filter(f => f.contentState === 'loaded' && !f.isDirty && f.path !== normalizedPath && f.content.length > 0)
+          .filter(f => f.contentState === 'loaded' && !f.isDirty && f.path !== normalizedPath
+            && (options?.activate !== false || f.path !== state.activeFilePath) && f.content.length > 0)
           .sort((a, b) => (a.lastAccessed || 0) - (b.lastAccessed || 0))
 
         const toEvict = evictCandidates.slice(0, loadedFileOverflow)
@@ -236,13 +239,13 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
               ? { ...f, content: '', contentState: 'unloaded' as const, originalContent: undefined }
               : f
           ),
-          activeFilePath: normalizedPath,
+          activeFilePath: options?.activate === false ? state.activeFilePath : normalizedPath,
         }
       }
 
       return {
         openFiles: resultFiles,
-        activeFilePath: normalizedPath,
+        activeFilePath: options?.activate === false ? state.activeFilePath : normalizedPath,
       }
     }),
 
@@ -295,11 +298,14 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   closeFile: (path, options) =>
     set((state) => {
       const target = state.openFiles.find((file) => file.path === path)
-      if (target?.pinned && !options?.force) return state
+      if (target?.pinned && !isPlanBoardPath(path) && !options?.force) return state
       const newOpenFiles = state.openFiles.filter((f) => f.path !== path)
+      const fallback = isPlanBoardPath(path)
+        ? newOpenFiles.reduce<OpenFile | undefined>((latest, file) => !latest || (file.lastAccessed || 0) >= (latest.lastAccessed || 0) ? file : latest, undefined)
+        : newOpenFiles[newOpenFiles.length - 1]
       const newActivePath =
         state.activeFilePath === path
-          ? newOpenFiles[newOpenFiles.length - 1]?.path || null
+          ? fallback?.path || null
           : state.activeFilePath
       return { openFiles: newOpenFiles, activeFilePath: newActivePath }
     }),

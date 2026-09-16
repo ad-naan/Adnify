@@ -6,6 +6,7 @@ import { useCallback, useRef, useEffect } from 'react'
 import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
+import { isPlanBoardPath } from '@shared/types/planBoard'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { toast } from '@renderer/components/common/ToastProvider'
 import { t, type Language, type TranslationKey } from '@shared/i18n'
@@ -88,7 +89,7 @@ export function useFileSave() {
   // 关闭文件（带保存提示）
   const closeFileWithConfirm = useCallback(async (filePath: string) => {
     const file = useStore.getState().openFiles.find(f => f.path === filePath)
-    if (file?.pinned) return
+    if (file?.pinned && !isPlanBoardPath(filePath)) return
     if (file?.isDirty) {
       const fileName = getFileName(filePath)
       const result = await globalConfirm({

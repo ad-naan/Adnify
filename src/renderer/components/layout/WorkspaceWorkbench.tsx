@@ -36,8 +36,8 @@ export default function WorkspaceWorkbench() {
   const [terminalCollapsed, setTerminalCollapsed] = useState(false)
   const visible = useMemo(() => ([
     ...(state.sidebar && !shell ? ['sidebar' as const] : []),
-    ...((state.editor && !planCanvas) || shell ? ['editor' as const] : []),
-    ...(state.agent ? ['agent' as const] : []),
+    ...(state.editor || shell ? ['editor' as const] : []),
+    ...(state.agent && !planCanvas ? ['agent' as const] : []),
   ]), [state.sidebar, state.editor, state.agent, shell, planCanvas])
   const terminalVisible = state.terminal && !shell && (state.layout.terminalPosition === 'bottom' || (visible.includes(state.layout.terminalPosition) && (!state.focus || state.focus === state.layout.terminalPosition)))
   const panelContent = useMemo(() => ({
@@ -45,7 +45,7 @@ export default function WorkspaceWorkbench() {
     editor: <>
       <EmotionAmbientGlow />
       <DecorativeAnimationScope paused={shell} className="flex-1 min-h-0 flex-col relative overflow-hidden" style={{ display: shell ? 'none' : 'flex' }}>
-        <ErrorBoundary><Suspense fallback={<EditorSkeleton />}><Editor /></Suspense></ErrorBoundary>
+        <ErrorBoundary><Suspense fallback={<EditorSkeleton />}><Editor planCanvas={planCanvas} /></Suspense></ErrorBoundary>
       </DecorativeAnimationScope>
       <DecorativeAnimationScope paused={!shell} className="flex-1 min-h-0 flex-col relative overflow-hidden" style={{ display: shell ? 'flex' : 'none' }}>
         <ErrorBoundary><Suspense fallback={<EditorSkeleton />}><LoadOnce active={shell}><ShellStudio /></LoadOnce></Suspense></ErrorBoundary>
@@ -53,9 +53,9 @@ export default function WorkspaceWorkbench() {
       {state.debug && !shell && <ErrorBoundary><Suspense fallback={null}><DebugPanel /></Suspense></ErrorBoundary>}
     </>,
     agent: <ErrorBoundary><Suspense fallback={<ChatSkeleton />}><LoadOnce active={state.agent}><ChatPanel /></LoadOnce></Suspense></ErrorBoundary>,
-  }), [state.sidebar, state.agent, state.debug, shell])
+  }), [state.sidebar, state.agent, state.debug, shell, planCanvas])
   return <DockWorkbench layout={state.layout} visible={visible} focused={state.focus} language={state.language}
-    panels={panelContent} terminalVisible={terminalVisible} terminalCollapsed={terminalCollapsed}
+    panels={panelContent} editorOverlay={planCanvas ? 'agent' : undefined} terminalVisible={terminalVisible} terminalCollapsed={terminalCollapsed}
     terminal={<ErrorBoundary><Suspense fallback={null}><LoadOnce active={state.terminal && !shell}><TerminalPanel docked layoutVisible={terminalVisible} onCollapsedChange={setTerminalCollapsed} /></LoadOnce></Suspense></ErrorBoundary>}
     onLayoutChange={state.setLayout} />
 }

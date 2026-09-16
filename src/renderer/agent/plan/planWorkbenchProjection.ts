@@ -190,8 +190,15 @@ function scanThread(thread: ChatThread): ThreadScan {
     const partCalls = (message.parts || [])
       .filter(part => part.type === 'tool_call')
       .map(part => (part as { toolCall?: ToolCallLike }).toolCall)
+    // Both representations contain the same call. Prefer the canonical snapshot
+    // and retain calls that only exist in streaming parts.
+    const seenCallIds = new Set<string>()
     const allCalls = [...(message.toolCalls || []), ...partCalls]
-      .filter((call): call is ToolCallLike => Boolean(call?.name))
+      .filter((call): call is ToolCallLike => {
+        if (!call?.name || seenCallIds.has(call.id)) return false
+        seenCallIds.add(call.id)
+        return true
+      })
 
     allCalls.forEach((toolCall, index) => {
       if (toolCall.name === 'report_plan_activity') {
@@ -251,6 +258,7 @@ const TOOL_TITLE_KEYS: Record<string, TranslationKey> = {
   read_files: 'planWorkbench.tool.readFile',
   search_files: 'planWorkbench.tool.searchFiles',
   list_directory: 'planWorkbench.tool.listDirectory',
+  get_document_symbols: 'planDesign.inspectSymbols',
   run_command: 'planWorkbench.tool.runCommand',
   task: 'planWorkbench.tool.task',
 }

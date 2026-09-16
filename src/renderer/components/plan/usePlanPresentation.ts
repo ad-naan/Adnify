@@ -9,7 +9,7 @@ export function usePlanPresentation() {
     activeFilePath: state.activeFilePath, editorVisible: state.editorVisible,
     chatVisible: state.chatVisible, activeSidePanel: state.activeSidePanel, focusedPanel: state.focusedPanel,
     debugVisible: state.debugVisible,
-    editorTerminalVisible: state.terminalVisible && state.workbenchLayout.terminalPosition === 'editor',
+    editorTerminalVisible: state.terminalVisible && state.workbenchLayout.terminalPosition !== 'bottom',
   })))
   const mode = useModeStore(state => state.currentMode)
   const plan = useAgentStore(state => state.plans.find(item => item.id === state.activePlanId))

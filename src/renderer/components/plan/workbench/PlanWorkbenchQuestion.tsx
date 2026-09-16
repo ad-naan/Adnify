@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Check, Circle, Send } from 'lucide-react'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type { InteractiveContent } from '@/renderer/agent/types'
 import { t, type Language } from '@shared/i18n'
 
@@ -35,7 +36,7 @@ export function PlanWorkbenchQuestion({ content, language, onSubmit }: Props) {
 
   return <section className="plan-question">
     <div className="mb-2.5">
-      <div className="text-[11px] font-medium text-accent">{t('planWorkbenchQuestion.yourInputIsNeeded', language)}</div>
+      <div className="flex items-center gap-2 text-xs font-medium text-accent"><OtterAsset asset="focused" className="h-8 w-8 object-contain" />{t('planWorkbenchQuestion.yourInputIsNeeded', language)}</div>
       <h2 className="plan-question-title text-text-primary">{content.question}</h2>
     </div>
     <div className="plan-question-options">
@@ -48,9 +49,9 @@ export function PlanWorkbenchQuestion({ content, language, onSubmit }: Props) {
       })}
     </div>
     <button type="button" aria-pressed={customMode} disabled={submitting} onClick={() => { setCustomMode(value => !value); if (!content.multiSelect) setSelected(new Set()) }} className={`mt-3 rounded-md px-3 py-2 text-left text-xs transition-colors ${customMode ? 'bg-accent/10 text-accent' : 'text-text-muted hover:text-accent'}`}>{t('common.customResponse', language)}</button>
-    {needsCustomText && <textarea value={customText} onChange={event => setCustomText(event.target.value)} rows={3} autoFocus placeholder={t('planWorkbenchQuestion.addDetails', language)} className="mt-2 w-full resize-none rounded-lg border border-border/60 bg-background/55 px-2.5 py-2 text-[10px] leading-4 text-text-primary outline-none placeholder:text-text-muted/55 focus:border-accent/40" />}
+    {needsCustomText && <textarea value={customText} onChange={event => setCustomText(event.target.value)} rows={3} autoFocus placeholder={t('planWorkbenchQuestion.addDetails', language)} className="mt-2 w-full resize-none rounded-lg border border-border/60 bg-background/55 px-2.5 py-2 text-xs leading-4 text-text-primary outline-none placeholder:text-text-muted/55 focus:border-accent/40" />}
     <div className="mt-2.5 flex items-center justify-between gap-3">
-      <span className="text-[10px] leading-4 text-text-muted/65">{t('planWorkbenchQuestion.thePlanIsCreated', language)}</span>
+      <span className="text-xs leading-4 text-text-muted">{t('planWorkbenchQuestion.thePlanIsCreated', language)}</span>
       <button onClick={submit} disabled={(!selected.size && !customMode) || (needsCustomText && !customText.trim()) || submitting} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-35"><Send className="h-3.5 w-3.5" />{t('planWorkbenchQuestion.confirm', language)}</button>
     </div>
   </section>

@@ -35,6 +35,7 @@ export function PlanStageTrace({ stage, selectedStage = stage, language, compact
       return <Fragment key={item}>
         <button
           type="button"
+          aria-label={label(item, language)}
           aria-current={selected ? 'page' : undefined}
           onClick={() => onStageChange?.(item)}
           disabled={!onStageChange}

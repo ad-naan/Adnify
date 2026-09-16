@@ -19,7 +19,7 @@ export function PlanTaskList({ tasks, language, expandedTaskId, onExpand, onConf
     {tasks.map((task, index) => {
       const expanded = expandedTaskId === task.id
       const dependencies = task.dependencies.map(id => tasks.find(item => item.id === id)?.title || id)
-      return <section key={task.id}>
+      return <section key={task.id} className="plan-task-card">
         <button type="button" className="plan-review-row" aria-expanded={expanded} onClick={() => onExpand(expanded ? null : task.id)}>
           <span className="self-start pt-1 font-mono text-xs text-text-muted">{String(index + 1).padStart(2, '0')}</span>
           <span className="min-w-0"><strong>{task.title}</strong><small className="line-clamp-2">{task.description}</small></span>

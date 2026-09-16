@@ -16,6 +16,27 @@ function project(input: Omit<WorkbenchInput, 'language'> & Partial<Pick<Workbenc
 }
 
 describe('projectPlanWorkbench', () => {
+  it('reads a reported call once when both message representations contain it', () => {
+    const root = thread('root')
+    const call = { id: 'same-call', name: 'report_plan_activity', status: 'success' as const,
+      arguments: { stage: 'plan', title: '正在拆分任务', detail: '保留最新的活动内容', status: 'active' } }
+    root.messages = [{ id: 'assistant', role: 'assistant', content: '', timestamp: 1,
+      toolCalls: [call], parts: [{ type: 'tool_call', toolCall: { ...call, arguments: { ...call.arguments, detail: '旧的流式片段' } } }] }]
+    const result = project({ currentThreadId: root.id, threads: { root } })
+    expect(result.activities).toHaveLength(1)
+    expect(result.activities[0]).toMatchObject({ id: 'root:same-call', detail: '保留最新的活动内容' })
+  })
+
+  it('retains distinct calls with matching titles and activities present only in parts', () => {
+    const root = thread('root')
+    const call = { id: 'first', name: 'report_plan_activity', status: 'success' as const,
+      arguments: { stage: 'requirements', title: '检查依赖', status: 'active' } }
+    root.messages = [{ id: 'assistant', role: 'assistant', content: '', timestamp: 1,
+      toolCalls: [call], parts: [{ type: 'tool_call', toolCall: call }, { type: 'tool_call', toolCall: { ...call, id: 'second' } }] }]
+    const result = project({ currentThreadId: root.id, threads: { root } })
+    expect(result.activities.map(activity => activity.id)).toEqual(['root:first', 'root:second'])
+  })
+
   it('does not invent an empty workflow state', () => {
     const result = project({ currentThreadId: null, threads: {} })
     expect(result.hasSession).toBe(false)

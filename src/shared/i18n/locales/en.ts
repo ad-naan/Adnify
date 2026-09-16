@@ -3,7 +3,15 @@
  */
 
 export const en = {
-  'planDesign.heading': 'Turn an idea into your next step.',
+  'planDesign.workspace': 'Plan workspace',
+  'planDesign.inspectSymbols': 'Inspect code structure',
+  'planDesign.recentActivity': 'Recent activity',
+  'planDesign.processingUpdate': 'Working on the next step. Updates will appear here.',
+  'planDesign.thinking': 'Thinking · {seconds}s',
+  'planDesign.thought': 'Reasoning',
+  'planDesign.executeAndReview': 'Run & review',
+  'planDesign.progress': 'Execution progress',
+  'planDesign.heading': 'A clear plan. A confident start.',
   'planDesign.subtitle': 'Clarify the goal together, then decide how to get there.',
   'planDesign.goalPlaceholder': 'What would you like to accomplish?',
   'planDesign.viewPlan': 'Review the plan',

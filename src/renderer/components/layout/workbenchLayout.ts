@@ -26,6 +26,13 @@ export interface LayoutDivider extends PanelRect {
   available: number
 }
 export const DIVIDER_SIZE = 5
+export const EDITOR_TAB_BAR_HEIGHT = 42
+
+export function editorContentRect(rect: PanelRect | undefined): PanelRect | undefined {
+  if (!rect) return undefined
+  const offset = Math.min(EDITOR_TAB_BAR_HEIGHT, rect.height)
+  return { ...rect, y: rect.y + offset, height: rect.height - offset }
+}
 
 const branch = (direction: 'horizontal' | 'vertical', first: LayoutNode, second: LayoutNode, ratio = .5): LayoutNode => ({ direction, first, second, ratio })
 

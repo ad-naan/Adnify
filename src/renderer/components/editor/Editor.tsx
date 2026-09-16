@@ -78,13 +78,12 @@ function clampEditorFontSize(fontSize: number) {
   return Math.min(MAX_EDITOR_FONT_SIZE, Math.max(MIN_EDITOR_FONT_SIZE, fontSize))
 }
 
-export default function Editor() {
+export default function Editor({ planCanvas = false }: { planCanvas?: boolean }) {
   const workMode = useModeStore(state => state.currentMode)
   const activeFilePath = useStore((state) => state.activeFilePath)
   const activeFile = useStore(useShallow(state => state.openFiles.find(f => f.path === state.activeFilePath)))
   const openFileCount = useStore((state) => state.openFiles.length)
-  const legacyPlanFiles = useStore(useShallow(state => state.openFiles.filter(file => isPlanJsonFile(file.path)).map(file => file.path)))
-  const isPlanBoardOpen = useStore(state => state.openFiles.some(file => isPlanBoardPath(file.path)))
+  const previousWorkMode = useRef<string | null>(null)
 
   // 状态
   const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)
@@ -98,7 +97,6 @@ export default function Editor() {
 
   const isContextMenuFileDirty = useStore(state => tabContextMenu ? state.openFiles.find(f => f.path === tabContextMenu.filePath)?.isDirty : false)
   const setActiveFile = useStore((state) => state.setActiveFile)
-  const openFile = useStore((state) => state.openFile)
   const updateFileContent = useStore((state) => state.updateFileContent)
   const updateFileDirtyState = useStore((state) => state.updateFileDirtyState)
   const markFileSaved = useStore((state) => state.markFileSaved)
@@ -474,16 +472,17 @@ export default function Editor() {
     }
   }, [activeFilePath, runLintCheck, isPlanBoardDocument, isPreviewDocument])
 
-  // Plan 模式维护一个固定编辑器标签。它只在进入模式时自动激活一次，
-  // 此后用户可以自由切换到其他文件；离开模式时强制移除固定标签。
+  // Entering Plan opens its document once. Closing the tab or changing modes
+  // never deletes other documents or reopens a tab the user just dismissed.
   useEffect(() => {
-    legacyPlanFiles.forEach(path => closeFile(path, { force: true }))
-    if (workMode === 'plan') {
-      if (!isPlanBoardOpen) openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
-      return
-    }
-    if (isPlanBoardOpen) closeFile(PLAN_BOARD_PATH, { force: true })
-  }, [closeFile, isPlanBoardOpen, legacyPlanFiles, openFile, workMode])
+    const previous = previousWorkMode.current
+    previousWorkMode.current = workMode
+    if (workMode !== 'plan' || previous === 'plan') return
+    const state = useStore.getState()
+    if (previous === null && state.activeFilePath) return
+    if (state.openFiles.some(file => isPlanBoardPath(file.path))) state.setActiveFile(PLAN_BOARD_PATH)
+    else state.openFile(PLAN_BOARD_PATH, '')
+  }, [workMode])
 
   if (openFileCount === 0) {
     return <EditorWelcome />
@@ -545,7 +544,7 @@ export default function Editor() {
       )}
 
       {/* 编辑器主体 */}
-      <div className="flex-1 relative min-h-0 overflow-visible flex flex-col">
+      <div className="flex-1 relative min-h-0 overflow-visible flex flex-col" style={planCanvas ? { visibility: 'hidden' } : undefined} aria-hidden={planCanvas || undefined}>
         {isPlanBoardDocument ? (
           <PlanWorkspace />
         ) : activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (

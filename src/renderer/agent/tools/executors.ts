@@ -3282,10 +3282,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 添加到 store。PlanWorkspace 订阅 activePlanId，会立即展示新计划。
             agentStorePlanBridge.addPlan(plan)
             const editorStore = useStore.getState()
-            if (editorStore.openFiles.some(file => isPlanBoardPath(file.path))) {
-                editorStore.setActiveFile(PLAN_BOARD_PATH)
-            } else {
-                editorStore.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+            // A completed background planning turn must not take focus from
+            // the source file the user is editing.
+            if (!editorStore.openFiles.some(file => isPlanBoardPath(file.path))) {
+                editorStore.openFile(PLAN_BOARD_PATH, '', undefined, { activate: !editorStore.activeFilePath })
             }
 
             return {

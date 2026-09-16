@@ -3,7 +3,15 @@
  */
 
 export const zh = {
-  'planDesign.heading': '把想法，变成下一步。',
+  'planDesign.workspace': '计划工作台',
+  'planDesign.inspectSymbols': '分析代码结构',
+  'planDesign.recentActivity': '近期活动',
+  'planDesign.processingUpdate': '正在处理，新的进展会显示在这里。',
+  'planDesign.thinking': '正在思考 · {seconds} 秒',
+  'planDesign.thought': '思考过程',
+  'planDesign.executeAndReview': '执行与验收',
+  'planDesign.progress': '执行进度',
+  'planDesign.heading': '想清楚，再开始。',
   'planDesign.subtitle': '先聊清楚要做什么，再一起确定怎么做。',
   'planDesign.goalPlaceholder': '这次，你想完成什么？',
   'planDesign.viewPlan': '查看计划',

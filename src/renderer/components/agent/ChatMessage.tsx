@@ -58,6 +58,7 @@ import { ChatFilePathBoundary } from './ChatFilePathBoundary'
 
 interface ChatMessageProps {
   message: ChatMessageType
+  presentation?: 'default' | 'plan'
   onEdit?: (messageId: string, newContent: string) => void
   onRegenerate?: (messageId: string) => void
   onRestore?: (messageId: string) => void
@@ -449,7 +450,7 @@ interface ProcessFoldProps {
 }
 
 const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => (
-  <div className="relative h-px flex-1 overflow-hidden rounded-full bg-border/45">
+  <div className="chat-process-divider relative h-px flex-1 overflow-hidden rounded-full bg-border/45">
     <div
       className={`absolute inset-0 ${
         side === 'left'
@@ -469,7 +470,7 @@ const ProcessFold = React.memo(({ language, summary, isExpanded, toggleExpanded 
     : (t('chatMessage.viewProcess', language))
 
   return (
-    <div className="my-3 w-full">
+    <div className="chat-process-fold my-3 w-full">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -491,6 +492,7 @@ const ProcessFold = React.memo(({ language, summary, isExpanded, toggleExpanded 
 ProcessFold.displayName = 'ProcessFold'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, isPresenting, fontSize }: ThinkingBlockProps) => {
+  const language = useStore(state => state.language)
   const { isOpen: isExpanded, toggle: toggleExpanded } = useDisclosureState({
     automaticOpen: isPresenting,
     openWhile: isStreaming,
@@ -535,11 +537,11 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, isPresentin
   }, [visibleContent, isStreaming, isExpanded])
 
   const durationText = !isStreaming
-    ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
-    : `Thinking for ${elapsed}s...`
+    ? `${t('planDesign.thought', language)}${lastElapsed.current > 0 ? ` · ${lastElapsed.current}s` : ''}`
+    : t('planDesign.thinking', language, { seconds: elapsed })
 
   return (
-    <div className="my-3 group/think overflow-hidden">
+    <div className="chat-thinking my-3 group/think overflow-hidden">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -558,12 +560,12 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, isPresentin
         <div className={`relative scroll-shadow-container ${isStreaming ? 'animate-slide-down' : ''} ${shadowClass}`}>
           <div
             ref={scrollRef}
-            className="max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
+            className="chat-thinking-scroll max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
           >
             {visibleContent ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
-                className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans"
+                className="chat-thinking-text text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans"
               >
                 <StreamingPlainText text={visibleContent} active={isVisuallyStreaming} />
               </div>
@@ -1057,6 +1059,7 @@ const AssistantMessageContent = React.memo(({
 AssistantMessageContent.displayName = 'AssistantMessageContent'
 
 interface AssistantTurnContentProps {
+  autoExpandProcess?: boolean
   parts: AssistantPart[]
   isTransportActive: boolean
   isAwaitingApproval: boolean
@@ -1075,6 +1078,7 @@ interface AssistantTurnContentProps {
 }
 
 const AssistantTurnContent = React.memo(({
+  autoExpandProcess,
   parts,
   isTransportActive,
   isAwaitingApproval,
@@ -1096,6 +1100,7 @@ const AssistantTurnContent = React.memo(({
     isTransportActive,
     isAwaitingApproval,
     hasContextMeta,
+    autoExpandProcess,
   })
   const { processExpanded, toggleProcess } = view
   const hiddenParts = processExpanded ? undefined : view.processParts
@@ -1194,6 +1199,7 @@ const ChatMessage = React.memo(({
   pendingToolId,
   hasCheckpoint,
   isAwaitingApproval = false,
+  presentation = 'default',
 }: ChatMessageProps) => {
   const message = messageProp
 
@@ -1278,7 +1284,7 @@ const ChatMessage = React.memo(({
 
   return (
     <div className={`
-      w-full group/msg transition-colors duration-300
+      w-full group/msg transition-colors duration-300 ${presentation === 'plan' ? 'plan-discussion-message' : ''}
       ${isUser ? 'py-1 bg-transparent' : 'py-2 bg-transparent'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
@@ -1485,8 +1491,8 @@ const ChatMessage = React.memo(({
 
         {/* Assistant Layout */}
         {!isUser && (
-          <div className="w-full min-w-0 flex flex-col gap-2">
-            <div className="flex items-center gap-3 px-1">
+          <div className="chat-assistant-layout w-full min-w-0 flex flex-col gap-2">
+            <div className="chat-assistant-heading flex items-center gap-3 px-1">
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface relative flex-shrink-0">
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
                 <OtterAsset asset={isMessageActive ? 'typing' : 'assistantFace'} alt="AI" className="h-full w-full object-cover" />
@@ -1494,7 +1500,7 @@ const ChatMessage = React.memo(({
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
 
-                {isMessageActive && <AssistantStreamingBadge language={language} />}
+                {isMessageActive && (presentation === 'plan' ? <span className="plan-discussion-status"><span />{t('planWorkbenchProcessing.processing', language)}</span> : <AssistantStreamingBadge language={language} />)}
               </div>
 
               {!isMessageActive && (
@@ -1516,6 +1522,7 @@ const ChatMessage = React.memo(({
             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
               {assistantParts && (
                 <AssistantTurnContent
+                  autoExpandProcess={presentation !== 'plan'}
                   parts={assistantParts}
                   isTransportActive={isStreaming}
                   isAwaitingApproval={messageHasPendingApproval}

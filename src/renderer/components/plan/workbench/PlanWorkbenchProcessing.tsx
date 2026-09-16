@@ -1,4 +1,5 @@
-import { CheckCircle2, Circle, LoaderCircle, Sparkles } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, Circle, LoaderCircle } from 'lucide-react'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type { PlanActivityItem, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import type { PlanPlanningState } from '@/renderer/agent/plan/planWorkflowGuard'
 import { t, type Language, type TranslationKey } from '@shared/i18n'
@@ -27,9 +28,10 @@ const STAGE_COPY: Partial<Record<PlanWorkbenchStage, ProcessingCopy>> = {
   validation: { title: 'planWorkbenchProcessing.validation', detail: 'planWorkbenchProcessing.validationDetail' },
 }
 
-function activityIcon(status: PlanActivityItem['status']) {
+function activityIcon(status: PlanActivityItem['status'], historical = false) {
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-  if (status === 'active') return <LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" />
+  if (status === 'blocked' || status === 'warning') return <AlertCircle className="h-3.5 w-3.5 plan-approval-ink" />
+  if (status === 'active' && !historical) return <LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" />
   return <Circle className="h-3.5 w-3.5 text-text-muted/50" />
 }
 
@@ -43,20 +45,20 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
   const copy = STAGE_COPY[stage] ?? PHASE_COPY[planningState]
   const recent = activities.filter(activity => activity.stage === stage).slice(-4)
   const waiting = stage === 'requirements' && planningState === 'waiting_for_answer'
+  const latest = recent.at(-1)
+  const current = !waiting && latest && latest.status !== 'completed' ? latest : undefined
+  const history = current ? recent.slice(0, -1) : recent
+  const elapsed = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`
 
-  return <section className="overflow-hidden rounded-xl border border-border/55 bg-surface/[0.055]">
+  return <section className="plan-processing overflow-hidden rounded-xl border border-border/55 bg-surface/[0.055]" aria-busy={!waiting}>
     <div className="flex items-start gap-3.5 px-4 py-4">
-      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-        <span className={`absolute inset-0 rounded-full border border-accent/20 ${waiting ? 'animate-pulse' : 'animate-spin'}`} />
-        <span className="absolute inset-[5px] rounded-full border border-accent/35 border-l-transparent" />
-        {waiting ? <Circle className="h-2.5 w-2.5 text-accent" /> : <Sparkles className="h-4 w-4 text-accent" />}
-      </div>
+      <OtterAsset asset={waiting ? 'focused' : 'working'} className="h-11 w-11 shrink-0 object-contain" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <h2 className={`text-[12px] font-semibold text-text-primary ${waiting ? '' : 'tool-text-shimmer'}`}>{t(copy.title, language)}</h2>
-          <time className="shrink-0 text-[11px] tabular-nums text-text-muted">{elapsedSeconds}s</time>
+          <h2 className="text-[13px] font-semibold text-text-primary">{t(copy.title, language)}</h2>
+          <time className="plan-processing-time">{elapsed}</time>
         </div>
-        <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{t(copy.detail, language)}</p>
+        <p className="mt-1.5 text-[12px] leading-5 text-text-muted">{t(copy.detail, language)}</p>
       </div>
     </div>
 
@@ -65,15 +67,17 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
     </div>}
 
     <div className="border-t border-border/40 px-4 py-3.5">
-      <div className="mb-2.5 text-[11px] font-medium text-text-muted">{t('planWorkbenchProcessing.liveProcess', language)}</div>
-      {recent.length > 0 ? <div className="space-y-2.5">
-        {recent.map(activity => <div key={activity.id} className="grid grid-cols-[16px_minmax(0,1fr)] gap-2.5">
-          <span className="mt-0.5">{activityIcon(activity.status)}</span>
-          <div className="min-w-0"><div className="truncate text-[10px] font-medium text-text-secondary">{activity.title}</div>{activity.detail && <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-muted">{activity.detail}</div>}</div>
-        </div>)}
-      </div> : waiting ? <div className="flex items-center gap-2 text-[11px] text-text-muted"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />{t('planWorkbenchProcessing.waitingForInput', language)}</div> : <div className="space-y-2.5" aria-label={t('planWorkbenchProcessing.processing', language)}>
-        {[0, 1, 2].map(index => <div key={index} className="flex items-center gap-2.5"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/60" style={{ animationDelay: `${index * 160}ms` }} /><span className="h-2.5 animate-pulse rounded bg-text-primary/[0.055]" style={{ width: `${72 - index * 13}%`, animationDelay: `${index * 160}ms` }} /></div>)}
-      </div>}
+      {current ? <div className="plan-processing-current">
+        <span className="mt-0.5">{activityIcon(current.status)}</span>
+        <div className="min-w-0"><div className="text-[13px] font-medium leading-5 text-text-primary">{current.title}</div>{current.detail && <p className="mt-1 text-xs leading-5 text-text-secondary">{current.detail}</p>}</div>
+      </div> : <div className="flex items-center gap-2 text-xs leading-5 text-text-muted"><span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-accent ${waiting ? '' : 'animate-pulse'}`} />{t(waiting ? 'planWorkbenchProcessing.waitingForInput' : 'planDesign.processingUpdate', language)}</div>}
+      {history.length > 0 && <details className="plan-processing-history">
+        <summary><ChevronDown size={13} /><span>{t('planDesign.recentActivity', language)}</span><span className="ml-auto tabular-nums">{history.length}</span></summary>
+        <div className="space-y-3 pt-3">{history.map(activity => <div key={activity.id} className="grid grid-cols-[16px_minmax(0,1fr)] gap-2">
+          <span className="mt-0.5">{activityIcon(activity.status, true)}</span>
+          <div className="min-w-0 text-xs leading-5 text-text-secondary"><div>{activity.title}</div>{activity.detail && <p className="mt-0.5 text-text-muted">{activity.detail}</p>}</div>
+        </div>)}</div>
+      </details>}
     </div>
   </section>
 }

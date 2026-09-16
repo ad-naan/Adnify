@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t, type Language } from '@shared/i18n'
 import { DecorativeAnimationScope } from '../common/DecorativeAnimationScope'
-import { measureWorkbench, resizeLayout, WORKBENCH_PANELS, type LayoutDivider, type PanelRect, type WorkbenchLayout, type WorkbenchPanel } from './workbenchLayout'
+import { measureWorkbench, resizeLayout, editorContentRect, WORKBENCH_PANELS, type LayoutDivider, type PanelRect, type WorkbenchLayout, type WorkbenchPanel } from './workbenchLayout'
 import './workbench.css'
 
 interface DockWorkbenchProps {
@@ -10,6 +10,8 @@ interface DockWorkbenchProps {
   focused: WorkbenchPanel | null
   language: Language
   panels: Record<WorkbenchPanel, ReactNode>
+  /** Reposition the existing panel below the editor tabs without remounting it. */
+  editorOverlay?: 'agent'
   terminal?: ReactNode
   terminalVisible: boolean
   terminalCollapsed?: boolean
@@ -20,7 +22,7 @@ const rectStyle = (rect?: PanelRect): CSSProperties => rect
   : { visibility: 'hidden', pointerEvents: 'none', left: 0, top: 0, width: 0, height: 0 }
 
 /** Flat, keyed panel hosts preserve React, Monaco, webview and xterm identity while docking. */
-export default function DockWorkbench({ layout, visible, focused, language, panels, terminal, terminalVisible, terminalCollapsed, onLayoutChange }: DockWorkbenchProps) {
+export default function DockWorkbench({ layout, visible, focused, language, panels, editorOverlay, terminal, terminalVisible, terminalCollapsed, onLayoutChange }: DockWorkbenchProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const gestureCleanup = useRef<(() => void) | null>(null)
   const lastRects = useRef<Partial<Record<WorkbenchPanel, PanelRect>>>({})
@@ -89,7 +91,8 @@ export default function DockWorkbench({ layout, visible, focused, language, pane
   return (
     <div ref={rootRef} className="dock-workbench" data-dock-workbench data-interacting={resizePreview ? 'true' : undefined}>
       {WORKBENCH_PANELS.map(panel => {
-        const rect = geometry.panels[panel], hidden = !rect
+        const rect = panel === editorOverlay ? editorContentRect(geometry.panels.editor) : geometry.panels[panel]
+        const hidden = !rect
         if (rect) lastRects.current[panel] = rect
         const style = hidden ? { ...rectStyle(lastRects.current[panel]), visibility: 'hidden' as const, pointerEvents: 'none' as const } : rectStyle(rect)
         return <DecorativeAnimationScope key={panel} paused={hidden} className="dock-panel" style={style} data-dock-panel={panel} aria-hidden={hidden || undefined}>

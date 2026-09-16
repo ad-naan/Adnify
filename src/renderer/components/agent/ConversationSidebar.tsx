@@ -160,7 +160,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                       if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
                         state.setActiveFile(PLAN_BOARD_PATH)
                       } else {
-                        state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+                        state.openFile(PLAN_BOARD_PATH, '')
                       }
                     }
                     createThread({ mode: currentMode, origin: 'user' })

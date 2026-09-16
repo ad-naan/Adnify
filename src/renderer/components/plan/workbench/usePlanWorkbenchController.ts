@@ -66,7 +66,7 @@ export function usePlanWorkbenchController() {
     if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
       state.setActiveFile(PLAN_BOARD_PATH)
     } else {
-      state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+      state.openFile(PLAN_BOARD_PATH, '')
     }
   }, [setActivePlan, switchThread])
 
@@ -94,7 +94,7 @@ export function usePlanWorkbenchController() {
     if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
       state.setActiveFile(PLAN_BOARD_PATH)
     } else {
-      state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+      state.openFile(PLAN_BOARD_PATH, '')
     }
   }, [createThread, setActivePlan])
 

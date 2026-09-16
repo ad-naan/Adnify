@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
+import { editorContentRect, EDITOR_TAB_BAR_HEIGHT } from '@renderer/components/layout/workbenchLayout'
 import { createStore } from 'zustand/vanilla'
 import { createLayoutSlice, type LayoutSlice } from '@renderer/store/slices/layoutSlice'
 import { createWorkbenchLayout, movePanel, measureWorkbench, normalizeWorkbenchLayout, panelOrder, resizeLayout, WORKBENCH_PANELS, type PanelRect } from '@renderer/components/layout/workbenchLayout'
@@ -7,6 +8,15 @@ import { createWorkbenchLayout, movePanel, measureWorkbench, normalizeWorkbenchL
 const overlap = (a: PanelRect, b: PanelRect) => Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > .01 && Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > .01
 
 describe('workbench docking model', () => {
+  it('reserves the real editor tab strip when showing the plan workspace', () => {
+    const layout = createWorkbenchLayout()
+    const editor = measureWorkbench(layout, ['sidebar', 'editor'], 1400, 900, false).panels.editor!
+    const snapshot = { ...editor }
+    expect(editorContentRect(editor)).toEqual({ ...editor, y: editor.y + EDITOR_TAB_BAR_HEIGHT, height: editor.height - EDITOR_TAB_BAR_HEIGHT })
+    expect(editor).toEqual(snapshot)
+    expect(editorContentRect(undefined)).toBeUndefined()
+    expect(editorContentRect({ x: 0, y: 0, width: 300, height: 20 })).toEqual({ x: 0, y: 20, width: 300, height: 0 })
+  })
   it('preserves every panel exactly once through arbitrary moves and round trips', () => {
     fc.assert(fc.property(fc.array(fc.tuple(fc.constantFrom(...WORKBENCH_PANELS), fc.constantFrom<-1 | 1>(-1, 1)), { maxLength: 60 }), operations => {
       let layout = createWorkbenchLayout()
