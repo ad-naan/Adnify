@@ -86,7 +86,17 @@ describe('Tool Definitions', () => {
       expect(definition.description).toContain('Find a class, function, method')
       expect(definition.description).toContain('Find symbols using stable semantic name paths')
       expect(definition.description).toContain('Prefer this tool over read_file')
+      expect(definition.description).toContain('Coordination profile: result=search; execution=parallel-safe')
+      expect(definition.description).toContain('independent parallel-safe calls may be batched')
       expect(definition.description).not.toContain('**Parameters:**')
+    })
+
+    it('gives every built-in tool a machine-generated coordination profile', () => {
+      for (const config of Object.values(TOOL_CONFIGS)) {
+        const definition = generateToolDefinition(config)
+        expect(definition.description, config.name).toContain('Coordination profile: result=')
+        expect(definition.description, config.name).toContain(`execution=${config.concurrencyMode ?? (config.parallel ? 'parallel-safe' : 'serialized')}`)
+      }
     })
 
     it('should expose semantic symbol tools with valid schemas', () => {

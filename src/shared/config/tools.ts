@@ -1537,11 +1537,29 @@ export function generateToolDefinition(config: ToolConfig): ToolDefinition {
         }
     }
 
+    const inferredResult = config.resultSemantics ?? ({
+        read: 'file-read',
+        write: 'file-write',
+        terminal: 'command',
+        search: 'search',
+        lsp: 'search',
+        network: 'network',
+        interaction: 'interactive',
+        plan: 'plan',
+    } satisfies Record<ToolCategory, import('@/shared/types/llm').ToolResultSemantics>)[config.category]
+    const concurrency = config.concurrencyMode ?? (config.parallel ? 'parallel-safe' : 'serialized')
+    const coordinationProfile = [
+        `result=${inferredResult}`,
+        `execution=${concurrency}`,
+        config.resourceScope?.length ? `resource=${config.resourceScope.join(',')}` : null,
+    ].filter(Boolean).join('; ')
+
     return {
         name: config.name,
         description: [
             config.description,
             config.detailedDescription?.trim(),
+            `Coordination profile: ${coordinationProfile}. Use this result as evidence for the next dependent decision; independent parallel-safe calls may be batched.`,
             config.criticalRules?.length
                 ? `Rules:\n${config.criticalRules.map(rule => `- ${rule}`).join('\n')}`
                 : null,

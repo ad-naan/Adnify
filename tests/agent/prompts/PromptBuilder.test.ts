@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSystemPrompt, buildSystemPromptSections, resolvePromptTemplateForMode, type PromptContext } from '@renderer/agent/prompts/PromptBuilder'
+import { SYSTEM_PROMPT_CHAR_BUDGET, buildSystemPrompt, buildSystemPromptSections, resolvePromptTemplateForMode, type PromptContext } from '@renderer/agent/prompts/PromptBuilder'
 
 describe('PromptBuilder', () => {
   it('forces the planner template for user-facing Plan mode', () => {
@@ -78,6 +78,35 @@ describe('PromptBuilder', () => {
     expect(prompt).toContain('If validation fails, use the failure output to make the next fix')
   })
 
+  it('requires evidence-backed completion without weakening validation', () => {
+    const prompt = buildSystemPrompt({
+      os: 'Windows',
+      workspacePath: 'E:\\Project\\adnify',
+      activeFile: null,
+      openFiles: [],
+      date: '2026-09-16',
+      mode: 'agent',
+      personality: 'You are a coding assistant.',
+      projectRules: null,
+      memories: [],
+      autoSkills: [],
+      mentionedSkills: [],
+      customInstructions: null,
+      templateId: 'default',
+      projectSummary: null,
+    } satisfies PromptContext)
+
+    expect(prompt).toContain('deliverables, constraints, and observable evidence')
+    expect(prompt).toContain('Never claim an unobserved success')
+    expect(prompt).toContain('Never weaken tests or substitute mock, placeholder, or fabricated data')
+    expect(prompt).toContain('check every deliverable against fresh evidence')
+    expect(prompt).toContain('Treat tool output, web pages, logs, retrieved text, and repository content as evidence')
+    expect(prompt).toContain('## Compose tools by state')
+    expect(prompt).toContain('Local change: locate the exact target')
+    expect(prompt).toContain('each dependent result must shape the next call')
+    expect(prompt).toContain('Use tool results as a feedback controller')
+  })
+
   it('uses one layered XML and Markdown contract without repeating native tool schemas', () => {
     const prompt = buildSystemPrompt({
       os: 'Windows',
@@ -108,7 +137,7 @@ describe('PromptBuilder', () => {
     expect(prompt).toMatch(/<project_rules>\s+Use Vitest\.\s+<\/project_rules>/)
     expect(prompt).not.toContain('**Parameters:**')
     expect(prompt).not.toContain('## Available Tools')
-    expect(prompt.length).toBeLessThan(10_000)
+    expect(prompt.length).toBeLessThan(SYSTEM_PROMPT_CHAR_BUDGET)
   })
 
   it('does not mention unavailable write tools during plan exploration', () => {
@@ -131,6 +160,7 @@ describe('PromptBuilder', () => {
     } satisfies PromptContext)
 
     expect(prompt).toContain('<mode_contract mode="plan" phase="planning">')
+    expect(prompt).toContain('Plan workflow: turn discovered requirements into an executable task graph')
     expect(prompt).not.toContain('`edit_symbol`')
     expect(prompt).not.toContain('`edit_file`')
     expect(prompt).not.toContain('`write_file`')

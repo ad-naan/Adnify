@@ -5,7 +5,6 @@ import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@store'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
-import { isInternalToolRoutingCategory, ToolRoutingAdvisor } from '../utils/ToolRoutingAdvisor'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { createStreamProcessor } from './stream'
@@ -28,7 +27,7 @@ import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlannin
 import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
 import type { LLMMessage } from '@shared/types'
-import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
+import { prepareLLMRequestMessages } from './loopMessageUtils'
 import { t, type Language, type TranslationKey } from '@shared/i18n'
 import { providerAuthErrorText } from '@shared/errors/providerAuthError'
 
@@ -118,12 +117,12 @@ function buildSoftLimitFeedback(language: Language, title: string, detail: strin
   ].filter(Boolean).join('\n')
 }
 
-function buildToolRoutingFeedback(language: Language, detail: string, suggestion?: string): string {
+export function buildLoopRecoveryFeedback(language: Language, detail: string, suggestion?: string): string {
   return [
-    translate(language, 'agent.routing.feedback.intro'),
+    translate(language, 'agent.loop.recovery.intro'),
     detail,
-    suggestion ? translate(language, 'agent.routing.feedback.suggestion', { suggestion }) : '',
-    translate(language, 'agent.routing.feedback.continue'),
+    suggestion ? translate(language, 'agent.loop.recovery.suggestion', { suggestion }) : '',
+    translate(language, 'agent.loop.recovery.continue'),
   ].filter(Boolean).join('\n')
 }
 
@@ -415,7 +414,6 @@ export async function runLoop(
   const agentTools = toolRuntime.toolManager.getAllToolDefinitions()
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
-  const toolRoutingAdvisor = new ToolRoutingAdvisor()
   let requestMessages = llmMessages
   let iteration = 0
   let shouldContinue = true
@@ -745,48 +743,18 @@ export async function runLoop(
       break
     }
 
-    // Loop detection is advisory only: it never terminates the turn.
-    //
-    // Every detector result now arrives as `warning`, handled below by feeding a
-    // corrective hint back to the model and continuing. Long-running tasks
-    // legitimately repeat tool patterns (edit -> lint -> edit ...), and killing
-    // the turn on that signal made long tasks unfinishable. `isLoop` is retained
-    // on the result type for callers that want to inspect it, but the loop does
-    // not branch on it.
-    const routingCheck = toolRoutingAdvisor.check(result.toolCalls)
-    const loopCheck = routingCheck.warning ? routingCheck : loopDetector.checkLoop(result.toolCalls)
-
+    const loopCheck = loopDetector.checkLoop(result.toolCalls)
+    let loopRecoveryFeedback: string | null = null
     if (loopCheck.warning) {
       const { language } = useStore.getState()
-      const isRoutingCorrection = isInternalToolRoutingCategory(loopCheck.details?.category)
-      const warningTitle = isRoutingCorrection
-        ? translate(language, 'agent.routing.title')
-        : translate(language, 'agent.loop.title')
       const warningMessage = getLoopCheckMessage(language, loopCheck)
       const warningSuggestion = getLoopCheckSuggestion(language, loopCheck)
 
-      logger.agent.warn(`[Loop] Non-blocking loop warning: ${loopCheck.warning}`)
-      clearUnexecutedToolCards(threadStore, assistantId, result.toolCalls)
-      if (!isRoutingCorrection) {
-        threadStore.addSystemAlertPart(assistantId, {
-          alertType: 'warning',
-          title: warningTitle,
-          message: warningMessage,
-          suggestion: warningSuggestion,
-          compact: true,
-        })
-        EventBus.emit({ type: 'loop:warning', message: warningMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
-      }
-
-      requestMessages.push({
-        role: 'user',
-        content: isRoutingCorrection
-          ? [buildToolRoutingFeedback(language, warningMessage, warningSuggestion), formatLoopDiagnostic(language, loopCheck)].filter(Boolean).join('\n\n')
-          : [buildSoftLimitFeedback(language, warningTitle, warningMessage, warningSuggestion), formatLoopDiagnostic(language, loopCheck)].filter(Boolean).join('\n\n'),
-      })
-
-      shouldContinue = true
-      continue
+      logger.agent.info(`[Loop] Non-terminal execution advisory: ${loopCheck.warning}`)
+      loopRecoveryFeedback = [
+        buildLoopRecoveryFeedback(language, warningMessage, warningSuggestion),
+        formatLoopDiagnostic(language, loopCheck),
+      ].filter(Boolean).join('\n\n')
     }
 
     requestMessages.push({
@@ -864,11 +832,6 @@ export async function runLoop(
         name: toolCall.name,
         arguments: toolCall.arguments,
       }, success)
-      toolRoutingAdvisor.recordExecutedTool({
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-      }, success)
-
       const meta = toolResult.meta
       if (isFileWriteToolResult(toolCall.name, meta)) {
         if (typeof meta.postHash === 'string') {
@@ -895,6 +858,10 @@ export async function runLoop(
           linesRemoved: (meta.linesRemoved as number) || 0,
         })
       }
+    }
+
+    if (loopRecoveryFeedback) {
+      requestMessages.push({ role: 'user', content: loopRecoveryFeedback })
     }
 
     if (enableAutoFix && !hadRejectedTool && context.workspacePath) {

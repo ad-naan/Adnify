@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
+import { buildLoopRecoveryFeedback } from '@renderer/agent/core/loop'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from '@renderer/agent/core/loopMessageUtils'
 
 describe('Agent Loop', () => {
@@ -30,6 +31,20 @@ describe('Agent Loop', () => {
   })
 
   describe('Loop Detection', () => {
+    it('frames repetition as non-terminal execution guidance', () => {
+      const feedback = buildLoopRecoveryFeedback(
+        'en',
+        'The same edit was proposed again.',
+        'Inspect the latest result and change the method.',
+      )
+
+      expect(feedback).toContain('tool calls were executed normally')
+      expect(feedback).toContain('continue working toward the original objective')
+      expect(feedback).toContain('Do not summarize, stop, or avoid tools')
+      expect(feedback).not.toContain('must not call any more tools')
+      expect(feedback).not.toContain('Finish by concluding')
+    })
+
     it('clears only the rejected proposal and preserves calls from earlier iterations', () => {
       const calls = [
         { id: 'completed-call', name: 'find_symbol', arguments: {}, status: 'success' },

@@ -44,6 +44,7 @@ package-lock.json
 /CC-Source
 /tmp
 /.tmp
+/.research
 
 .pnpm-store/
 
