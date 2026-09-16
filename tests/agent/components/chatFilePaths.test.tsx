@@ -23,6 +23,14 @@ describe('chat file path recognition', () => {
     expect(parseChatFilePath(value)).toBeNull()
   })
 
+  it.each(['疑似有重复/错位的测试块', '支持中文/English 两种语言', '开启/关闭该功能'])('does not treat slash-separated prose as a path: %s', value => {
+    expect(parseChatFilePath(value)).toBeNull()
+  })
+
+  it.each(['src/components', 'src/components/', '文档/设计说明.md'])('keeps recognizing relative paths: %s', value => {
+    expect(parseChatFilePath(value)).toBe(value)
+  })
+
   it('resolves relative paths lexically without losing drive or UNC roots', () => {
     expect(resolveChatFilePath('./patches/../dist/a.zip', 'E:\\Project\\app')).toBe('E:/Project/app/dist/a.zip')
     expect(resolveChatFilePath('C:\\other\\a.zip', 'E:/app')).toBe('C:/other/a.zip')

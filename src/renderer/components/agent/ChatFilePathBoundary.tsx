@@ -4,23 +4,91 @@ import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
 import { isBinaryFile, safeOpenFile } from '@renderer/utils/fileUtils'
 import { t } from '@shared/i18n'
+import { getDirname, normalizePath } from '@shared/utils/pathUtils'
 import { toast } from '../common/ToastProvider'
 import { ContextMenu, useContextMenu } from '../ui/ContextMenu'
-import { resolveChatFilePath } from './chatFilePaths'
+import { parseChatFilePath, resolveChatFilePath } from './chatFilePaths'
+
+const FILE_LOOKUP_IGNORES = new Set(['node_modules', 'dist', 'build', 'coverage', 'release', 'test-results'])
+const MAX_LOOKUP_DIRECTORIES = 2_000
+const LOOKUP_BATCH_SIZE = 12
+
+async function findUniqueWorkspaceFile(value: string, workspacePath: string): Promise<string | null> {
+  const relativePath = parseChatFilePath(value)
+  if (!relativePath || /^(?:\/|[a-z]:\/|\/\/)/i.test(relativePath) || relativePath.endsWith('/')) return null
+
+  const normalizedSuffix = relativePath.toLowerCase().replace(/^\.\//, '')
+  const isBasenameOnly = !normalizedSuffix.includes('/')
+  const directories = [workspacePath]
+  const matches: string[] = []
+  let visitedDirectories = 0
+
+  while (directories.length > 0 && matches.length < 2 && visitedDirectories < MAX_LOOKUP_DIRECTORIES) {
+    const batch = directories.splice(0, LOOKUP_BATCH_SIZE)
+    visitedDirectories += batch.length
+    const listings = await Promise.all(batch.map(directory => api.file.readDir(directory)))
+
+    for (const items of listings) {
+      for (const item of items || []) {
+        if (item.isDirectory) {
+          if (!item.name.startsWith('.') && !FILE_LOOKUP_IGNORES.has(item.name)) directories.push(item.path)
+          continue
+        }
+        const normalizedCandidate = normalizePath(item.path).toLowerCase()
+        const matchesPath = isBasenameOnly
+          ? item.name.toLowerCase() === normalizedSuffix
+          : normalizedCandidate.endsWith(`/${normalizedSuffix}`)
+        if (matchesPath) matches.push(normalizePath(item.path))
+        if (matches.length >= 2) break
+      }
+      if (matches.length >= 2) break
+    }
+  }
+
+  return matches.length === 1 ? matches[0] : null
+}
+
+async function resolveExistingChatFilePath(value: string, workspacePath: string | null): Promise<{
+  path: string
+  stat: { isDirectory: boolean } | null
+} | null> {
+  const directPath = resolveChatFilePath(value, workspacePath)
+  if (!directPath) return null
+
+  const directStat = await api.file.stat(directPath)
+  if (directStat) return { path: directPath, stat: directStat }
+  if (!workspacePath) return { path: directPath, stat: null }
+
+  const matchedPath = await findUniqueWorkspaceFile(value, workspacePath)
+  return matchedPath ? { path: matchedPath, stat: { isDirectory: false } } : { path: directPath, stat: null }
+}
+
+async function revealChatFilePath(path: string): Promise<boolean> {
+  if (await api.file.showInFolder(path)) return true
+
+  // The model can mention a file that has just been moved or deleted. Opening
+  // its existing parent is still useful and makes "Open Containing Folder"
+  // behave according to its label instead of failing with the file lookup.
+  const parentPath = getDirname(path)
+  if (!parentPath || parentPath === path) return false
+  const parentStat = await api.file.stat(parentPath)
+  return Boolean(parentStat?.isDirectory && await api.file.openWithDefault(parentPath))
+}
 
 export async function activateChatFilePath(value: string, reveal = false): Promise<void> {
   const { workspacePath, language } = useStore.getState()
-  const path = resolveChatFilePath(value, workspacePath)
+  let path = resolveChatFilePath(value, workspacePath)
   try {
-    if (!path) throw new Error('Unresolved path')
+    const resolved = await resolveExistingChatFilePath(value, workspacePath)
+    if (!resolved) throw new Error('Unresolved path')
+    path = resolved.path
     if (reveal) {
-      if (!await api.file.showInFolder(path)) throw new Error('Cannot reveal file')
+      if (!await revealChatFilePath(path)) throw new Error('Cannot reveal file')
     } else if (isBinaryFile(path)) {
       if (!await api.file.openWithDefault(path)) throw new Error('Cannot open file')
     } else {
-      const stat = await api.file.stat(path)
-      if (!stat) throw new Error('File not found')
-      if (stat.isDirectory) {
+      if (!resolved.stat) throw new Error('File not found')
+      if (resolved.stat.isDirectory) {
         if (!await api.file.openWithDefault(path)) throw new Error('Cannot open directory')
       } else {
         await safeOpenFile(path, { language })

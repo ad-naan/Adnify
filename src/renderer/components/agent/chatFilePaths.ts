@@ -2,6 +2,11 @@ import { hasAsciiControlCharacters, resolvePathLexically } from '@shared/utils/p
 
 const MAX_PATH_LENGTH = 2048
 const FILE_NAME = /^(?:\.[\w-]+|[\p{L}\p{N}_ .@()+-]+\.(?:[cm]?[jt]sx?|vue|uvue|md|mdx|json|jsonc|ya?ml|toml|xml|txt|log|csv|tsv|css|scss|less|html?|go|rs|py|java|[ch]|[ch]pp|sh|ps1|sql|zip|tar|gz|rar|7z|pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|svg))$/iu
+const ASCII_RELATIVE_PATH = /^(?:\.{0,2}\/)?[\w.@()+-]+(?:\/[\w.@()+-]+)+\/?$/u
+
+function isFileName(value: string): boolean {
+  return FILE_NAME.test(value.replace(/%[\da-f]{2}/gi, '_'))
+}
 
 /** Pure, bounded syntax recognition. Never checks the disk during rendering. */
 export function parseChatFilePath(value: string): string | null {
@@ -22,8 +27,20 @@ export function parseChatFilePath(value: string): string | null {
   if (path.replace(/^[a-z]:\//i, '').includes(':')) return null
   // Avoid expressions, options and prose that happen to contain a slash.
   if (/\s\//.test(path) || /\/\s/.test(path) || /^[-@~]/.test(path) || /\(\)$/.test(path)) return null
-  if (path.includes('/')) return path === '/' || /[^./]/.test(path) ? path : null
-  return FILE_NAME.test(path) ? path : null
+  if (path.includes('/')) {
+    if (path === '/') return path
+    if (!/[^./]/.test(path)) return null
+
+    // A slash alone does not make prose a path (for example, Chinese text that
+    // uses "/" as an alternative separator). Relative directory paths without
+    // a trailing slash are accepted only when they use conventional ASCII path
+    // segments; Unicode relative paths remain supported when they name a file.
+    const basename = path.replace(/\/$/, '').split('/').pop() || ''
+    const isAbsolute = /^(?:\/|[a-z]:\/)/i.test(path)
+    if (!path.endsWith('/') && !isAbsolute && !isFileName(basename) && !ASCII_RELATIVE_PATH.test(path)) return null
+    return path
+  }
+  return isFileName(path) ? path : null
 }
 
 export function resolveChatFilePath(value: string, workspacePath: string | null): string | null {
