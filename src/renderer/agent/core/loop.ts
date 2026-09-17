@@ -293,7 +293,12 @@ async function callLLMWithRetry(
         }
       },
       {
-        maxRetries: retryConfig.maxRetries,
+        // The main-process generation layer already performs cache fallback
+        // and transient retries. Repeating that whole recovery sequence three
+        // more times here made one long timeout replay the complete document
+        // many times. Keep a single renderer-level retry for IPC/process-edge
+        // failures without multiplying provider requests.
+        maxRetries: Math.min(retryConfig.maxRetries, 1),
         initialDelayMs: retryConfig.retryDelayMs,
         backoffMultiplier: retryConfig.retryBackoffMultiplier,
         isRetryable: error => {

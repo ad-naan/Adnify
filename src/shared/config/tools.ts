@@ -394,11 +394,14 @@ Avoid:
         displayName: 'Write File',
         description: `Write complete file content.
 Use for new files, intentional full rewrites, or generated artifact files.
+Write ordinary long documents in one complete call. Do not split a document merely because it is long.
+Only use multiple writes for exceptionally large generated content that is unlikely to fit in one model response (roughly more than 50,000 characters); create the first part with write_file, then append later parts with edit_file.
 Do not use for partial edits; write_file overwrites the whole file, so use edit_file for targeted changes.`,
         criticalRules: [
             'Overwrites the entire file; use edit_file for partial changes',
             'Use write_file to create files; use create_directory to create folders',
             'Do not rewrite the same large file multiple times in one turn unless absolutely necessary',
+            'Prefer one complete write for documents up to roughly 50,000 characters; segment only exceptionally large output that cannot fit in one response',
             'If the file already exists and you are only changing a section, DO NOT use write_file',
         ],
         category: 'write',

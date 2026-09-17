@@ -196,7 +196,10 @@ export function createStreamProcessor(
             if (data.name && data.name !== tc.name) {
               tc.name = data.name
             }
-            EventBus.emit({ type: 'stream:tool_delta', id: tc.id, args: tc.argsString })
+            // Publish only the new fragment. Publishing the entire accumulated
+            // argument on every token made long write_file payloads quadratic
+            // for global event subscribers.
+            if (argsDelta) EventBus.emit({ type: 'stream:tool_delta', id: tc.id, argsDelta })
           }
         }
         break

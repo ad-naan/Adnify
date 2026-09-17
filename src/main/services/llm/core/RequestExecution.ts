@@ -82,14 +82,15 @@ interface PrepareExecutionRequestOptions {
   originalMessages?: LLMMessage[]
   systemPrompt?: string
   useCache: boolean
+  streaming?: boolean
 }
 
 export async function prepareExecutionRequest(
   options: PrepareExecutionRequestOptions,
 ): Promise<PreparedRequest> {
-  const { config, baseMessages, originalMessages, useCache } = options
+  const { config, baseMessages, originalMessages, useCache, streaming } = options
   const settings = buildGenerationSettings(config)
-  const callOptions = buildRequestExecutionOptions(config)
+  const callOptions = buildRequestExecutionOptions(config, { streaming })
 
   const prepared = useCache
     ? await prepareRequestCache(config, baseMessages)

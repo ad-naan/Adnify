@@ -17,8 +17,19 @@ export interface RequestExecutionOptions {
   maxRetries?: number
   toolChoice?: LLMConfig['toolChoice']
   headers?: Record<string, string>
-  timeout?: number
+  timeout?: number | {
+    totalMs?: number
+    stepMs?: number
+    firstChunkMs?: number
+    chunkMs?: number
+  }
 }
+
+export interface RequestExecutionSettings {
+  streaming?: boolean
+}
+
+const MIN_REASONING_STREAM_INACTIVITY_TIMEOUT_MS = 5 * 60_000
 
 function normalizePositiveNumber(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -73,6 +84,16 @@ function isOpenAIReasoningRoute(config: LLMConfig): boolean {
   )
 }
 
+function usesLongReasoning(config: LLMConfig): boolean {
+  if (!config.reasoningEffort || config.reasoningEffort === 'none') return false
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
+  return Boolean(
+    config.enableThinking ||
+    config.capabilities?.openAIReasoningModel ||
+    protocol === 'openai-responses'
+  )
+}
+
 function supportsOpenAIResponsesMaxOutputTokens(config: LLMConfig): boolean {
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
   if (protocol !== 'openai-responses') {
@@ -104,11 +125,31 @@ export function buildGenerationSettings(config: LLMConfig): GenerationSettings {
   }
 }
 
-export function buildRequestExecutionOptions(config: LLMConfig): RequestExecutionOptions {
+export function buildRequestExecutionOptions(
+  config: LLMConfig,
+  settings: RequestExecutionSettings = {},
+): RequestExecutionOptions {
+  const configuredTimeout = normalizePositiveNumber(config.timeout)
+  const streamInactivityTimeout = configuredTimeout
+    ? usesLongReasoning(config)
+      ? Math.max(configuredTimeout, MIN_REASONING_STREAM_INACTIVITY_TIMEOUT_MS)
+      : configuredTimeout
+    : undefined
+
   return {
     maxRetries: normalizeNonNegativeInteger(config.maxRetries),
     toolChoice: config.toolChoice,
     headers: normalizeHeaders(resolveHeaderPlaceholders(config.headers, config.apiKey)),
-    timeout: normalizePositiveNumber(config.timeout),
+    // A numeric AI SDK timeout is a total wall-clock limit. That made healthy
+    // long reasoning and long-document generations stop at the default 120s
+    // even while chunks were arriving. Streaming requests instead use only
+    // first/inter-chunk inactivity limits. Non-streaming callers retain the
+    // existing total timeout behavior.
+    timeout: settings.streaming && streamInactivityTimeout
+      ? {
+          firstChunkMs: streamInactivityTimeout,
+          chunkMs: streamInactivityTimeout,
+        }
+      : configuredTimeout,
   }
 }

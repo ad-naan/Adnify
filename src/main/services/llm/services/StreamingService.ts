@@ -44,10 +44,17 @@ export interface StreamingResult {
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
 
 
-function resolveStreamIdleTimeoutMs(timeoutMs?: number): number {
-  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
-    return timeoutMs
+function resolveStreamIdleTimeoutMs(
+  timeout?: number | { firstChunkMs?: number; chunkMs?: number },
+): number {
+  if (typeof timeout === 'number' && Number.isFinite(timeout) && timeout > 0) {
+    return timeout
   }
+
+  const configured = typeof timeout === 'object'
+    ? timeout.chunkMs ?? timeout.firstChunkMs
+    : undefined
+  if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) return configured
 
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS
 }
@@ -134,6 +141,7 @@ export class StreamingService {
         originalMessages: messages,
         systemPrompt,
         useCache,
+        streaming: true,
       })
       coreMessages = preparedRequest.messages
 
@@ -300,6 +308,19 @@ export class StreamingService {
     }
 
     const finishReason = await result.finishReason
+
+    const normalizedFinishReason = String(finishReason)
+    if (
+      (normalizedFinishReason === 'length' || normalizedFinishReason === 'max_tokens' || normalizedFinishReason === 'max_output_tokens') &&
+      shape.sawToolActivity &&
+      !shape.sawExecutableToolCall
+    ) {
+      throw new LLMError(
+        'The model reached its output token limit before the file-writing tool call was complete. Increase Max Tokens or split only this exceptionally large document into multiple writes.',
+        ErrorCode.LLM_NO_OUTPUT,
+        false,
+      )
+    }
 
     if (finishReason === 'tool-calls' && !shape.sawExecutableToolCall) {
       throw new LLMError(

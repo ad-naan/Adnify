@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LLMConfig } from '@shared/types'
-import { buildGenerationSettings } from '@main/services/llm/core/RequestSettings'
+import { buildGenerationSettings, buildRequestExecutionOptions } from '@main/services/llm/core/RequestSettings'
 import { buildThinkingProviderOptions } from '@main/services/llm/core/ProviderCompatibility'
 import { ThinkingStrategyFactory, XmlTagThinkingStrategy, StandardThinkingStrategy } from '@main/services/llm/strategies/ThinkingStrategy'
 
@@ -67,5 +67,51 @@ describe('LLM capability-driven behavior', () => {
   it('selects xml think parsing only when explicitly declared', () => {
     expect(ThinkingStrategyFactory.create('native')).toBeInstanceOf(StandardThinkingStrategy)
     expect(ThinkingStrategyFactory.create('xml-think')).toBeInstanceOf(XmlTagThinkingStrategy)
+  })
+
+  it('uses inactivity timeouts instead of a total timeout for streaming', () => {
+    const result = buildRequestExecutionOptions(createConfig({
+      protocol: 'openai',
+      reasoningEffort: 'none',
+      timeout: 120_000,
+    }), { streaming: true })
+
+    expect(result.timeout).toEqual({
+      firstChunkMs: 120_000,
+      chunkMs: 120_000,
+    })
+  })
+
+  it('allows long silent reasoning windows without imposing a total timeout', () => {
+    const result = buildRequestExecutionOptions(createConfig({
+      protocol: 'openai-responses',
+      reasoningEffort: 'high',
+      timeout: 120_000,
+    }), { streaming: true })
+
+    expect(result.timeout).toEqual({
+      firstChunkMs: 300_000,
+      chunkMs: 300_000,
+    })
+  })
+
+  it('uses the same long-reasoning inactivity window for non-OpenAI thinking routes', () => {
+    const result = buildRequestExecutionOptions(createConfig({
+      provider: 'anthropic',
+      protocol: 'anthropic',
+      enableThinking: true,
+      reasoningEffort: 'high',
+      timeout: 120_000,
+    }), { streaming: true })
+
+    expect(result.timeout).toEqual({
+      firstChunkMs: 300_000,
+      chunkMs: 300_000,
+    })
+  })
+
+  it('retains the configured total timeout for non-streaming requests', () => {
+    const result = buildRequestExecutionOptions(createConfig({ timeout: 120_000 }))
+    expect(result.timeout).toBe(120_000)
   })
 })

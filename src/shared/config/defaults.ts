@@ -17,7 +17,12 @@ export { SECURITY_SETTINGS_DEFAULTS } from './securitySettings'
 export const LLM_DEFAULTS = {
   temperature: 0.7,
   topP: 1,
-  maxTokens: 8192,
+  // A complete generated document is carried inside a tool-call argument, and
+  // reasoning tokens share this allowance on reasoning models. 8K was small
+  // enough to truncate otherwise ordinary long documents before write_file
+  // became executable. Keep normal documents single-shot; truly huge outputs
+  // are handled by the agent's explicit segmented-write guidance instead.
+  maxTokens: 16384,
   timeout: 120000,
   frequencyPenalty: 0,
   presencePenalty: 0,
