@@ -8,7 +8,7 @@ import { createGoogle } from '@ai-sdk/google'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { LLMConfig } from '@shared/types/llm'
-import { BUILTIN_PROVIDERS, isBuiltinProvider } from '@shared/config/providers'
+import { BUILTIN_PROVIDERS, getOpenAIOAuthModels, isBuiltinProvider } from '@shared/config/providers'
 import type { ApiProtocol } from '@shared/config/providers'
 import { supportsFullOpenAIStyleFeatures } from '@shared/config/providers'
 import { OpenAIAuthService } from '../openai/OpenAIAuthService'
@@ -28,16 +28,18 @@ const CHATGPT_BACKEND_URL = 'https://chatgpt.com/backend-api/codex'
  */
 export async function resolveAuthForConfig(config: LLMConfig): Promise<LLMConfig> {
     const isOAuthProvider = config.provider === 'openai-oauth'
-    const isOpenAI = config.provider === 'openai'
 
-    if (isOAuthProvider || (isOpenAI && !config.apiKey)) {
+    if (isOAuthProvider) {
         const token = await OpenAIAuthService.getValidToken()
         if (token) {
-            const { accountID } = await OpenAIAuthService.getStatus()
+            const { accountID, planType } = await OpenAIAuthService.getStatus()
+            const availableModels = getOpenAIOAuthModels(planType)
             return {
                 ...config,
+                model: availableModels.includes(config.model) ? config.model : availableModels[0],
                 apiKey: token,
-                baseUrl: config.baseUrl || CHATGPT_BACKEND_URL,
+                // Never send a ChatGPT OAuth bearer token to a configurable origin.
+                baseUrl: CHATGPT_BACKEND_URL,
                 protocol: 'openai-responses',
                 headers: {
                     ...config.headers,
@@ -66,9 +68,6 @@ export async function resolveAuthForConfig(config: LLMConfig): Promise<LLMConfig
             throw providerAuthError('chatgptNotSignedIn')
         }
 
-        if (isOpenAI && !config.apiKey) {
-            throw providerAuthError('openAiKeyMissing')
-        }
     }
 
     const builtinProvider = BUILTIN_PROVIDERS[config.provider]
@@ -211,7 +210,21 @@ function createBuiltinModel(route: ResolvedModelRoute): LanguageModel {
                 // Subscription usage is only ever reported on response headers,
                 // so snapshot it as requests pass through.
                 fetch: async (input, init) => {
-                    const response = await fetch(input as any, init as any)
+                    const request = new Request(input as any, init as RequestInit)
+                    const retryRequest = request.clone()
+                    let response = await fetch(request)
+
+                    if (response.status === 401) {
+                        await response.body?.cancel().catch(() => undefined)
+                        const refreshedToken = await OpenAIAuthService.refreshAfterUnauthorized(route.apiKey)
+                        if (refreshedToken) {
+                            const headers = new Headers(retryRequest.headers)
+                            headers.set('Authorization', `Bearer ${refreshedToken}`)
+                            const { accountID } = await OpenAIAuthService.getStatus()
+                            if (accountID) headers.set('chatgpt-account-id', accountID)
+                            response = await fetch(retryRequest, { headers })
+                        }
+                    }
                     try {
                         OpenAIUsageStore.captureFromHeaders(response.headers)
                     } catch (error) {

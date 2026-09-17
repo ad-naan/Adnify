@@ -740,6 +740,7 @@ export interface ElectronAPI {
       capturedAt: number
     } | null
   }>
+  onCredentialsOAuthStatusChanged: (callback: (status: { loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }) => void) => () => void
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
   mcpDiscoverExternalConfigs: () => Promise<{ success: boolean; configs?: McpServerState['config'][]; error?: string }>

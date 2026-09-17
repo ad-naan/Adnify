@@ -9,7 +9,7 @@ import { memo, useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw, Pencil } from 'lucide-react'
 import {
-  PROVIDERS, type ApiProtocol, type OpenAICompatibilityProfile, getProviderDefaultHeaders, isOpenAIStyleProtocol, resolveOpenAICompatibilityProfile, } from '@/shared/config/providers'
+  PROVIDERS, type ApiProtocol, type OpenAICompatibilityProfile, getOpenAIOAuthModels, getProviderDefaultHeaders, isOpenAIStyleProtocol, resolveOpenAICompatibilityProfile, } from '@/shared/config/providers'
 import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
 import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
@@ -376,7 +376,15 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
     onStatusChange?.()
   }, [onStatusChange, loadUsage])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    void refresh()
+    return window.electronAPI.onCredentialsOAuthStatusChanged(next => {
+      setStatus(next)
+      if (next.loggedIn) void loadUsage()
+      else setUsage(null)
+      onStatusChange?.()
+    })
+  }, [refresh, loadUsage, onStatusChange])
 
   const handleLogin = async () => {
     setBusy(true)
@@ -1000,12 +1008,15 @@ export function ProviderSettings({
 
   // OAuth 登录状态（OAuth provider 没有 API Key，可用性取决于是否已登录）
   const [oauthSignedIn, setOauthSignedIn] = useState(false)
+  const [oauthPlanType, setOauthPlanType] = useState<string | undefined>()
   const refreshOAuthStatus = useCallback(async () => {
     try {
       const status = await window.electronAPI.credentialsOAuthStatus()
       setOauthSignedIn(status.loggedIn)
+      setOauthPlanType(status.planType)
     } catch {
       setOauthSignedIn(false)
+      setOauthPlanType(undefined)
     }
   }, [])
 
@@ -1498,7 +1509,10 @@ export function ProviderSettings({
     if (isCustomSelected && selectedCustomConfig) {
        (selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
     } else if (selectedProvider) {
-      selectedProvider.models.forEach((model: string) => modelsSet.add(model))
+      const providerModels = localConfig.provider === 'openai-oauth'
+        ? getOpenAIOAuthModels(oauthPlanType)
+        : selectedProvider.models
+      providerModels.forEach((model: string) => modelsSet.add(model))
     }
 
     const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
@@ -1509,7 +1523,7 @@ export function ProviderSettings({
     }
 
     return Array.from(modelsSet)
-  }, [isCustomSelected, localConfig.model, localConfig.provider, localProviderConfigs, selectedCustomConfig, selectedProvider])
+  }, [isCustomSelected, localConfig.model, localConfig.provider, localProviderConfigs, oauthPlanType, selectedCustomConfig, selectedProvider])
   const availableModelOptions = useMemo(
     () => availableModels.map((model) => ({ value: model, label: model })),
     [availableModels],
@@ -1809,8 +1823,11 @@ export function ProviderSettings({
                     {t('providerSettings.apiEndpoint', language)}
                   </label>
                   <Input
-                    value={localConfig.baseUrl || ''}
+                    value={PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
+                      ? PROVIDERS[localConfig.provider].baseUrl
+                      : localConfig.baseUrl || ''}
                     onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
+                    disabled={PROVIDERS[localConfig.provider]?.auth.type === 'oauth'}
                     placeholder="https://api.example.com/v1"
                     className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs font-mono h-10 transition-all"
                   />

@@ -164,13 +164,22 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
   },
   'openai-oauth': {
     id: 'openai-oauth',
-    displayName: 'ChatGPT (Pro/Plus)',
+    displayName: 'ChatGPT Account',
     description: 'Sign in with your ChatGPT subscription — no API key needed',
     // OAuth tokens are only valid against the ChatGPT backend, not api.openai.com.
     // This path is exact: the endpoint is `<baseUrl>/responses`, with no /v1 segment.
     baseUrl: 'https://chatgpt.com/backend-api/codex',
-    models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
-    defaultModel: 'gpt-5.5',
+    models: [
+      'gpt-6-astra',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'gpt-5.3-codex-spark',
+    ],
+    defaultModel: 'gpt-5.6-terra',
     protocol: 'openai-responses',
     features: { streaming: true, tools: true, vision: true, reasoning: true },
     defaults: { maxTokens: 16384, temperature: 0.7, topP: 1, timeout: 120000 },
@@ -219,6 +228,14 @@ export function isBuiltinProvider(providerId: string): boolean {
 
 export function getBuiltinProvider(providerId: string): BuiltinProviderDef | undefined {
   return BUILTIN_PROVIDERS[providerId]
+}
+
+/** Models that can be safely advertised for the authenticated ChatGPT plan. */
+export function getOpenAIOAuthModels(planType?: string): string[] {
+  const models = [...BUILTIN_PROVIDERS['openai-oauth'].models]
+  const normalizedPlan = planType?.trim().toLowerCase()
+  if (normalizedPlan === 'pro' || normalizedPlan?.startsWith('pro_')) return models
+  return models.filter(model => model !== 'gpt-5.3-codex-spark')
 }
 
 export function getProviderDefaultModel(providerId: string): string {

@@ -90,8 +90,8 @@ describe('LLM capability-driven behavior', () => {
     }), { streaming: true })
 
     expect(result.timeout).toEqual({
-      firstChunkMs: 300_000,
-      chunkMs: 300_000,
+      firstChunkMs: 900_000,
+      chunkMs: 900_000,
     })
   })
 
@@ -105,8 +105,22 @@ describe('LLM capability-driven behavior', () => {
     }), { streaming: true })
 
     expect(result.timeout).toEqual({
-      firstChunkMs: 300_000,
-      chunkMs: 300_000,
+      firstChunkMs: 900_000,
+      chunkMs: 900_000,
+    })
+  })
+
+  it('protects ChatGPT OAuth reasoning even when effort uses the provider default', () => {
+    const result = buildRequestExecutionOptions(createConfig({
+      provider: 'openai-oauth',
+      protocol: 'openai-responses',
+      reasoningEffort: undefined,
+      timeout: 120_000,
+    }), { streaming: true })
+
+    expect(result.timeout).toEqual({
+      firstChunkMs: 900_000,
+      chunkMs: 900_000,
     })
   })
 

@@ -1,16 +1,23 @@
 import { safeIpcHandle } from './safeHandle'
+import { BrowserWindow } from 'electron'
 import { ProviderCredentialStore } from '../services/credentials/ProviderCredentialStore'
 import { OpenAIAuthService } from '../services/openai/OpenAIAuthService'
 import { OpenAIUsageStore } from '../services/openai/OpenAIUsageStore'
 import { logger } from '@shared/utils/Logger'
+import { getOpenAIOAuthModels } from '@shared/config/providers'
 
 const CHATGPT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
+let authStatusBroadcastRegistered = false
 
 async function refreshUsage(): Promise<boolean> {
   const token = await OpenAIAuthService.getValidToken()
   if (!token) return false
 
-  const { accountID } = await OpenAIAuthService.getStatus()
+  const { accountID, planType } = await OpenAIAuthService.getStatus()
+  const availableModels = getOpenAIOAuthModels(planType)
+  const probeModel = availableModels.includes('gpt-5.6-luna')
+    ? 'gpt-5.6-luna'
+    : availableModels[0]
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 15_000)
 
@@ -24,9 +31,20 @@ async function refreshUsage(): Promise<boolean> {
         originator: 'adnify',
       },
       signal: controller.signal,
-      body: JSON.stringify({ model: 'gpt-5.5', input: [], store: false, stream: true }),
+      body: JSON.stringify({
+        model: probeModel,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: 'Reply OK.' }] }],
+        store: false,
+        stream: true,
+      }),
     })
-    return OpenAIUsageStore.captureFromHeaders(response.headers)
+    const captured = OpenAIUsageStore.captureFromHeaders(response.headers)
+    await response.body?.cancel().catch(() => undefined)
+    if (!response.ok) {
+      logger.ipc.warn('[Credentials] OAuth usage probe was rejected', { status: response.status })
+      return false
+    }
+    return captured
   } catch (error) {
     logger.ipc.warn('[Credentials] OAuth usage refresh failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -38,6 +56,20 @@ async function refreshUsage(): Promise<boolean> {
 }
 
 export function registerProviderCredentialHandlers(): void {
+  if (!authStatusBroadcastRegistered) {
+    authStatusBroadcastRegistered = true
+    OpenAIAuthService.onStatusChanged(() => {
+      void OpenAIAuthService.getStatus().then(status => {
+        if (!status.loggedIn) OpenAIUsageStore.clear()
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+            window.webContents.send('credentials:oauth:status-changed', status)
+          }
+        }
+      })
+    })
+  }
+
   safeIpcHandle('credentials:api-keys:get', async () => ProviderCredentialStore.getApiKeys())
   safeIpcHandle('credentials:api-keys:replace', async (_event, apiKeys: Record<string, string>) => {
     ProviderCredentialStore.replaceApiKeys(apiKeys)
@@ -46,6 +78,7 @@ export function registerProviderCredentialHandlers(): void {
 
   safeIpcHandle('credentials:oauth:login', async () => {
     const tokens = await OpenAIAuthService.login()
+    OpenAIUsageStore.clear()
     return { success: true, accountID: tokens.accountID }
   })
 
@@ -56,7 +89,7 @@ export function registerProviderCredentialHandlers(): void {
   })
 
   safeIpcHandle('credentials:oauth:usage', async (_event, options?: { refresh?: boolean }) => {
-    if (options?.refresh || !OpenAIUsageStore.get()) await refreshUsage()
+    if (options?.refresh) await refreshUsage()
     return { usage: OpenAIUsageStore.get() }
   })
 

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, Check, Search } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { BUILTIN_PROVIDERS, getBuiltinProvider } from '@shared/config/providers'
+import { BUILTIN_PROVIDERS, getBuiltinProvider, getOpenAIOAuthModels } from '@shared/config/providers'
 import { t } from '@shared/i18n'
 
 interface ModelGroup {
@@ -33,19 +33,20 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // OAuth providers have no API key — availability depends on sign-in state.
-  const [oauthSignedIn, setOauthSignedIn] = useState(false)
+  const [oauthStatus, setOauthStatus] = useState<{ loggedIn: boolean; planType?: string }>({ loggedIn: false })
   useEffect(() => {
     window.electronAPI.credentialsOAuthStatus()
-      .then(s => setOauthSignedIn(s.loggedIn))
-      .catch(() => setOauthSignedIn(false))
+      .then(setOauthStatus)
+      .catch(() => setOauthStatus({ loggedIn: false }))
+    return window.electronAPI.onCredentialsOAuthStatusChanged(setOauthStatus)
   }, [isOpen])
 
   const hasApiKey = useCallback((providerId: string) => {
-    if (getBuiltinProvider(providerId)?.auth.type === 'oauth') return oauthSignedIn
+    if (getBuiltinProvider(providerId)?.auth.type === 'oauth') return oauthStatus.loggedIn
     const config = providerConfigs[providerId]
     if (config?.apiKey) return true
     return llmConfig.provider === providerId && !!llmConfig.apiKey
-  }, [llmConfig, providerConfigs, oauthSignedIn])
+  }, [llmConfig, providerConfigs, oauthStatus.loggedIn])
 
   const groupedModels = useMemo<ModelGroup[]>(() => {
     const groups: ModelGroup[] = []
@@ -55,9 +56,12 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
 
       const providerConfig = providerConfigs[providerId]
       const customModels = providerConfig?.customModels || []
-      const builtinModelIds = new Set(provider.models)
+      const advertisedModels = providerId === 'openai-oauth'
+        ? getOpenAIOAuthModels(oauthStatus.planType)
+        : provider.models
+      const builtinModelIds = new Set(advertisedModels)
       const models = [
-        ...provider.models.map(id => ({ id, name: id })),
+        ...advertisedModels.map(id => ({ id, name: id })),
         ...customModels
           .filter(id => !builtinModelIds.has(id))
           .map(id => ({ id, name: id, isCustom: true })),
@@ -82,7 +86,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
     }
 
     return groups
-  }, [providerConfigs, hasApiKey])
+  }, [providerConfigs, hasApiKey, oauthStatus.planType])
 
   const getIcon = useCallback((providerId: string, providerName?: string) => {
     const name = providerName || providerId

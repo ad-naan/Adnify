@@ -29,7 +29,7 @@ export interface RequestExecutionSettings {
   streaming?: boolean
 }
 
-const MIN_REASONING_STREAM_INACTIVITY_TIMEOUT_MS = 5 * 60_000
+const MIN_REASONING_STREAM_INACTIVITY_TIMEOUT_MS = 15 * 60_000
 
 function normalizePositiveNumber(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -85,6 +85,9 @@ function isOpenAIReasoningRoute(config: LLMConfig): boolean {
 }
 
 function usesLongReasoning(config: LLMConfig): boolean {
+  // ChatGPT account models are reasoning-capable even when the user leaves the
+  // effort selector at its provider default. Do not apply the generic 120s idle cutoff.
+  if (config.provider === 'openai-oauth') return true
   if (!config.reasoningEffort || config.reasoningEffort === 'none') return false
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
   return Boolean(

@@ -5,7 +5,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { BUILTIN_PROVIDERS, getBuiltinProvider, isBuiltinProvider } from '@shared/config/providers'
+import { BUILTIN_PROVIDERS, getBuiltinProvider, getOpenAIOAuthModels, isBuiltinProvider } from '@shared/config/providers'
 import type { LLMConfig } from '@shared/types/llm'
 import { createModel, resolveAuthForConfig, resolveHeaderPlaceholders } from '../services/llm/modelFactory'
 import { OpenAIAuthService } from '../services/openai/OpenAIAuthService'
@@ -237,12 +237,36 @@ export function registerHealthCheckHandlers() {
           checkedAt: new Date(),
         }
       }
-      // The ChatGPT backend has no /models endpoint; a valid token is the health signal.
-      return {
-        provider,
-        status: 'healthy' as const,
-        latency: Date.now() - startTime,
-        checkedAt: new Date(),
+      const status = await OpenAIAuthService.getStatus()
+      const availableModels = getOpenAIOAuthModels(status.planType)
+      const model = availableModels.includes('gpt-5.6-luna') ? 'gpt-5.6-luna' : availableModels[0]
+      try {
+        await testOpenAIResponsesModel({
+          provider: 'openai-oauth',
+          model,
+          apiKey: token,
+          baseUrl: BUILTIN_PROVIDERS['openai-oauth'].baseUrl,
+          timeout,
+          protocol: 'openai-responses',
+          headers: {
+            ...(status.accountID ? { 'chatgpt-account-id': status.accountID } : {}),
+            originator: 'adnify',
+          },
+        })
+        return {
+          provider,
+          status: 'healthy' as const,
+          latency: Date.now() - startTime,
+          checkedAt: new Date(),
+        }
+      } catch (error) {
+        return {
+          provider,
+          status: 'unhealthy' as const,
+          latency: Date.now() - startTime,
+          error: error instanceof Error ? error.message : String(error),
+          checkedAt: new Date(),
+        }
       }
     }
 
@@ -395,8 +419,8 @@ export function registerHealthCheckHandlers() {
         if (!token) {
           throw new Error('Not signed in to ChatGPT. Please sign in first.')
         }
-        // The ChatGPT backend exposes no /models endpoint; the catalog is fixed.
-        return { success: true, models: [...getBuiltinProvider(provider)!.models] }
+        const { planType } = await OpenAIAuthService.getStatus()
+        return { success: true, models: getOpenAIOAuthModels(planType) }
       }
 
       const defaultUrls: Record<string, string> = {

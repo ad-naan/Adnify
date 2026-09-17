@@ -17,14 +17,13 @@ type Pkce = { verifier: string; challenge: string }
 
 type TokenResponse = {
   access_token: string
-  refresh_token: string
-  id_token: string
+  refresh_token?: string
+  id_token?: string
   expires_in?: number
 }
 
 type Claims = {
   chatgpt_account_id?: string
-  organizations?: Array<{ id: string }>
   email?: string
   chatgpt_plan_type?: string
   'https://api.openai.com/auth'?: {
@@ -69,8 +68,7 @@ function extractAccountInfo(tokens: TokenResponse): AccountInfo {
     info.accountID =
       info.accountID ??
       claims.chatgpt_account_id ??
-      auth?.chatgpt_account_id ??
-      claims.organizations?.[0]?.id
+      auth?.chatgpt_account_id
     info.email = info.email ?? claims.email ?? profile?.email
     info.planType = info.planType ?? claims.chatgpt_plan_type ?? auth?.chatgpt_plan_type
   }
@@ -119,6 +117,17 @@ async function exchangeCode(code: string, pkce: Pkce): Promise<TokenResponse> {
   return (await res.json()) as TokenResponse
 }
 
+class OAuthTokenError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly oauthCode?: string,
+  ) {
+    super(message)
+    this.name = 'OAuthTokenError'
+  }
+}
+
 async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
   const res = await fetch(`${ISSUER}/oauth/token`, {
     method: 'POST',
@@ -129,20 +138,98 @@ async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
       client_id: CLIENT_ID,
     }).toString(),
   })
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`)
+  if (!res.ok) {
+    let oauthCode: string | undefined
+    try {
+      const payload = await res.json() as { error?: unknown }
+      if (typeof payload.error === 'string') oauthCode = payload.error
+    } catch {
+      // Never expose an OAuth response body through logs or renderer errors.
+    }
+    throw new OAuthTokenError(`Token refresh failed: ${res.status}`, res.status, oauthCode)
+  }
   return (await res.json()) as TokenResponse
 }
 
-function tokensFromResponse(res: TokenResponse): OAuthCredential {
+function tokensFromResponse(res: TokenResponse, previous?: OAuthCredential): OAuthCredential {
+  if (!res.access_token) throw new Error('OAuth token response did not include an access token')
+  const refreshToken = res.refresh_token ?? previous?.refreshToken
+  if (!refreshToken) throw new Error('OAuth token response did not include a refresh token')
   const info = extractAccountInfo(res)
   return {
     accessToken: res.access_token,
-    refreshToken: res.refresh_token,
+    refreshToken,
     expiresAt: Date.now() + (res.expires_in ?? 3600) * 1000,
     accountID: info.accountID,
     email: info.email,
     planType: info.planType,
   }
+}
+
+type StatusListener = () => void
+const statusListeners = new Set<StatusListener>()
+let refreshInFlight: Promise<string | null> | null = null
+
+function emitStatusChanged(): void {
+  for (const listener of statusListeners) {
+    try { listener() } catch { /* auth state notifications are best effort */ }
+  }
+}
+
+function isPermanentlyInvalidRefresh(error: unknown): boolean {
+  if (!(error instanceof OAuthTokenError)) return false
+  return error.oauthCode === 'invalid_grant'
+    || error.oauthCode === 'invalid_token'
+    || error.status === 401
+}
+
+async function refreshCredential(expectedAccessToken?: string): Promise<string | null> {
+  const current = ProviderCredentialStore.getOAuth('openai-oauth')
+  if (!current) return null
+
+  // A concurrent caller may already have rotated the rejected credential.
+  if (expectedAccessToken && current.accessToken !== expectedAccessToken) return current.accessToken
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const latest = ProviderCredentialStore.getOAuth('openai-oauth')
+        if (!latest) return null
+        const refreshed = await refreshTokens(latest.refreshToken)
+        const next = tokensFromResponse(refreshed, latest)
+        ProviderCredentialStore.setOAuth('openai-oauth', {
+          ...next,
+          accountID: next.accountID ?? latest.accountID,
+          email: next.email ?? latest.email,
+          planType: next.planType ?? latest.planType,
+        })
+        emitStatusChanged()
+        return next.accessToken
+      } catch (error) {
+        if (isPermanentlyInvalidRefresh(error)) {
+          logger.security.warn('[OpenAIAuth] Refresh credential rejected; clearing session', {
+            status: error instanceof OAuthTokenError ? error.status : undefined,
+            code: error instanceof OAuthTokenError ? error.oauthCode : undefined,
+          })
+          ProviderCredentialStore.clear('openai-oauth')
+          emitStatusChanged()
+          return null
+        }
+
+        // Transient network and upstream failures must not destroy the refresh token.
+        logger.security.warn('[OpenAIAuth] Token refresh temporarily failed; keeping session', {
+          reason: error instanceof Error ? error.name : 'unknown',
+        })
+        throw error
+      } finally {
+        // Defer clearing so even a synchronous early return cannot be overwritten
+        // by the outer assignment of this promise.
+        queueMicrotask(() => { refreshInFlight = null })
+      }
+    })()
+  }
+
+  return refreshInFlight
 }
 
 export const OpenAIAuthService = {
@@ -231,12 +318,14 @@ export const OpenAIAuthService = {
     const tokenRes = await exchangeCode(code, pkce)
     const tokens = tokensFromResponse(tokenRes)
     ProviderCredentialStore.setOAuth('openai-oauth', tokens)
+    emitStatusChanged()
     logger.security.info('[OpenAIAuth] Login successful', { accountID: tokens.accountID })
     return tokens
   },
 
   async logout(): Promise<void> {
     ProviderCredentialStore.clear('openai-oauth')
+    emitStatusChanged()
   },
 
   async getValidToken(): Promise<string | null> {
@@ -244,25 +333,15 @@ export const OpenAIAuthService = {
     if (!tokens) return null
 
     if (tokens.expiresAt < Date.now() + 60_000) {
-      try {
-        const refreshed = await refreshTokens(tokens.refreshToken)
-        const next = tokensFromResponse(refreshed)
-        // Refresh responses may omit id_token — keep the profile claims we already have.
-        ProviderCredentialStore.setOAuth('openai-oauth', {
-          ...next,
-          accountID: next.accountID ?? tokens.accountID,
-          email: next.email ?? tokens.email,
-          planType: next.planType ?? tokens.planType,
-        })
-        return next.accessToken
-      } catch (err) {
-        logger.security.warn('[OpenAIAuth] Token refresh failed, clearing tokens', err)
-        ProviderCredentialStore.clear('openai-oauth')
-        return null
-      }
+      return refreshCredential(tokens.accessToken)
     }
 
     return tokens.accessToken
+  },
+
+  /** Retry authentication once after the backend rejects an access token. */
+  async refreshAfterUnauthorized(rejectedAccessToken: string): Promise<string | null> {
+    return refreshCredential(rejectedAccessToken)
   },
 
   async getStatus(): Promise<{
@@ -288,5 +367,10 @@ export const OpenAIAuthService = {
       planType: tokens.planType ?? derived.planType,
       expiresAt: tokens.expiresAt,
     }
+  },
+
+  onStatusChanged(listener: StatusListener): () => void {
+    statusListeners.add(listener)
+    return () => statusListeners.delete(listener)
   },
 }

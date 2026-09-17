@@ -1066,6 +1066,9 @@ function ChatPanelContent() {
     window.electronAPI?.credentialsOAuthStatus?.()
       .then(s => setOauthSignedIn(s?.loggedIn ?? false))
       .catch(() => setOauthSignedIn(false))
+    return window.electronAPI?.onCredentialsOAuthStatusChanged?.(status => {
+      setOauthSignedIn(status.loggedIn)
+    })
   }, [])
 
   const isOAuth = getBuiltinProvider(llmConfig.provider)?.auth.type === 'oauth'

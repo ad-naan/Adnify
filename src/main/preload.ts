@@ -513,8 +513,9 @@ export interface ElectronAPI {
   credentialsReplaceApiKeys: (apiKeys: Record<string, string>) => Promise<boolean>
   credentialsOAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
   credentialsOAuthLogout: () => Promise<{ success: boolean; error?: string }>
-  credentialsOAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string }>
+  credentialsOAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }>
   credentialsOAuthUsage: (options?: { refresh?: boolean }) => Promise<{ usage: unknown }>
+  onCredentialsOAuthStatusChanged: (callback: (status: { loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }) => void) => () => void
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
   mcpDiscoverExternalConfigs: () => Promise<{ success: boolean; configs?: any[]; error?: string }>
@@ -978,6 +979,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   credentialsOAuthStatus: () => ipcRenderer.invoke('credentials:oauth:status'),
   credentialsOAuthUsage: (options?: { refresh?: boolean }) =>
     ipcRenderer.invoke('credentials:oauth:usage', options),
+  onCredentialsOAuthStatusChanged: (callback: (status: { loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }) => void) => {
+    const handler = (_event: IpcRendererEvent, status: { loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }) => callback(status)
+    ipcRenderer.on('credentials:oauth:status-changed', handler)
+    return () => ipcRenderer.removeListener('credentials:oauth:status-changed', handler)
+  },
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),
   mcpReloadConfig: () => ipcRenderer.invoke('mcp:reloadConfig'),
   mcpDiscoverExternalConfigs: () => ipcRenderer.invoke('mcp:discoverExternalConfigs'),
