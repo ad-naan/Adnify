@@ -21,6 +21,8 @@ import { ContextItem, FileContext } from '@/renderer/agent/types'
 
 const COLLAPSED_TEXTAREA_HEIGHT = 132
 const LONG_TEXT_THRESHOLD = 168
+const REGULAR_TEXTAREA_HEIGHT = 48
+const COMPACT_TEXTAREA_HEIGHT = 36
 
 export interface PendingImage {
   id: string
@@ -94,13 +96,27 @@ const ChatInput = memo(function ChatInput({
     const textarea = textareaRef.current
     if (!textarea) return
 
-    textarea.style.height = 'auto'
+    const minimumHeight = compact ? COMPACT_TEXTAREA_HEIGHT : REGULAR_TEXTAREA_HEIGHT
+
+    // An empty textarea can briefly report a stale scrollHeight while the panel is
+    // mounting (or while the UI font is being swapped in).  That stale measurement
+    // used to make a fresh composer look like it already contained several lines.
+    // Give the empty state a deterministic height and only measure real content.
+    if (!input) {
+      textarea.style.height = `${minimumHeight}px`
+      textarea.style.overflowY = 'hidden'
+      setCanCollapseInput(false)
+      setIsInputExpanded(false)
+      return
+    }
+
+    textarea.style.height = '0px'
     const fullHeight = textarea.scrollHeight
     const isLongInput = fullHeight > LONG_TEXT_THRESHOLD
     const maxExpandedHeight = Math.max(220, Math.floor(window.innerHeight * 0.5))
     const targetHeight = isLongInput && !isInputExpanded
       ? COLLAPSED_TEXTAREA_HEIGHT
-      : Math.min(fullHeight, maxExpandedHeight)
+      : Math.max(minimumHeight, Math.min(fullHeight, maxExpandedHeight))
 
     setCanCollapseInput(isLongInput)
     if (!isLongInput && isInputExpanded) {
@@ -109,7 +125,7 @@ const ChatInput = memo(function ChatInput({
 
     textarea.style.height = `${targetHeight}px`
     textarea.style.overflowY = fullHeight > targetHeight ? 'auto' : 'hidden'
-  }, [input, isInputExpanded, textareaRef])
+  }, [compact, input, isInputExpanded, textareaRef])
 
   // 文件引用检测
   const fileRefs = useMemo(() => {
@@ -190,7 +206,7 @@ const ChatInput = memo(function ChatInput({
     : 'none'
 
   return (
-    <div ref={inputContainerRef} className="z-20">
+    <div ref={inputContainerRef} className="z-20 min-w-0 max-w-full">
       <div
         className={`
             process-fluid-input relative group flex flex-col rounded-xl transition-shadow duration-300 ease-out
@@ -329,7 +345,11 @@ const ChatInput = memo(function ChatInput({
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide ${compact ? 'py-1.5' : 'py-2.5'}`}
             rows={1}
-            style={{ minHeight: compact ? '36px' : '48px', fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px` }}
+            style={{
+              boxSizing: 'border-box',
+              minHeight: compact ? `${COMPACT_TEXTAREA_HEIGHT}px` : `${REGULAR_TEXTAREA_HEIGHT}px`,
+              fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px`,
+            }}
           />
 
           {canCollapseInput && (

@@ -1322,12 +1322,12 @@ function ChatPanelContent() {
 
   return (
     <div
-      className={`absolute inset-0 overflow-hidden bg-background-secondary transition-colors ${chatMode === 'plan' ? `plan-chat-surface ${planPresentation.canvas ? 'plan-chat-canvas' : ''} ${planPresentation.empty ? 'plan-chat-empty' : ''}` : ''} ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
+      className={`absolute inset-0 min-w-0 max-w-full overflow-hidden bg-background-secondary transition-colors ${chatMode === 'plan' ? `plan-chat-surface ${planPresentation.canvas ? 'plan-chat-canvas' : ''} ${planPresentation.empty ? 'plan-chat-empty' : ''}` : ''} ${isDragging ? 'bg-accent/5 ring-2 ring-inset ring-accent' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex min-w-0 max-w-full flex-col h-full overflow-hidden">
         {chatMode === 'plan' && <header className="plan-chat-toolbar">
           {planPresentation.canvas && <OtterAsset asset="plans" className="mr-1 h-6 w-6 object-contain" />}
           <button type="button" aria-pressed={showPlanWorkbench} onClick={() => { setCanvasDiscussion(false); setPlanSidebarView('details') }}>{t(planPresentation.canvas ? 'planDesign.workspace' : 'planDesign.details', language)}</button>
@@ -1548,12 +1548,12 @@ function ChatPanelContent() {
           }
 
           {/* Bottom Input Area - Unified Tray */}
-          <div className={`plan-chat-composer shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
-            <div className="mx-4 mb-4 flex flex-col">
+          <div className={`plan-chat-composer min-w-0 max-w-full shrink-0 z-20 flex-col overflow-hidden ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
+            <div className="mx-4 mb-4 flex min-w-0 max-w-full flex-col">
               {/* Dock 区域：无内容时不占空间，有内容时用动画平滑展开，
                   避免固定 min-h 造成的底部空白，同时通过过渡动画防止抖动。 */}
               {(chatMode !== 'plan' || hasSubtaskApprovals) && (
-                <div className="relative shrink-0 z-30">
+                <div className="relative min-w-0 max-w-full shrink-0 z-30">
                   {laneNotice && (
                     <div className="flex items-center gap-2 rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2 mb-2">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />

@@ -77,7 +77,7 @@ export function ToolApprovalActions({
 
   return (
     <div
-      className="flex min-w-0 flex-nowrap items-center justify-end gap-0.5"
+      className="flex min-w-0 max-w-full shrink-0 flex-nowrap items-center justify-end gap-0.5 overflow-hidden"
       onClick={event => event.stopPropagation()}
     >
       {onReject && (

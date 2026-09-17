@@ -117,11 +117,11 @@ function UnifiedStatusTray({
 
   return (
     <SmoothCollapse open={showTray}>
-    <div className="pb-3">
-      <div className="chat-layered-surface rounded-xl border border-border/50 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden pb-3">
+      <div className="chat-layered-surface min-w-0 max-w-full rounded-xl border border-border/50 overflow-hidden">
         {/* Header: 状态 + Tab 切换 */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full items-center justify-between gap-2 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
             {/* 状态指示器 */}
             {hasStatus && (
               <div className="flex items-center gap-2 mr-2">
@@ -201,7 +201,7 @@ function UnifiedStatusTray({
           </div>
 
           {/* 右侧操作 */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             {/* Stop 按钮 */}
             {isStreaming && (
               <button
@@ -268,8 +268,8 @@ function UnifiedStatusTray({
 
 
         <SmoothCollapse open={!!pendingCommand}>
-          <div className="border-t border-yellow-500/10 bg-yellow-500/[0.04] px-3 py-2">
-            <code className="block select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-text-primary">
+          <div className="min-w-0 max-w-full overflow-hidden border-t border-yellow-500/10 bg-yellow-500/[0.04] px-3 py-2">
+            <code className="block min-w-0 max-w-full select-text whitespace-pre-wrap break-all [overflow-wrap:anywhere] font-mono text-[11px] leading-5 text-text-primary">
               <span className="mr-1.5 select-none text-accent/60">$</span>
               {pendingCommand}
             </code>
@@ -289,7 +289,7 @@ function UnifiedStatusTray({
               )}
 
               {currentTab === 'approvals' && hasApprovals && (
-                <div className="max-h-[min(220px,30vh)] overflow-y-auto custom-scrollbar">
+                <div className="min-w-0 max-w-full max-h-[min(220px,30vh)] overflow-x-hidden overflow-y-auto custom-scrollbar">
                 <ApprovalQueueContent
                   toolCalls={pendingToolCalls}
                   currentToolCallId={pendingToolCall?.id}
@@ -384,7 +384,7 @@ function ApprovalQueueContent({
   }, [decideOnce, language, onApprove])
 
   return (
-    <div className={visibleToolCalls.length ? 'space-y-1 px-2 py-2' : ''}>
+    <div className={visibleToolCalls.length ? 'min-w-0 max-w-full space-y-1 px-2 py-2' : ''}>
       {visibleToolCalls.map((toolCall, index) => {
         const isCurrent = toolCall.id === currentToolCallId
         const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
@@ -394,7 +394,7 @@ function ApprovalQueueContent({
         return (
           <div
             key={toolCall.id}
-            className="flex items-center gap-2 px-2.5 py-2"
+            className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden px-2.5 py-2"
           >
             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[9px] font-semibold ${isCurrent
               ? 'bg-amber-400/15 text-amber-400'
@@ -407,7 +407,7 @@ function ApprovalQueueContent({
                 <span className="text-[10px] font-medium text-text-primary">{toolCall.name}</span>
                 {isCurrent && <span className="text-[9px] text-amber-400">{t('checkpoint.current', language)}</span>}
               </div>
-              <code className="block truncate font-mono text-[10px] text-text-muted" title={getApprovalSummary(toolCall)}>
+              <code className="block min-w-0 max-w-full truncate font-mono text-[10px] text-text-muted" title={getApprovalSummary(toolCall)}>
                 {getApprovalSummary(toolCall)}
               </code>
             </div>

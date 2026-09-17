@@ -20,6 +20,8 @@ export function useChatScrollController({
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef(new ChatViewport())
   const frameRef = useRef<number | null>(null)
+  const layoutFrameRef = useRef<number | null>(null)
+  const pendingContentHeightRef = useRef<number | undefined>(undefined)
   const userIntentUntilRef = useRef(0)
   const pointerDownRef = useRef(false)
   const writtenTopRef = useRef<number | null>(null)
@@ -38,11 +40,24 @@ export function useChatScrollController({
   }, [])
 
   const commitLayout = useCallback((height?: number) => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const viewport = viewportRef.current
-    const geometry = viewport.layout(height ?? viewport.contentHeight, scroller.clientHeight)
-    writeGeometry(geometry.scrollTop)
+    if (height !== undefined) pendingContentHeightRef.current = height
+    if (layoutFrameRef.current !== null) return
+
+    // Virtuoso's content-height callback and ResizeObserver can fire in either
+    // order during the same layout transition. Applying both immediately lets a
+    // stale content height fight a fresh viewport height, which is visible as the
+    // last message bouncing when streaming/status UI disappears. Commit one
+    // coherent geometry snapshot per animation frame instead.
+    layoutFrameRef.current = requestAnimationFrame(() => {
+      layoutFrameRef.current = null
+      const scroller = scrollerRef.current
+      if (!scroller) return
+      const viewport = viewportRef.current
+      const contentHeight = pendingContentHeightRef.current ?? viewport.contentHeight
+      pendingContentHeightRef.current = undefined
+      const geometry = viewport.layout(contentHeight, scroller.clientHeight)
+      writeGeometry(geometry.scrollTop)
+    })
   }, [writeGeometry])
 
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
@@ -64,7 +79,10 @@ export function useChatScrollController({
   const attachScrollerNode = useCallback((node: HTMLDivElement | null) => {
     if (scrollerRef.current === node) return
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+    if (layoutFrameRef.current !== null) cancelAnimationFrame(layoutFrameRef.current)
     frameRef.current = null
+    layoutFrameRef.current = null
+    pendingContentHeightRef.current = undefined
     scrollerRef.current = node
     writtenTopRef.current = null
     viewportRef.current = new ChatViewport()
@@ -131,7 +149,9 @@ export function useChatScrollController({
 
   useEffect(() => () => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+    if (layoutFrameRef.current !== null) cancelAnimationFrame(layoutFrameRef.current)
     frameRef.current = null
+    layoutFrameRef.current = null
   }, [])
 
   return {
