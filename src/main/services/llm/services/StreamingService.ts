@@ -330,6 +330,19 @@ export class StreamingService {
       )
     }
 
+    // 思考耗尽了所有 token，没有实际内容输出
+    if (
+      (normalizedFinishReason === 'length' || normalizedFinishReason === 'max_tokens' || normalizedFinishReason === 'max_output_tokens') &&
+      !finalText.trim() &&
+      finalReasoning.trim()
+    ) {
+      throw new LLMError(
+        'Model exhausted its output token limit on reasoning/thinking alone and produced no visible content. Increase Max Tokens or reduce Thinking Budget.',
+        ErrorCode.LLM_NO_OUTPUT,
+        true,
+      )
+    }
+
     if (!finalText.trim() && !finalReasoning.trim() && !shape.sawToolActivity && !shape.sawNonTextOutput) {
       throw new LLMError(
         'Model returned an empty response after the API call completed',

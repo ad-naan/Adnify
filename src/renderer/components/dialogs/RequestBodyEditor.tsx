@@ -10,7 +10,7 @@ import { t } from '@shared/i18n'
 // 默认请求体模板
 const DEFAULT_REQUEST_BODY = {
     model: '{{model}}',      // 会被实际模型名替换
-    max_tokens: 8192,
+    max_tokens: 16384,
     stream: true,
     temperature: 0.7,
     // 以下为可选参数
@@ -23,32 +23,32 @@ const DEFAULT_REQUEST_BODY = {
 const PROVIDER_DEFAULTS: Record<string, Record<string, unknown>> = {
     openai: {
         model: '{{model}}',
-        max_tokens: 8192,
+        max_tokens: 16384,
         stream: true,
         temperature: 0.7,
     },
     anthropic: {
         model: '{{model}}',
-        max_tokens: 8192,
+        max_tokens: 16384,
         stream: true,
     },
     deepseek: {
         model: '{{model}}',
-        max_tokens: 8192,
+        max_tokens: 16384,
         stream: true,
         temperature: 0.7,
         // reasoning_effort: 'medium',  // 仅 R1 模型
     },
     gemini: {
         model: '{{model}}',
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
         // Gemini 使用不同的参数名
     },
     ollama: {
         model: '{{model}}',
         stream: true,
         options: {
-            num_predict: 8192,
+            num_predict: 16384,
             temperature: 0.7,
         }
     }

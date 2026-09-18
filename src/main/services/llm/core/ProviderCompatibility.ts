@@ -100,6 +100,11 @@ export function buildOpenAIStyleProviderOptions(
 export function buildThinkingProviderOptions(config: LLMConfig): RequestProviderOptions | undefined {
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
 
+  // 确保 thinkingBudget 不会超过 maxTokens，留出至少 20% 给实际内容
+  const rawBudget = config.thinkingBudget || 10000
+  const maxTokens = config.maxTokens || 16384
+  const safeBudget = Math.min(rawBudget, Math.floor(maxTokens * 0.8))
+
   if (config.provider === 'gemini' || protocol === 'google') {
     const thinkingLevel = resolveGoogleThinkingLevel(config.reasoningEffort)
     const thinkingMode = config.capabilities?.googleThinkingMode ?? 'budget'
@@ -110,7 +115,7 @@ export function buildThinkingProviderOptions(config: LLMConfig): RequestProvider
               ...(thinkingLevel ? { thinkingLevel } : {}),
               includeThoughts: true,
             }
-          : { thinkingBudget: config.thinkingBudget || 10000, includeThoughts: true },
+          : { thinkingBudget: safeBudget, includeThoughts: true },
       },
     }
   }
@@ -121,7 +126,7 @@ export function buildThinkingProviderOptions(config: LLMConfig): RequestProvider
       anthropic: {
         thinking: {
           type: 'enabled',
-          budgetTokens: config.thinkingBudget || 10000,
+          budgetTokens: safeBudget,
         },
         ...(effort ? { effort } : {}),
       },
