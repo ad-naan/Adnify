@@ -339,7 +339,7 @@ export class StreamingService {
       throw new LLMError(
         'Model exhausted its output token limit on reasoning/thinking alone and produced no visible content. Increase Max Tokens or reduce Thinking Budget.',
         ErrorCode.LLM_NO_OUTPUT,
-        true,
+        false,
       )
     }
 

@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: CI
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   validate:
-    name: Type Check, Test & Build
+    name: Typecheck · Test · Build
     runs-on: ubuntu-latest
 
     steps:
@@ -33,11 +33,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run TypeScript Type Check
+      - name: TypeScript Type Check
         run: pnpm exec tsc --noEmit
 
-      - name: Run Unit Tests
+      - name: Unit Tests
         run: pnpm test
 
-      - name: Verify Production Build
+      - name: Production Build
         run: pnpm build
