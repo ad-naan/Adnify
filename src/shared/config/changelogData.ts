@@ -69,6 +69,195 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.69",
+    "rawVersion": "1.7.69",
+    "date": "2026-09-18",
+    "title": "扩展管理、计划工作台与流式推理增强",
+    "titleEn": "Extension Management, Plan Workbench & Streaming Enhancements",
+    "highlight": "引入 Agent 管理的扩展事务与凭据处理系统，支持 MCP/Skill 扩展的搜索、安装与卸载；计划工作台全面升级，新增展示钩子、历史抽屉和任务审查；流式推理新增长思考不活跃超时机制；聊天中支持文件路径识别与跳转；ZIP 提取加固防止符号链接攻击；新增多语言 README 翻译。",
+    "highlightEn": "Introduces agent-managed extension transactions with credential handling for MCP and Skill extensions. The plan workbench gains a presentation hook, history drawer, and task review. Streaming now features inactivity timeouts for long reasoning. Chat messages recognize and link file paths. ZIP extraction is hardened against symlink attacks. Seven new README translations are added.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "扩展与配置管理 / Extension and Configuration Management",
+        "labelEn": "Extension and Configuration Management",
+        "items": [
+          {
+            "title": "Agent 管理的扩展事务",
+            "titleEn": "Agent-Managed Extension Transactions",
+            "details": [
+              "新增扩展服务和类型系统，支持 MCP 和 Skill 扩展的搜索、列出和批量安装/卸载操作。",
+              "引入 ConfigurationToolProvider 处理扩展相关命令，支持配置发现、设置验证及部分结果与警告。",
+              "MCP 客户端集成扩展凭据代理，支持待审凭据管理；执行策略新增扩展审批范围。"
+            ],
+            "detailsEn": [
+              "New extension services and type system support searching, listing, and batch installing or uninstalling MCP and Skill extensions.",
+              "ConfigurationToolProvider handles extension commands with configuration discovery, setting validation, partial results, and warnings.",
+              "MCP client integrates an extension credential broker with pending credential management; execution policies add extension approval scopes."
+            ]
+          },
+          {
+            "title": "配置与设置增强",
+            "titleEn": "Configuration and Settings Enhancements",
+            "details": [
+              "重构扩展处理逻辑至配置管理模块，新增 Skill 源解析和目录服务及测试。",
+              "新增 Agent 设置 Schema 和嵌套设置值解析逻辑，ThemeManager 支持从持久化设置同步且不触发 IPC 循环。",
+              "持久化偏好支持删除键时恢复默认值。"
+            ],
+            "detailsEn": [
+              "Refactored extension handling into the configuration management module with new Skill source parsing, catalog services, and tests.",
+              "Added agent settings schema and nested setting value parsing. ThemeManager syncs from persisted settings without IPC loops.",
+              "Persistent preferences now restore defaults when keys are deleted."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "计划工作台 / Plan Workbench",
+        "labelEn": "Plan Workbench",
+        "items": [
+          {
+            "title": "展示与交互升级",
+            "titleEn": "Presentation and Interaction Upgrades",
+            "details": [
+              "新增 usePlanPresentation 钩子管理计划展示逻辑，PlanHistoryDrawer 支持 Portal 渲染与无障碍访问。",
+              "计划工作台根据计划状态条件渲染，集成历史抽屉 Portal 支持；空状态和问答组件优化用户体验和样式。",
+              "简化文件打开逻辑，固定文件关闭时保留计划看板，新增计划设计的中英文翻译。"
+            ],
+            "detailsEn": [
+              "New usePlanPresentation hook manages plan presentation logic. PlanHistoryDrawer supports portal rendering and accessibility.",
+              "Plan workbench renders conditionally based on plan state with integrated history drawer portal. Empty and question components improve UX and styling.",
+              "Simplified file open logic retains plan boards when pinned files close. Added bilingual translations for plan design."
+            ]
+          },
+          {
+            "title": "需求上下文本地化与测试",
+            "titleEn": "Requirement Context Localization and Tests",
+            "details": [
+              "计划需求上下文使用本地化答案分隔符展示答案。",
+              "新增计划展示、任务审查、工作台投影的单元测试，以及计划设计与导航的浏览器测试。"
+            ],
+            "detailsEn": [
+              "Plan requirement context uses localized answer separators for displaying answers.",
+              "Added unit tests for plan presentation, task review, and workbench projection, plus browser tests for plan design and navigation."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "流式推理与模型管理 / Streaming and Model Management",
+        "labelEn": "Streaming and Model Management",
+        "items": [
+          {
+            "title": "长思考不活跃超时与 Token 管理",
+            "titleEn": "Long Reasoning Inactivity Timeouts and Token Management",
+            "details": [
+              "流式推理新增不活跃超时机制，防止长时间推理无响应导致的阻塞。",
+              "简化 StreamingService 错误处理，调整输出 Token 限制标记逻辑。",
+              "增强 Provider 选项和请求体编辑器中的 Token 管理功能。"
+            ],
+            "detailsEn": [
+              "Streaming now introduces inactivity timeouts to prevent blocking during long unresponsive reasoning.",
+              "Simplified StreamingService error handling with adjusted output token limit flag logic.",
+              "Enhanced token management in provider options and request body editor."
+            ]
+          },
+          {
+            "title": "OpenAI OAuth 增强",
+            "titleEn": "OpenAI OAuth Enhancements",
+            "details": [
+              "改进 OpenAI OAuth 集成，优化模型处理和超时设置，新增状态变更通知。"
+            ],
+            "detailsEn": [
+              "Improved OpenAI OAuth integration with better model handling, timeout settings, and status change notifications."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "聊天与文件路径 / Chat and File Paths",
+        "labelEn": "Chat and File Paths",
+        "items": [
+          {
+            "title": "文件路径识别与跳转",
+            "titleEn": "File Path Recognition and Navigation",
+            "details": [
+              "聊天组件新增文件路径处理，支持嵌套文件和边缘情况的路径解析与识别。",
+              "新增 ChatFilePathBoundary 组件，支持从聊天消息中识别并打开文件。",
+              "新增 hasAsciiControlCharacters 工具函数，集成到文件路径校验中防止异常字符。",
+              "文件路径操作增强错误处理和本地化提示。"
+            ],
+            "detailsEn": [
+              "Chat components now handle file paths with support for nested files and edge-case path resolution.",
+              "New ChatFilePathBoundary component recognizes file paths in chat messages and opens them on click.",
+              "Added hasAsciiControlCharacters utility integrated into file path validation to prevent abnormal characters.",
+              "File path operations have enhanced error handling and localized messages."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "security",
+        "label": "安全加固 / Security Hardening",
+        "labelEn": "Security Hardening",
+        "items": [
+          {
+            "title": "ZIP 提取安全增强",
+            "titleEn": "ZIP Extraction Security Hardening",
+            "details": [
+              "ZIP 提取使用 @electron-internal/extract-zip，拒绝归档遍历和预存在的符号链接。",
+              "提取时替换预存在的文件符号链接，不覆盖外部文件；新增依赖补丁测试验证提取安全行为。"
+            ],
+            "detailsEn": [
+              "ZIP extraction now uses @electron-internal/extract-zip, rejecting archive traversal and pre-existing symlinks.",
+              "Extraction replaces pre-existing file symlinks without overwriting outside files. Added dependency patch tests to verify secure extraction."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "其他改进 / Other Improvements",
+        "labelEn": "Other Improvements",
+        "items": [
+          {
+            "title": "界面、工具与工作台",
+            "titleEn": "UI, Tools, and Workbench",
+            "details": [
+              "改进聊天组件的布局处理和溢出管理。",
+              "增强循环处理与反馈机制，改进提示词校验，更新工具路由逻辑。",
+              "增强 DockWorkbench 缩放功能，改进 Worktree 分支创建及未提交变更的错误处理。",
+              "更新中英文语言文件，移除过时提示词并优化消息表述。"
+            ],
+            "detailsEn": [
+              "Improved chat component layout handling and overflow management.",
+              "Enhanced loop handling and feedback mechanisms with improved prompt validation and updated tool routing.",
+              "Enhanced DockWorkbench resize with improved state management. Better worktree lane creation and uncommitted change error handling.",
+              "Updated locale files to remove outdated prompts and clarify messages."
+            ]
+          },
+          {
+            "title": "文档与多语言",
+            "titleEn": "Documentation and Multilingual",
+            "details": [
+              "新增日语、韩语、西班牙语、法语、德语、葡萄牙语（巴西）、俄语 README 翻译。",
+              "更新依赖覆盖（hono、js-yaml、qs、sharp）至最新兼容版本。"
+            ],
+            "detailsEn": [
+              "Added README translations for Japanese, Korean, Spanish, French, German, Portuguese (Brazil), and Russian.",
+              "Updated dependency overrides (hono, js-yaml, qs, sharp) to latest compatible versions."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.68",
     "rawVersion": "1.7.68",
     "date": "2026-09-07",
@@ -76,8 +265,6 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Custom Workbench Layouts & Terminal Improvements",
     "highlight": "支持调整工作台面板顺序、比例与终端停靠位置，并按工作区记住布局。修复非交互命令失败时诊断输出被覆盖的问题，新增终端标签右键菜单、归档一键清理和可配置的自动回收策略，同时优化后台及被遮挡区域的装饰动画。",
     "highlightEn": "Reorder and resize workbench panels, choose where terminals dock, and save layouts per workspace. Failed non-interactive commands now retain their diagnostic output. Terminal tab context menus, bulk archive cleanup, and configurable retention policies make execution history easier to manage, while decorative animations pause in background windows and occluded areas.",
-    "tag": "latest",
-    "isLatest": true,
     "categories": [
       {
         "type": "feature",
