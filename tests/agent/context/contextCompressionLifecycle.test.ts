@@ -61,6 +61,53 @@ describe('context compression lifecycle', () => {
     expect(state.threads[activeThreadId].compressionStats).toBeNull()
   })
 
+  it('creates a continuity snapshot when first entering L2', async () => {
+    const { sourceThreadId } = createIsolatedThreads()
+    const sourceStore = useAgentStore.getState().forThread(sourceThreadId)
+
+    await checkAndHandleCompression(
+      { input: 750, output: 20 }, 1000, sourceStore, sourceThreadId,
+      { workspacePath: '/workspace' } as any, 'assistant-source', true, false,
+    )
+
+    const thread = useAgentStore.getState().threads[sourceThreadId]
+    expect(thread.compressionStats?.level).toBe(2)
+    expect(thread.contextSummary?.objective).toContain('Preserve this task')
+  })
+
+  it('refreshes a snapshot after stored history has been trimmed', async () => {
+    const { sourceThreadId } = createIsolatedThreads()
+    const sourceStore = useAgentStore.getState().forThread(sourceThreadId)
+    const now = Date.now()
+    sourceStore.setContextSummary({
+      objective: 'Original long-running task', completedSteps: [], pendingSteps: [], todos: [],
+      decisions: [], keyDecisions: ['Keep the API stable'], fileChanges: [], errorsAndFixes: [],
+      userInstructions: ['Preserve the task'], generatedAt: now - 10_000, turnRange: [0, 50],
+    })
+    useAgentStore.setState(state => ({
+      threads: {
+        ...state.threads,
+        [sourceThreadId]: {
+          ...state.threads[sourceThreadId],
+          messages: [
+            { id: 'new-1', role: 'user', content: 'First new turn', timestamp: now - 2_000 },
+            { id: 'new-2', role: 'user', content: 'Second new turn', timestamp: now - 1_000 },
+          ] as any,
+        },
+      },
+    }))
+
+    await checkAndHandleCompression(
+      { input: 860, output: 20 }, 1000, sourceStore, sourceThreadId,
+      { workspacePath: '/workspace' } as any, 'assistant-source', true, false,
+    )
+
+    const summary = useAgentStore.getState().threads[sourceThreadId].contextSummary
+    expect(summary?.turnRange[1]).toBe(52)
+    expect(summary?.objective).toBe('Original long-running task')
+    expect(summary?.keyDecisions).toContain('Keep the API stable')
+  })
+
   it('clears only the source thread compression phase after a timed-out handoff', async () => {
     vi.useFakeTimers()
     const { sourceThreadId, activeThreadId } = createIsolatedThreads()

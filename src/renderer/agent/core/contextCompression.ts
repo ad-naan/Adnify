@@ -9,6 +9,7 @@ import { executeAutoHandoff } from '../services/autoHandoffService'
 import { prepareHandoffForThread, type PreparedHandoffResult } from '../services/handoffSessionService'
 import { getMessageText, type ChatMessage, type ChatThread, type UserMessage } from '../types'
 import { t } from '@shared/i18n'
+import { getAgentConfig } from '../utils/AgentConfig'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { StructuredSummary } from '../domains/context/types'
 import type { ExecutionContext } from './types'
@@ -16,6 +17,17 @@ import type { ExecutionContext } from './types'
 export interface CompressionCheckResult {
   level: 0 | 1 | 2 | 3 | 4
   needsHandoff: boolean
+}
+
+function countUserTurns(thread: ChatThread): number {
+  const summary = thread.contextSummary
+  if (!summary) return thread.messages.filter(message => message.role === 'user').length
+  // Stored history can be trimmed. Counting its current rows alone would move
+  // backwards and leave a previously generated summary permanently "fresh".
+  const newTurns = thread.messages.filter(message =>
+    message.role === 'user' && message.timestamp > summary.generatedAt
+  ).length
+  return (summary.turnRange?.[1] ?? 0) + newTurns
 }
 
 function shouldRefreshSummary(summary: StructuredSummary | null | undefined, userTurns: number, minDelta = 2): boolean {
@@ -38,17 +50,36 @@ function getRecentUserRequests(messages: ChatMessage[], limit = 5): string[] {
 function buildStructuredSummary(
   summaryResult: Awaited<ReturnType<typeof generateSummary>>,
   userTurns: number,
-  userInstructions: string[] = []
+  userInstructions: string[] = [],
+  previous?: StructuredSummary | null
 ): StructuredSummary {
+  const unique = (items: string[]) => [...new Set(items.map(item => item.trim()).filter(Boolean))]
   return {
-    objective: summaryResult.objective,
-    completedSteps: summaryResult.completedSteps,
-    pendingSteps: summaryResult.pendingSteps,
+    objective: summaryResult.source === 'rule_based' && previous
+      ? previous.objective
+      : summaryResult.objective === 'Unknown objective'
+        ? previous?.objective || summaryResult.objective
+        : summaryResult.objective,
+    completedSteps: unique([...(previous?.completedSteps || []), ...summaryResult.completedSteps]),
+    pendingSteps: summaryResult.lastRequestStatus === 'completed'
+      ? summaryResult.pendingSteps
+      : summaryResult.pendingSteps.length > 0
+        ? summaryResult.pendingSteps
+        : previous?.pendingSteps || [],
     todos: summaryResult.todos,
-    decisions: [],
-    fileChanges: summaryResult.fileChanges,
-    errorsAndFixes: [],
-    userInstructions,
+    decisions: previous?.decisions || [],
+    keyDecisions: summaryResult.source === 'llm'
+      ? unique(summaryResult.keyDecisions.length ? summaryResult.keyDecisions : previous?.keyDecisions || [])
+      : unique([...(previous?.keyDecisions || []), ...summaryResult.keyDecisions]),
+    fileChanges: [...(previous?.fileChanges || []), ...summaryResult.fileChanges].filter(
+      (change, index, all) => all.findIndex(item =>
+        item.path === change.path && item.action === change.action && item.summary === change.summary
+      ) === index
+    ),
+    errorsAndFixes: previous?.errorsAndFixes || [],
+    userInstructions: summaryResult.source === 'llm'
+      ? unique(summaryResult.userConstraints.length ? summaryResult.userConstraints : previous?.userInstructions || [])
+      : unique([...(previous?.userInstructions || []), ...userInstructions]),
     generatedAt: Date.now(),
     turnRange: [0, userTurns],
   }
@@ -96,12 +127,17 @@ async function ensureSummarySnapshot(threadId: string, threadStore: ThreadBoundS
   const thread = getLiveThread(threadId)
   if (!thread) return
 
-  const userTurns = thread.messages.filter(message => message.role === 'user').length
+  const userTurns = countUserTurns(thread)
+  const storagePressure = thread.messages.length >= getAgentConfig().maxStoredMessagesPerThread * 0.8
 
-  if (shouldRefreshSummary(thread.contextSummary, userTurns)) {
+  if (shouldRefreshSummary(thread.contextSummary, userTurns, storagePressure ? 1 : 2)) {
     const recentUserRequests = getRecentUserRequests(thread.messages)
-    const summaryResult = await generateSummary(thread.messages, { type: 'detailed', todos: thread.todos })
-    const structuredSummary = buildStructuredSummary(summaryResult, userTurns, recentUserRequests)
+    const summaryResult = await generateSummary(thread.messages, {
+      type: 'detailed',
+      todos: thread.todos,
+      previousSummary: thread.contextSummary,
+    })
+    const structuredSummary = buildStructuredSummary(summaryResult, userTurns, recentUserRequests, thread.contextSummary)
     threadStore.setContextSummary(structuredSummary)
     EventBus.emit({ type: 'context:summary', summary: summaryResult.summary })
   }
@@ -150,7 +186,10 @@ async function applyCompressionActions(
     emitCompressionWarning(usage, contextLimit, ratio, budgetController)
   }
 
-  if (calculatedLevel >= 3 && enableLLMSummary && thread) {
+  const shouldBuildSnapshot = calculatedLevel >= 3 ||
+    (calculatedLevel === 2 && (previousStats?.level ?? 0) < 2) ||
+    (thread !== null && thread.messages.length >= getAgentConfig().maxStoredMessagesPerThread * 0.8)
+  if (shouldBuildSnapshot && enableLLMSummary && thread) {
     threadStore.setCompressionPhase('summarizing')
     try {
       await ensureSummarySnapshot(threadId, threadStore)
@@ -195,7 +234,7 @@ export async function checkAndHandleCompression(
 ): Promise<CompressionCheckResult> {
   const thread = getLiveThread(threadId)
   const messageCount = thread?.messages.length || 0
-  const userTurns = thread?.messages.filter(message => message.role === 'user').length || 0
+  const userTurns = thread ? countUserTurns(thread) : 0
   const memoryHealth = calculateWorkingMemoryHealth(thread?.contextSummary, userTurns)
   const previousStats = thread?.compressionStats || null
   const newStats = updateStats(
@@ -250,7 +289,7 @@ export async function checkAndHandleCompression(
   // is reflected immediately instead of waiting for another model request.
   const latestThread = getLiveThread(threadId)
   if (latestThread) {
-    const latestUserTurns = latestThread.messages.filter(message => message.role === 'user').length
+    const latestUserTurns = countUserTurns(latestThread)
     threadStore.setCompressionStats({
       ...newStats,
       memoryHealth: calculateWorkingMemoryHealth(latestThread.contextSummary, latestUserTurns),

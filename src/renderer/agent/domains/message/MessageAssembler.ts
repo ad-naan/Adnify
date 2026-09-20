@@ -43,7 +43,7 @@ export class MessageCompressor {
   compress(
     messages: ChatMessage[],
     level: CompressionLevel,
-    hasContinuityArtifact = true
+    hasContinuityArtifact = false
   ): {
     messages: ChatMessage[]
     stats: {
@@ -146,7 +146,9 @@ export class MessageAssembler {
       content: userMessage.combined,
     })
 
-    const historyTokens = this.compressor.estimateTokens(compressedMessages)
+    // The current user message is appended below (with referenced context), so
+    // counting it in history as well overstates pressure and advances levels early.
+    const historyTokens = this.compressor.estimateTokens(messagesToConvert)
     const systemPromptTokens = countTokens(systemPrompt)
     const runtimeTokens = runtimeStateMessage ? countTokens(String(runtimeStateMessage.content || '')) : 0
     const estimatedTokens = historyTokens + systemPromptTokens + runtimeTokens + userMessage.estimatedTokens

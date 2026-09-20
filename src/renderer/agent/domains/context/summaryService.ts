@@ -26,6 +26,7 @@ import type {
   TodoItem,
 } from '../../types'
 import { getMessageText } from '../../types'
+import { buildWorkingMemoryContext } from './WorkingMemory'
 import { withTimeout } from '@shared/utils/retry'
 
 const HANDOFF_SYSTEM_PROMPT = `You are analyzing a conversation to extract structured information for session handoff.
@@ -42,6 +43,7 @@ Rules:
 - Do not use alternate keys such as mainObjective, completedSoFar, technicalDecisions, specialRequirementsOrConstraints, or lastUserRequestStatus.
 - Do not add extra top-level keys.
 - pendingSteps must include the last user request when it was not fully completed.
+- Carry forward still-active decisions and user constraints from earlier context; omit ones explicitly superseded by newer messages.
 - Arrays must contain short plain strings only.
 - Output valid JSON only. No markdown.`
 
@@ -103,6 +105,9 @@ export interface SummaryResult {
   pendingSteps: string[]
   fileChanges: FileChangeRecord[]
   todos: TodoItem[]
+  keyDecisions: string[]
+  userConstraints: string[]
+  lastRequestStatus?: 'completed' | 'partial' | 'not_started'
   source: 'llm' | 'rule_based'
   fallbackReason?: string
 }
@@ -286,6 +291,9 @@ function buildHandoffSummaryResult(
     pendingSteps,
     fileChanges: options.fileChanges,
     todos: options.todos,
+    keyDecisions: parsed.keyDecisions,
+    userConstraints: parsed.userConstraints,
+    lastRequestStatus: parsed.lastRequestStatus,
     source: 'llm',
   }
 }
@@ -356,6 +364,7 @@ export async function generateSummary(
     type: 'quick' | 'detailed' | 'handoff'
     maxTokens?: number
     todos?: TodoItem[]
+    previousSummary?: StructuredSummary | null
   } = { type: 'quick' }
 ): Promise<SummaryResult> {
   const { llmConfig } = useStore.getState()
@@ -366,7 +375,7 @@ export async function generateSummary(
   if (!llmConfig.apiKey) {
     return generateRuleBasedSummary(
       messages,
-      options.type === 'handoff' ? lastUserRequest : undefined,
+      options.type === 'quick' ? undefined : lastUserRequest,
       todos,
     )
   }
@@ -374,15 +383,23 @@ export async function generateSummary(
   const agentConfig = getAgentConfig()
   const maxContextLength = agentConfig.summaryMaxContextChars[options.type]
   const conversationText = buildConversationText(messages, maxContextLength)
+  const continuityContext = options.previousSummary
+    ? buildWorkingMemoryContext(options.previousSummary)
+    : ''
   const todoContext = buildTodoContext(todos)
   const fileChanges = extractFileChanges(messages)
 
   if (options.type === 'handoff') {
-    return generateHandoffSummary(messages, conversationText, fileChanges, userRequests, todos, todoContext, llmConfig)
+    return generateHandoffSummary(messages, conversationText, fileChanges, userRequests, todos, todoContext, llmConfig, continuityContext)
+  }
+
+  if (options.type === 'detailed') {
+    return generateHandoffSummary(messages, conversationText, fileChanges, userRequests, todos, todoContext, llmConfig, continuityContext)
   }
 
   const userPrompt = [
     'Please summarize the following conversation:',
+    continuityContext,
     todoContext,
     conversationText,
   ].filter(Boolean).join('\n\n')
@@ -403,7 +420,7 @@ export async function generateSummary(
 
     if (result.error) {
       logger.agent.warn('[SummaryService] LLM error, falling back to rule-based:', result.error)
-      return generateRuleBasedSummary(messages, undefined, todos)
+      return generateRuleBasedSummary(messages, options.type === 'quick' ? undefined : lastUserRequest, todos)
     }
 
     return {
@@ -413,12 +430,14 @@ export async function generateSummary(
       pendingSteps: mergePendingSteps([], todos),
       fileChanges,
       todos,
+      keyDecisions: [],
+      userConstraints: [],
       source: 'llm',
     }
   } catch (error) {
     const fallbackReason = getStructuredOutputErrorMessage(error)
     logger.agent.warn('[SummaryService] Summary generation failed, falling back to rule-based:', error)
-    return generateRuleBasedSummary(messages, undefined, todos, fallbackReason)
+    return generateRuleBasedSummary(messages, options.type === 'quick' ? undefined : lastUserRequest, todos, fallbackReason)
   }
 }
 
@@ -429,13 +448,15 @@ async function generateHandoffSummary(
   userRequests: string[],
   todos: TodoItem[],
   todoContext: string,
-  llmConfig: import('@store').LLMConfig
+  llmConfig: import('@store').LLMConfig,
+  continuityContext = '',
 ): Promise<SummaryResult> {
   const lastUserRequest = userRequests[userRequests.length - 1] || ''
   const objectiveFallback = userRequests[0] || 'Unknown objective'
   const completedStepsFallback = extractCompletedSteps(messages)
   const userPrompt = [
     'Analyze the following conversation:',
+    continuityContext,
     todoContext,
     conversationText,
     `Last user request: "${lastUserRequest}"`,
@@ -527,15 +548,7 @@ function generateRuleBasedSummary(
 
   let pendingSteps: string[] = []
   if (lastUserRequest) {
-    const lastMessages = messages.slice(-5)
-    const hasRecentSuccess = lastMessages.some(m =>
-      m.role === 'assistant' &&
-      (m as AssistantMessage).toolCalls?.some(tc => tc.status === 'success')
-    )
-
-    if (!hasRecentSuccess) {
-      pendingSteps.push(`Continue: ${lastUserRequest.slice(0, 100)}${lastUserRequest.length > 100 ? '...' : ''}`)
-    }
+    pendingSteps.push(`Continue: ${lastUserRequest.slice(0, 100)}${lastUserRequest.length > 100 ? '...' : ''}`)
   }
 
   pendingSteps = mergePendingSteps(pendingSteps, todos)
@@ -570,6 +583,8 @@ function generateRuleBasedSummary(
     pendingSteps,
     fileChanges,
     todos,
+    keyDecisions: [],
+    userConstraints: [],
     source: 'rule_based',
     fallbackReason,
   }
@@ -631,10 +646,11 @@ export async function generateHandoffDocument(
     completedSteps: summaryResult.completedSteps,
     pendingSteps: summaryResult.pendingSteps,
     todos: summaryResult.todos,
+    keyDecisions: summaryResult.keyDecisions,
     decisions: [],
     fileChanges: summaryResult.fileChanges,
     errorsAndFixes: [],
-    userInstructions: userRequests.slice(-5),
+    userInstructions: [...new Set([...summaryResult.userConstraints, ...userRequests.slice(-5)])],
     generatedAt: Date.now(),
     turnRange: [0, messages.filter(m => m.role === 'user').length],
   }

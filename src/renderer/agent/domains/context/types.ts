@@ -60,6 +60,7 @@ export interface StructuredSummary {
   pendingSteps: string[]
   todos: TodoItem[]
   decisions: DecisionPoint[]
+  keyDecisions?: string[]
   fileChanges: FileChangeRecord[]
   errorsAndFixes: { error: string; fix: string }[]
   userInstructions: string[]

@@ -38,6 +38,9 @@ ${bulletList(summary.pendingSteps || [], '- None recorded', 8)}
 **Completed Steps**:
 ${bulletList(summary.completedSteps || [], '- None recorded', 10)}
 
+**Key Decisions**:
+${bulletList(summary.keyDecisions || [], '- None recorded', 8)}
+
 **Task List**:
 ${todos.slice(-10).map(todo => `- [${todo.status}] ${todo.status === 'in_progress' ? todo.activeForm : todo.content}`).join('\n') || '- None recorded'}
 

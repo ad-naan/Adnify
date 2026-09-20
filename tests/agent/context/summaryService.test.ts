@@ -75,7 +75,7 @@ describe('summaryService handoff', () => {
         timeout: 25,
       },
     } as any)
-    vi.spyOn(api.llm, 'compactContext').mockReturnValue(new Promise(() => {}))
+    vi.spyOn(api.llm, 'generateObject').mockReturnValue(new Promise(() => {}))
 
     const resultPromise = generateSummary([{
       id: 'u-timeout',
@@ -89,5 +89,31 @@ describe('summaryService handoff', () => {
 
     expect(result.source).toBe('rule_based')
     expect(result.fallbackReason).toContain('timed out')
+  })
+
+  it('uses structured detail to retain decisions and constraints', async () => {
+    useStore.setState({
+      llmConfig: {
+        provider: 'openai', model: 'gpt-4o-mini', apiKey: 'test-key', baseUrl: '', timeout: 30_000,
+      },
+    } as any)
+    const generate = vi.spyOn(api.llm, 'generateObject').mockResolvedValue({
+      object: {
+        objective: 'Repair context compression',
+        completedSteps: ['Traced message assembly'],
+        pendingSteps: ['Fix truncation'],
+        keyDecisions: ['Keep user constraints in working memory'],
+        userConstraints: ['Do not delete the task list'],
+        lastRequestStatus: 'partial',
+      },
+    } as any)
+
+    const result = await generateSummary([{
+      id: 'u1', role: 'user', content: 'Repair context compression', timestamp: 1,
+    }], { type: 'detailed' })
+
+    expect(result.keyDecisions).toContain('Keep user constraints in working memory')
+    expect(result.userConstraints).toContain('Do not delete the task list')
+    expect(generate).toHaveBeenCalledOnce()
   })
 })

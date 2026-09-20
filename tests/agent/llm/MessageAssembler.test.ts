@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { MessageAssembler } from '@renderer/agent/domains/message/MessageAssembler'
 import type { ChatMessage } from '@renderer/agent/types'
+import { estimateMessagesTokens } from '@renderer/agent/domains/context/CompressionManager'
+import { countTokens } from '@shared/utils/tokenCounter'
 
 describe('MessageAssembler', () => {
   it('injects resume state as a separate runtime assistant message', () => {
@@ -36,5 +38,17 @@ describe('MessageAssembler', () => {
       role: 'user',
       content: '继续处理上下文压缩',
     })
+  })
+
+  it('counts the current user message once', () => {
+    const assembler = new MessageAssembler()
+    const current = {
+      id: 'u1', role: 'user', content: 'hello', timestamp: 1,
+    } as ChatMessage
+    const result = assembler.assemble(
+      [current], assembler.assembleUserMessage('hello', ''), '', 0,
+    )
+
+    expect(result.estimatedTokens).toBe(estimateMessagesTokens([]) + countTokens('hello'))
   })
 })

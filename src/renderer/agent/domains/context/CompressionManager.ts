@@ -9,7 +9,6 @@
 
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../../utils/AgentConfig'
-import { pruneMessages } from 'ai'
 import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
 import type { WorkingMemoryHealth } from './WorkingMemory'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../../types'
@@ -150,7 +149,7 @@ function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; t
  * - 需要保留最后一条消息的图片（AI 需要分析）
  * - 历史消息中的图片替换为占位符（AI 已经分析过，节省 token）
  * 
- * 优化：结合 AI SDK 的 pruneMessages 进行智能修剪
+ * Historical tool payloads are compacted while keeping their messages paired.
  */
 export interface PrepareOptions {
   /**
@@ -165,9 +164,8 @@ export interface PrepareOptions {
    * `PLAN_TASK_WORKER_DESCRIPTOR` makes it permanent: it sets
    * `enableSummaryGeneration: false` yet still truncates.
    *
-   * When false, the message limit is floored at the L2 limit so history survives
-   * until a summary exists. Token-level compression (arg truncation, tool-result
-   * clearing) still applies in full, so pressure is still relieved.
+   * When false or omitted, message-count truncation is disabled until a summary
+   * exists. Argument and tool-result compaction still relieves token pressure.
    */
   hasContinuityArtifact?: boolean
 }
@@ -185,65 +183,6 @@ export function prepareMessages(
 
   // 过滤 checkpoint 消息
   result = result.filter(m => m.role !== 'checkpoint')
-
-  // 0. 使用 AI SDK 的 pruneMessages 进行智能修剪（L2+）
-  if (lastLevel >= 2) {
-    try {
-      const beforeCount = result.length
-
-      // 转换为 AI SDK 格式
-      const aiMessages = result.map(m => {
-        if (m.role === 'assistant') {
-          const am = m as AssistantMessage
-          return {
-            role: 'assistant' as const,
-            content: am.content || '',
-            tool_calls: am.toolCalls?.map(tc => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
-            }))
-          }
-        }
-        if (m.role === 'tool') {
-          const tm = m as ToolResultMessage
-          return {
-            role: 'tool' as const,
-            tool_call_id: tm.toolCallId,
-            name: tm.name,
-            content: [{ type: 'text' as const, text: tm.content }]
-          }
-        }
-        if (m.role === 'user') {
-          const um = m as UserMessage
-          return {
-            role: 'user' as const,
-            content: typeof um.content === 'string' ? um.content : JSON.stringify(um.content)
-          }
-        }
-        return {
-          role: 'system' as const,
-          content: ''
-        }
-      })
-
-      // 应用 pruneMessages
-      const pruned = pruneMessages({
-        messages: aiMessages as any, // 类型转换，避免复杂的类型匹配
-        reasoning: lastLevel >= 3 ? 'before-last-message' : 'all',
-        toolCalls: lastLevel >= 3 ? 'before-last-2-messages' : 'all',
-        emptyMessages: 'remove'
-      })
-
-      removedMessages = beforeCount - pruned.length
-      if (removedMessages > 0) {
-        logger.agent.info(`[Compression] pruneMessages removed ${removedMessages} messages`)
-        result = result.slice(-pruned.length)
-      }
-    } catch (e) {
-      logger.agent.warn('[Compression] pruneMessages failed:', e)
-    }
-  }
 
   // 1. 替换历史消息中的图片为占位符（节省 token）
   // 注意：messages 包含刚添加的当前用户消息，它在最后一条
@@ -289,17 +228,24 @@ export function prepareMessages(
   // dropping to 10 messages with nothing carrying the history forward loses the
   // session. See PrepareOptions.hasContinuityArtifact.
   const requestedLimit = getMessageLimit(lastLevel, config)
-  const messageLimit = options.hasContinuityArtifact === false
-    ? Math.max(requestedLimit, getMessageLimit(2, config))
-    : requestedLimit
-  if (messageLimit !== requestedLimit) {
+  // A count cutoff cannot know whether an early user constraint or decision is
+  // important. Until a continuity artifact exists, retain the raw messages and
+  // rely on argument/result compaction for token relief.
+  const messageLimit = options.hasContinuityArtifact === true
+    ? requestedLimit
+    : Infinity
+  if (messageLimit !== requestedLimit && result.length > requestedLimit) {
     logger.agent.warn(
-      `[Compression] L${lastLevel} message limit held at ${messageLimit} (requested ${requestedLimit}): no summary or handoff document exists yet to carry dropped history.`
+      `[Compression] L${lastLevel} retaining ${result.length} messages (count limit ${requestedLimit}): no summary or handoff document exists yet to carry dropped history.`
     )
   }
   if (result.length > messageLimit) {
-    removedMessages = result.length - messageLimit
-    result = result.slice(-messageLimit)
+    let start = result.length - messageLimit
+    // Never begin a model request halfway through a user turn. A long tool
+    // sequence can otherwise push the user's instruction outside the window.
+    while (start > 0 && result[start].role !== 'user') start--
+    removedMessages = start
+    result = result.slice(start)
   }
 
   // 2. L1+: 截断工具调用参数
@@ -374,9 +320,10 @@ export function prepareMessages(
       if (toolMsg.compactedAt) return msg
 
       const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
-      if (content.length > 100) {
+      if (content.length > 900) {
         clearedToolResults++
-        return { ...toolMsg, content: '[Cleared]', compactedAt: Date.now() }
+        const excerpt = `${content.slice(0, 600)}\n...[${content.length - 900} chars omitted]...\n${content.slice(-300)}`
+        return { ...toolMsg, content: excerpt, compactedAt: Date.now() }
       }
       return msg
     })
@@ -464,10 +411,8 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
       }
     } else if (msg.role === 'tool') {
       const toolMsg = msg as ToolResultMessage
-      if (!toolMsg.compactedAt) {
-        const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
-        total += countTokens(content)
-      }
+      const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
+      total += countTokens(content)
     }
   }
 
