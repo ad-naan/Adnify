@@ -40,24 +40,60 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
   // build trees from generating events at all. Git stays post-filtered because
   // repositories whose metadata lives inside the workspace still need state signals.
   ignored: [
+    // Common / VCS / Temp
     '**/node_modules/**',
     /\.git/,
+    '**/.svn/**',
+    '**/.hg/**',
+    '**/.adnify/**',
+    '**/.tmp/**',
+    '**/.temp/**',
+    '**/*.tmp',
+    '**/*.temp',
+    '**/coverage/**',
+    '**/.research/**',
+
+    // Generic Build & Output
     '**/dist/**',
     '**/build/**',
     '**/out/**',
     '**/release/**',
-    '**/.adnify/**',
-    '**/.tmp/**',
+    '**/.cache/**',
+
+    // Node / Web Frameworks
     '**/.pnpm-store/**',
-    '**/coverage/**',
-    '**/.research/**',
+    '**/.yarn/**',
     '**/.next/**',
     '**/.turbo/**',
-    '**/.cache/**',
     '**/.nuxt/**',
     '**/.output/**',
-    '**/*.tmp',
-    '**/*.temp',
+    '**/.svelte-kit/**',
+    '**/.astro/**',
+
+    // Python
+    '**/.venv/**',
+    '**/venv/**',
+    '**/env/**',
+    '**/__pycache__/**',
+    '**/.pytest_cache/**',
+    '**/.mypy_cache/**',
+    '**/.ruff_cache/**',
+    '**/*.egg-info/**',
+    '**/*.pyc',
+    '**/*.pyo',
+
+    // Rust
+    '**/target/**',
+
+    // Java / Kotlin / Gradle / Maven
+    '**/.gradle/**',
+
+    // Go
+    '**/vendor/**',
+
+    // C / C++
+    '**/CMakeFiles/**',
+    '**/cmake-build-*/**',
   ],
   persistent: true,
   ignoreInitial: true,

@@ -875,6 +875,9 @@ class LspManager {
             },
             procMacro: {
               enable: true
+            },
+            files: {
+              excludeDirs: ['target', '.git', '.cargo']
             }
           }
         }

@@ -164,6 +164,12 @@ export const DEFAULT_INDEX_CONFIG: IndexConfig = {
   chunkSize: 80,
   chunkOverlap: 10,
   maxFileSize: 1024 * 1024,
-  ignoredDirs: ['node_modules', '.git', 'dist', 'build', '.adnify', 'coverage', '__pycache__', '.venv', 'venv'],
+  ignoredDirs: [
+    'node_modules', '.git', 'dist', 'build', 'out', 'release', '.adnify', 'coverage',
+    '__pycache__', '.venv', 'venv', 'env', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+    'target', '.gradle', 'vendor',
+    '.next', '.nuxt', '.turbo', '.cache', '.svelte-kit', '.astro',
+    'CMakeFiles',
+  ],
   includedExts: ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', '.rb', '.php', '.swift', '.kt', '.scala', '.vue', '.svelte'],
 }
