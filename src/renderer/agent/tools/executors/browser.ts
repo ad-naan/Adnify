@@ -24,6 +24,16 @@ async function formatResponse(response: BrowserResponse, question?: string): Pro
       return { success: true, result: `Screenshot captured, but visual analysis failed: ${String(error)}. Use DOM/styles; visual verification is incomplete.`, richContent: [captured] }
     }
   }
+  const payload = response.data as Record<string, any>
+  if (payload && typeof payload.indexedTable === 'string') {
+    const header = `Page: "${payload.title || ''}" (${payload.url || ''}) [Viewport: ${payload.viewport?.width}x${payload.viewport?.height}]\nInteractive Elements (${payload.totalInteractive || 0}):\n`
+    const summary = `${header}${payload.indexedTable}\n\nTip: You can use element ID directly in browser_action (e.g. element: 1 or selector: "@1").`
+    return {
+      success: true,
+      result: summary,
+      meta: { ...payload, html: undefined },
+    }
+  }
   return { success: true, result: JSON.stringify(response.data) }
 }
 

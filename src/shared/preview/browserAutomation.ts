@@ -19,17 +19,22 @@ export const browserActionSchema = z.object({
   action: z.enum(['navigate', 'reload', 'click', 'fill', 'press', 'scroll', 'wait_for']),
   url: z.string().min(1).max(4000).optional(),
   selector: selector.optional(),
+  element: z.union([z.number().int().positive(), z.string()]).optional(),
   text: z.string().max(10000).optional(),
   key: z.enum(['Enter', 'Tab', 'Escape', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']).optional(),
   x: z.number().finite().min(-10000).max(10000).default(0),
   y: z.number().finite().min(-10000).max(10000).default(600),
   timeout_ms: z.number().int().min(100).max(10000).default(5000),
 }).superRefine((value, ctx) => {
-  const requireField = (name: 'url' | 'selector' | 'text' | 'key') => {
+  const requireField = (name: 'url' | 'text' | 'key') => {
     if (value[name] === undefined) ctx.addIssue({ code: 'custom', path: [name], message: `${value.action} requires ${name}` })
   }
   if (value.action === 'navigate') requireField('url')
-  if (['click', 'fill', 'wait_for'].includes(value.action)) requireField('selector')
+  if (['click', 'fill', 'wait_for'].includes(value.action)) {
+    if (!value.selector && value.element === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['element'], message: `${value.action} requires either element ID (e.g. 1 or "@1") or selector` })
+    }
+  }
   if (value.action === 'fill') requireField('text')
   if (value.action === 'press') requireField('key')
 })

@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { browserActionSchema, browserInspectSchema, type BrowserTarget } from '@shared/preview/browserAutomation'
-import { domScript, stylesScript, elementActionScript } from '@shared/preview/browserScripts'
+import { domScript, stylesScript, elementActionScript, cursorOverlayScript } from '@shared/preview/browserScripts'
 import { isBrowserPreviewUrl } from '@shared/preview/discovery'
 import { getPreviewDeviceSize, previewDeviceSchema } from '@shared/preview/device'
 
@@ -21,6 +21,7 @@ interface TargetEntry {
   connecting?: Promise<void>
   busy: boolean
   deviceUpdate?: Promise<void>
+  lastMousePos?: { x: number; y: number }
 }
 
 const MAX_RECORDS = 200
@@ -196,6 +197,98 @@ export class PreviewBrowserService {
     }
   }
 
+  private async ensureCursorOverlay(entry: TargetEntry): Promise<void> {
+    try {
+      await this.evaluate(entry, cursorOverlayScript())
+    } catch {
+      // Non-critical if guest page is not ready yet
+    }
+  }
+
+  private async simulateMouseTrajectory(
+    entry: TargetEntry,
+    targetX: number,
+    targetY: number,
+  ): Promise<void> {
+    await this.ensureCursorOverlay(entry)
+
+    const from = entry.lastMousePos || { x: Math.round(targetX * 0.5), y: Math.round(targetY * 0.5) }
+    const startX = from.x
+    const startY = from.y
+    const dx = targetX - startX
+    const dy = targetY - startY
+    const dist = Math.hypot(dx, dy)
+
+    if (dist < 4) {
+      entry.lastMousePos = { x: targetX, y: targetY }
+      await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: targetX, y: targetY,
+      }))
+      await this.evaluate(entry, `window.__adnifyUpdateCursor?.(${targetX}, ${targetY})`).catch(() => {})
+      return
+    }
+
+    // Dynamic steps based on distance
+    const steps = Math.max(10, Math.min(24, Math.round(dist / 30)))
+
+    // Two control points for a natural cubic Bézier curve with human-like perpendicular sway
+    const deviation = Math.min(50, dist * 0.15) * (Math.random() > 0.5 ? 1 : -1)
+    const perpX = -dy / (dist || 1)
+    const perpY = dx / (dist || 1)
+
+    const cp1X = startX + dx * 0.25 + perpX * deviation
+    const cp1Y = startY + dy * 0.25 + perpY * deviation
+    const cp2X = startX + dx * 0.75 + perpX * (deviation * 0.5)
+    const cp2Y = startY + dy * 0.75 + perpY * (deviation * 0.5)
+
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps
+      // Ease-out cubic: starts with velocity, smoothly decelerates toward target
+      const p = 1 - Math.pow(1 - t, 3)
+      const u = 1 - p
+
+      const cx = Math.round(u * u * u * startX + 3 * u * u * p * cp1X + 3 * u * p * p * cp2X + p * p * p * targetX)
+      const cy = Math.round(u * u * u * startY + 3 * u * u * p * cp1Y + 3 * u * p * p * cp2Y + p * p * p * targetY)
+
+      // Sub-pixel hand micro-jitter during transit, 0 jitter at destination
+      const jitterX = i < steps ? Math.round((Math.random() - 0.5) * 1.5) : 0
+      const jitterY = i < steps ? Math.round((Math.random() - 0.5) * 1.5) : 0
+      const curX = cx + jitterX
+      const curY = cy + jitterY
+
+      await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: curX, y: curY,
+      }))
+      await this.evaluate(entry, `window.__adnifyUpdateCursor?.(${curX}, ${curY})`).catch(() => {})
+
+      await new Promise(resolve => setTimeout(resolve, 8))
+    }
+
+    entry.lastMousePos = { x: targetX, y: targetY }
+  }
+
+  private async simulateWheelScroll(
+    entry: TargetEntry,
+    deltaX: number,
+    deltaY: number,
+  ): Promise<void> {
+    const mousePos = entry.lastMousePos || { x: 500, y: 400 }
+    // Decompose total delta into decaying momentum frames (simulating natural flick friction)
+    const fractions = [0.30, 0.25, 0.18, 0.12, 0.08, 0.04, 0.02, 0.01]
+    for (const f of fractions) {
+      const stepX = Math.round(deltaX * f)
+      const stepY = Math.round(deltaY * f)
+      await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: mousePos.x,
+        y: mousePos.y,
+        deltaX: stepX,
+        deltaY: stepY,
+      }))
+      await new Promise(resolve => setTimeout(resolve, 16))
+    }
+  }
+
   async act(ownerId: number, input: unknown): Promise<unknown> {
     const args = browserActionSchema.parse(input)
     const entry = this.resolve(ownerId, args.target_id)
@@ -211,32 +304,54 @@ export class PreviewBrowserService {
       } else {
         await this.connect(entry)
         if (args.action === 'click' || args.action === 'press') await this.waitForFrame(entry)
+
+        const targetSelector = args.element !== undefined
+          ? (String(args.element).startsWith('@') ? String(args.element) : `@${args.element}`)
+          : args.selector
+
         if (args.action === 'wait_for') {
           const deadline = Date.now() + args.timeout_ms
           for (;;) {
             try {
-              if ((await this.evaluate(entry, elementActionScript('wait_for', args.selector))).visible) break
+              if ((await this.evaluate(entry, elementActionScript('wait_for', targetSelector))).visible) break
             } catch (error) {
               if (entry.guest.isDestroyed() || !entry.guest.debugger.isAttached()) throw error
               if (!String(error).includes('matched 0')) throw error
             }
-            if (Date.now() >= deadline) throw new Error(`Timed out waiting for visible element: ${args.selector}`)
+            if (Date.now() >= deadline) throw new Error(`Timed out waiting for visible element: ${targetSelector}`)
             await new Promise(resolve => setTimeout(resolve, 100))
           }
         } else if (args.action === 'press') {
           entry.guest.focus()
-          if (args.selector) await this.evaluate(entry, elementActionScript('focus', args.selector))
+          if (targetSelector) await this.evaluate(entry, elementActionScript('focus', targetSelector))
           const codes = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 }
           const key = args.key!
           await bounded(entry.guest.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: codes[key], ...(key === 'Enter' ? { text: '\r' } : {}) }))
           await bounded(entry.guest.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: codes[key] }))
+        } else if (args.action === 'scroll') {
+          await this.simulateWheelScroll(entry, args.x, args.y)
         } else {
-          const result = await this.evaluate(entry, elementActionScript(args.action, args.selector, args.text, args.x, args.y))
+          const result = await this.evaluate(entry, elementActionScript(args.action, targetSelector, args.text, args.x, args.y))
           if (args.action === 'click') {
-            for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-              await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
-                type, x: result.x, y: result.y, ...(type !== 'mouseMoved' ? { button: 'left', clickCount: 1 } : {}),
-              }))
+            await this.simulateMouseTrajectory(entry, result.x, result.y)
+            // Human pre-click pause
+            await new Promise(resolve => setTimeout(resolve, 40))
+            // Click ripple animation in view
+            await this.evaluate(entry, `window.__adnifyClickRipple?.(${result.x}, ${result.y})`).catch(() => {})
+            // Physical mouse press
+            await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
+              type: 'mousePressed', button: 'left', x: result.x, y: result.y, clickCount: 1,
+            }))
+            // Physical hold duration (dwell time)
+            await new Promise(resolve => setTimeout(resolve, 75))
+            // Physical mouse release
+            await bounded(entry.guest.debugger.sendCommand('Input.dispatchMouseEvent', {
+              type: 'mouseReleased', button: 'left', x: result.x, y: result.y, clickCount: 1,
+            }))
+          } else if (args.action === 'fill') {
+            if (typeof result.x === 'number' && typeof result.y === 'number') {
+              await this.simulateMouseTrajectory(entry, result.x, result.y)
+              await this.evaluate(entry, `window.__adnifyClickRipple?.(${result.x}, ${result.y})`).catch(() => {})
             }
           }
         }

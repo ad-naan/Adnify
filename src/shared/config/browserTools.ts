@@ -33,13 +33,14 @@ export const BROWSER_TOOL_CONFIGS: Record<string, ToolConfig> = {
   browser_action: {
     ...common, name: 'browser_action', displayName: 'Control Preview', category: 'write', approvalType: 'none',
     description: 'Automate an embedded website or local page: navigate, reload, click, fill a control, press a key, scroll, or wait for a visible element.',
-    criticalRules: ['Use selectors observed in browser_inspect. Actions can submit forms or change application data; stay within the user request.', 'Perform actions sequentially. Do not blindly retry clicks or submissions. Verify the resulting DOM, screenshot or diagnostics.'],
-    detailedDescription: 'click requires a unique visible, enabled, uncovered element and uses browser mouse events. fill replaces input/textarea/select/contenteditable content and dispatches input/change events (framework-compatible). press targets the focused element or an optional selector. wait_for waits for one visible match. Navigation supports external and local HTTP(S). New-window links navigate in the same preview; popup-dependent login flows may require user help. No arbitrary JavaScript or CDP commands are exposed.',
+    criticalRules: ['Prefer element index (e.g. element: 1 or selector: "@1") observed in browser_inspect. Actions can submit forms or change application data; stay within the user request.', 'Perform actions sequentially. Do not blindly retry clicks or submissions. Verify the resulting DOM, screenshot or diagnostics.'],
+    detailedDescription: 'click uses human-like Bézier mouse trajectory movement with visual cursor and ripple animations. scroll uses realistic decaying wheel momentum scrolling. fill replaces input/textarea/select/contenteditable content and dispatches input/change events (framework-compatible). press targets the focused element or an optional selector. wait_for waits for one visible match. Navigation supports external and local HTTP(S). New-window links navigate in the same preview; popup-dependent login flows may require user help. No arbitrary JavaScript or CDP commands are exposed.',
     parameters: {
       action: { type: 'string', enum: ['navigate', 'reload', 'click', 'fill', 'press', 'scroll', 'wait_for'], description: 'Operation to perform', required: true },
       target_id: { type: 'number', description: 'ID from browser_open or browser_inspect(list)' },
+      element: { type: 'number', description: 'Indexed element ID from browser_inspect (e.g. 1). Recommended over complex CSS selectors.' },
       url: { type: 'string', description: 'HTTP(S) URL, required for navigate' },
-      selector: { type: 'string', description: 'Unique CSS selector; required for click, fill, wait_for' },
+      selector: { type: 'string', description: 'Unique CSS selector or element ID (e.g. "@1"). Required for click, fill, wait_for if element is omitted.' },
       text: { type: 'string', description: 'Replacement value for fill; empty string clears the control' },
       key: { type: 'string', enum: ['Enter', 'Tab', 'Escape', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'], description: 'Key for press' },
       x: { type: 'number', description: 'Horizontal scroll delta in CSS pixels', default: 0 },
