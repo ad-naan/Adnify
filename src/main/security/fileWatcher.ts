@@ -39,12 +39,31 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
   // String globs are passed to the native backend, preventing dependency and
   // build trees from generating events at all. Git stays post-filtered because
   // repositories whose metadata lives inside the workspace still need state signals.
-  ignored: ['**/node_modules/**', /\.git/, '**/dist/**', '**/build/**', '**/.adnify/**', '**/*.tmp', '**/*.temp'],
+  ignored: [
+    '**/node_modules/**',
+    /\.git/,
+    '**/dist/**',
+    '**/build/**',
+    '**/out/**',
+    '**/release/**',
+    '**/.adnify/**',
+    '**/.tmp/**',
+    '**/.pnpm-store/**',
+    '**/coverage/**',
+    '**/.research/**',
+    '**/.next/**',
+    '**/.turbo/**',
+    '**/.cache/**',
+    '**/.nuxt/**',
+    '**/.output/**',
+    '**/*.tmp',
+    '**/*.temp',
+  ],
   persistent: true,
   ignoreInitial: true,
-  bufferTimeMs: 500,
+  bufferTimeMs: 1500,
   maxBufferSize: 50,
-  maxWaitTimeMs: 5000,
+  maxWaitTimeMs: 8000,
   forwardOnly: false,
 }
 
@@ -72,21 +91,40 @@ function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => b
   }
 }
 
+const pendingLspChanges = new Map<string, { timer: NodeJS.Timeout; changes: Map<string, { path: string; type: 'create' | 'update' | 'delete' }> }>()
+
 function notifyLspFileChanges(
   workspaceRoot: string,
   changes: Array<{ path: string; type: 'create' | 'update' | 'delete' }>,
 ): void {
-  const runningServers = lspManager.getRunningServers(workspaceRoot)
-  if (runningServers.length === 0) return
-
-  const lspChanges = changes.map(c => ({
-    uri: pathToLspUri(c.path),
-    type: LSP_FILE_CHANGE_TYPE[c.type],
-  }))
-
-  for (const serverKey of runningServers) {
-    lspManager.notifyDidChangeWatchedFiles(serverKey, lspChanges)
+  let pending = pendingLspChanges.get(workspaceRoot)
+  if (!pending) {
+    pending = {
+      timer: null as any,
+      changes: new Map(),
+    }
+    pendingLspChanges.set(workspaceRoot, pending)
   }
+
+  for (const c of changes) {
+    pending.changes.set(c.path, c)
+  }
+
+  if (pending.timer) clearTimeout(pending.timer)
+  pending.timer = setTimeout(() => {
+    pendingLspChanges.delete(workspaceRoot)
+    const runningServers = lspManager.getRunningServers(workspaceRoot)
+    if (runningServers.length === 0) return
+
+    const lspChanges = Array.from(pending.changes.values()).map(c => ({
+      uri: pathToLspUri(c.path),
+      type: LSP_FILE_CHANGE_TYPE[c.type],
+    }))
+
+    for (const serverKey of runningServers) {
+      lspManager.notifyDidChangeWatchedFiles(serverKey, lspChanges)
+    }
+  }, 1000)
 }
 
 function pathToLspUri(filePath: string): string {

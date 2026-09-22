@@ -13,6 +13,7 @@ import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
+import { useAgentStore, selectIsStreaming } from '@/renderer/agent'
 
 const GLOW_CONFIG: Record<EmotionState, {
   opacity: number
@@ -52,6 +53,7 @@ function buildBackground(corner: string, color: string, spread: number, opacity:
 export const EmotionAmbientGlow: React.FC = () => {
   const emotion = useEmotionState()
   const decorativeAnimations = useDecorativeAnimations()
+  const isAgentBusy = useAgentStore(selectIsStreaming)
   const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(loadEmotionPanelSettings().ambientGlow)
 
   useEffect(() => {
@@ -68,7 +70,8 @@ export const EmotionAmbientGlow: React.FC = () => {
   // neutral 或 0 强度不渲染
   if (!ambientGlowEnabled || state === 'neutral' || intensity === 0 || config.opacity === 0) return null
 
-  const animate = config.animated && decorativeAnimations
+  // Agent 执行或流式生成任务时暂停高频呼吸动画，保持静态柔和光晕，显著减少 GPU 合成层开销
+  const animate = config.animated && decorativeAnimations && !isAgentBusy
 
   // 实际透明度 = 基础透明度 * 强度
   const effectiveOpacity = config.opacity * Math.max(intensity, 0.3)

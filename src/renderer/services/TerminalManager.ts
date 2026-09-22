@@ -345,6 +345,10 @@ class TerminalManagerClass {
   private dataListeners = new Set<(id: string, data: string) => void>();
   private rawDataListeners = new Set<(event: TerminalDataEvent) => void>();
 
+  // 终端写缓冲区与渲染调度器（合并高频刷屏，限制 WebGL 绘制频率至屏幕刷新率）
+  private pendingTerminalWrites = new Map<string, string[]>();
+  private pendingTerminalWriteFrame: number | null = null;
+
   // 主题配置
   private currentTheme: Record<string, string> = {};
 
@@ -375,6 +379,57 @@ class TerminalManagerClass {
     } catch (error) {
       logger.system.warn(`[TerminalManager] Skipped terminal resize for ${id}`, error)
     }
+  }
+
+  private scheduleTerminalWrite(id: string, text: string): void {
+    const queue = this.pendingTerminalWrites.get(id) || [];
+    queue.push(text);
+    this.pendingTerminalWrites.set(id, queue);
+
+    if (this.pendingTerminalWriteFrame === null && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      this.pendingTerminalWriteFrame = window.requestAnimationFrame(() => {
+        this.flushTerminalWrites();
+      });
+    }
+  }
+
+  private flushTerminalWrites(targetId?: string): void {
+    if (targetId) {
+      const chunks = this.pendingTerminalWrites.get(targetId);
+      if (chunks && chunks.length > 0) {
+        this.pendingTerminalWrites.delete(targetId);
+        const xterm = this.xtermInstances.get(targetId);
+        if (xterm?.terminal) {
+          try {
+            xterm.terminal.write(chunks.join(''));
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return;
+    }
+
+    if (this.pendingTerminalWriteFrame !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.pendingTerminalWriteFrame);
+      this.pendingTerminalWriteFrame = null;
+    }
+    for (const [id, chunks] of this.pendingTerminalWrites.entries()) {
+      if (chunks.length === 0) continue;
+      const xterm = this.xtermInstances.get(id);
+      if (xterm?.terminal) {
+        try {
+          xterm.terminal.write(chunks.join(''));
+        } catch {
+          // ignore
+        }
+      }
+    }
+    this.pendingTerminalWrites.clear();
+  }
+
+  private cancelPendingTerminalWrites(id: string): void {
+    this.pendingTerminalWrites.delete(id);
   }
 
   constructor() {
@@ -536,6 +591,7 @@ class TerminalManagerClass {
           `[TerminalManager] Terminal ${id} exited with code ${exitCode}, signal ${signal}`,
         );
 
+        this.flushTerminalWrites(id);
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
           xterm.terminal.write(
@@ -580,6 +636,7 @@ class TerminalManagerClass {
         const { id, error } = event;
         logger.system.error(`[TerminalManager] Terminal ${id} error:`, error);
 
+        this.flushTerminalWrites(id);
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
           xterm.terminal.write(
@@ -630,17 +687,21 @@ class TerminalManagerClass {
     if (job.output !== oldOutput) {
       if (job.output.startsWith(oldOutput)) {
         const added = job.output.slice(oldOutput.length)
-        xterm?.terminal.write(added.replace(/\r?\n/g, '\r\n'))
+        this.scheduleTerminalWrite(job.jobId, added.replace(/\r?\n/g, '\r\n'))
         this.appendToBuffer(job.jobId, added)
         this.dataListeners.forEach(listener => listener(job.jobId, added))
       } else {
+        this.cancelPendingTerminalWrites(job.jobId)
         xterm?.terminal.clear()
-        xterm?.terminal.write(job.output.replace(/\r?\n/g, '\r\n'))
+        this.scheduleTerminalWrite(job.jobId, job.output.replace(/\r?\n/g, '\r\n'))
         this.outputBuffers.delete(job.jobId)
         this.appendToBuffer(job.jobId, job.output)
       }
     }
     const finished = isExecutionFinished(job.status)
+    if (finished) {
+      this.flushTerminalWrites(job.jobId)
+    }
     const status: TerminalCommandStatus = job.status === 'expired' ? 'failed'
       : job.status === 'unknown' ? 'detached'
       : job.status === 'starting' || job.status === 'stopping' ? 'running' : job.status
@@ -1348,6 +1409,7 @@ class TerminalManagerClass {
       }
     }
 
+    this.cancelPendingTerminalWrites(id);
     const xterm = this.xtermInstances.get(id);
     if (xterm) {
       xterm.container = null;

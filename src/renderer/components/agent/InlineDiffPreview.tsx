@@ -270,7 +270,19 @@ const getCustomStyle = (isLight: boolean) => {
     }
 }
 
-const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, language: string, style: any }) => {
+const DiffLineItem = React.memo(({
+    line,
+    language,
+    style,
+    isStreaming = false,
+    simplifyHighlight = false,
+}: {
+    line: DiffLine
+    language: string
+    style: any
+    isStreaming?: boolean
+    simplifyHighlight?: boolean
+}) => {
     const bgClass = line.type === 'add'
         ? 'bg-green-500/15 border-l-2 border-green-500/50'
         : line.type === 'remove'
@@ -285,6 +297,7 @@ const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, la
 
     const symbol = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '
     const lineNum = line.type === 'remove' ? line.oldLineNumber : line.newLineNumber
+    const shouldHighlight = !isStreaming && !simplifyHighlight && Boolean(line.content.trim())
 
     return (
         <div className={`flex ${bgClass} hover:brightness-95 dark:hover:brightness-110 transition-all`}>
@@ -301,6 +314,10 @@ const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, la
                     <div className="whitespace-pre text-text-muted truncate">
                         {line.content.slice(0, 500)}... (line too long)
                     </div>
+                ) : !shouldHighlight ? (
+                    <span className="text-[11px] font-mono whitespace-pre leading-relaxed">
+                        {line.content || ' '}
+                    </span>
                 ) : (
                     <SyntaxHighlighter
                         language={language}
@@ -454,12 +471,16 @@ export default function InlineDiffPreview({
                     )
                 }
 
+                const simplifyHighlight = displayLines.length > 60 && line.type === 'unchanged'
+
                 return (
                     <DiffLineItem
-                        key={`${line.type}-${idx}-${line.oldLineNumber || line.newLineNumber}`}
+                        key={isStreaming ? `stream-${idx}` : `${line.type}-${idx}-${line.oldLineNumber || line.newLineNumber}`}
                         line={line}
                         language={language}
                         style={codeStyle}
+                        isStreaming={isStreaming}
+                        simplifyHighlight={simplifyHighlight}
                     />
                 )
             })}

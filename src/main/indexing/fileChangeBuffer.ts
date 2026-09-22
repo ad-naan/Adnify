@@ -22,9 +22,9 @@ export interface FileChangeBufferConfig {
 }
 
 const DEFAULT_CONFIG: FileChangeBufferConfig = {
-  bufferTimeMs: 500,
+  bufferTimeMs: 1500,
   maxBufferSize: 50,
-  maxWaitTimeMs: 5000,
+  maxWaitTimeMs: 8000,
 }
 
 export class FileChangeBuffer {
