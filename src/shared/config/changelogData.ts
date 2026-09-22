@@ -69,6 +69,141 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.70",
+    "rawVersion": "1.7.70",
+    "date": "2026-09-23",
+    "title": "交互决策工具、拟物思考旋钮与浏览器拟人化自动化",
+    "titleEn": "Interactive Decision Tool, Rotary Dial Knob & Realistic Browser Automation",
+    "highlight": "引入 ask_user 核心决策工具，支持结构化可选项一键确认；思考强度全面重构为 270° 拟物金属滚花旋钮并完善 ARIA 无障碍访问；浏览器自动化新增元素 ID 支持与拟人化贝塞尔曲线鼠标交互；上下文压缩增强关键决策与用户约束追踪；优化流式期间 GPU 与终端性能，扩充多维度系统压测套件。",
+    "highlightEn": "Introduces the ask_user core decision tool for fast structured option confirmations. Reimagines reasoning effort controls with a 270° physical milled rotary dial knob and full ARIA accessibility. Enhances browser automation with element ID targeting and realistic Bezier-curve mouse interactions. Context compression now retains key decisions and user constraints. Optimizes streaming GPU and terminal performance, and introduces comprehensive stress test suites.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "Agent 与交互决策 / Agent and Interaction Decisions",
+        "labelEn": "Agent and Interaction Decisions",
+        "items": [
+          {
+            "title": "结构化决策工具 ask_user",
+            "titleEn": "Structured Decision Tool ask_user",
+            "details": [
+              "将 ask_user 加入核心工具集，当需求存在多条可行路径或架构决策时，主动向用户提供结构化可选项以便一键确认，避免开放式模糊提问。",
+              "提示词合约全面升级，增加 ask_user 的路由判定与决策驱动链路，优化系统提示词预算上限以支持更强大的交互契约。"
+            ],
+            "detailsEn": [
+              "Added ask_user to core tools, enabling the agent to present structured, clickable options when requirements or architectural choices have multiple viable paths, replacing open-ended questioning.",
+              "Upgraded prompt contracts with ask_user routing rules and decision-driven tool chains, raising the prompt budget ceiling to support richer interaction contracts."
+            ]
+          },
+          {
+            "title": "上下文智能压缩与工作记忆增强",
+            "titleEn": "Context Compression and Working Memory Enhancements",
+            "details": [
+              "上下文压缩体系新增关键决策（Key Decisions）与用户约束（User Constraints）追踪，生成摘要时自动沉淀核心上下文。",
+              "重构 CompressionManager 与 summaryService，增强长对话截断保护与消息组合稳定性。"
+            ],
+            "detailsEn": [
+              "Context compression now tracks key decisions and user constraints, automatically distilling critical context during summary generation.",
+              "Refactored CompressionManager and summaryService for more robust truncation guards and message assembly in long conversations."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "UI 与交互体验 / UI and User Experience",
+        "labelEn": "UI and User Experience",
+        "items": [
+          {
+            "title": "拟物金属旋钮思考强度调节器",
+            "titleEn": "Physical Rotary Dial for Reasoning Effort",
+            "details": [
+              "将思考强度调节器重构为 270° 人体工学拟物滚花金属旋钮，配备顶部激光高亮凹槽与始终水平居中的层级徽标。",
+              "支持鼠标滚轮平滑步进、键盘方向键导航与直接点击切换，全面补齐 ARIA Slider 与 Dialog 无障碍属性及双语提示。"
+            ],
+            "detailsEn": [
+              "Redesigned reasoning effort controls into a 270° ergonomic milled rotary knob with an electric laser notch and an upright center tier badge.",
+              "Supports smooth mouse-wheel stepping, keyboard arrow navigation, and direct clicks, fully equipped with ARIA slider and dialog accessibility plus bilingual tooltips."
+            ]
+          },
+          {
+            "title": "模型选择器与双主题适配",
+            "titleEn": "Model Selector and Theme Adaptations",
+            "details": [
+              "优化 ModelSelector 按钮样式与悬停动效，操作更平滑细腻。",
+              "ThemeManager 同步在根节点维护 .light 和 .dark 样式类，使拟物渐变、反光与高光阴影在深浅色主题下均获得真实光影质感。"
+            ],
+            "detailsEn": [
+              "Refined ModelSelector button styles and hover animations for smoother, more tactile interaction.",
+              "ThemeManager synchronizes .light and .dark classes on root, rendering physical gradients, specular rims, and inset shadows faithfully across both themes."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "浏览器自动化与预览 / Browser Automation and Preview",
+        "labelEn": "Browser Automation and Preview",
+        "items": [
+          {
+            "title": "元素定位与拟人化鼠标交互",
+            "titleEn": "Element ID Targeting and Realistic Mouse Interactions",
+            "details": [
+              "浏览器自动化新增 elementId 目标支持，结合 DOM 树检查实现更稳健的交互元素定位。",
+              "实现基于曲线路径的拟人化鼠标移动、平滑滚动、物理点击时延与悬停状态派发，提高对复杂前端应用的自动化成功率。"
+            ],
+            "detailsEn": [
+              "Browser automation adds elementId targeting combined with DOM inspection for more reliable interaction target selection.",
+              "Implemented realistic curved mouse movements, smooth scrolling, realistic click delays, and hover dispatching for higher automation reliability."
+            ]
+          },
+          {
+            "title": "光标层视觉与交互动效升级",
+            "titleEn": "Cursor Overlay Visuals and Animations",
+            "details": [
+              "升级嵌入式浏览器光标覆盖层，新增动态拖尾光环、交互聚焦光晕与点击水波纹动画，使 Agent 操作过程直观可感知。"
+            ],
+            "detailsEn": [
+              "Upgraded embedded browser cursor overlay with dynamic trailing rings, focus glow, and click ripple effects for transparent agent operation tracking."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "性能与系统工程 / Performance and System Engineering",
+        "labelEn": "Performance and System Engineering",
+        "items": [
+          {
+            "title": "流式渲染与终端输出性能优化",
+            "titleEn": "Streaming and Terminal Output Performance Optimization",
+            "details": [
+              "Agent 生成流式输出时自动暂停微光（EmotionAmbientGlow）动画，减轻 GPU 渲染负担。",
+              "InlineDiffPreview 在流式接收阶段简化语法高亮，TerminalManager 引入高频写入缓冲与渲染节流，消除主界面卡顿。"
+            ],
+            "detailsEn": [
+              "EmotionAmbientGlow animations pause automatically while the agent streams output to lower GPU rendering load.",
+              "InlineDiffPreview simplifies syntax highlighting during streaming, and TerminalManager introduces high-frequency write buffering and render throttling."
+            ]
+          },
+          {
+            "title": "文件监听过滤与系统压测套件",
+            "titleEn": "File Watcher Filtering and Stress Test Suites",
+            "details": [
+              "扩展索引服务与文件监听的排除目录规则，减少非必要文件变更事件的开销。",
+              "构建涵盖 Agent 全生命周期轮次、Diff 语法解析、本地 Transformer 向量嵌入、GPU 渲染与增量索引的完整性能压测套件。"
+            ],
+            "detailsEn": [
+              "Expanded ignore patterns for indexing and file watching to filter out unnecessary file change overhead.",
+              "Built comprehensive stress testing suites covering agent full turns, diff syntax parsing, local transformer embeddings, GPU rendering, and incremental indexing."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.69",
     "rawVersion": "1.7.69",
     "date": "2026-09-18",
@@ -76,8 +211,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Extension Management, Plan Workbench & Streaming Enhancements",
     "highlight": "引入 Agent 管理的扩展事务与凭据处理系统，支持 MCP/Skill 扩展的搜索、安装与卸载；计划工作台全面升级，新增展示钩子、历史抽屉和任务审查；流式推理新增长思考不活跃超时机制；聊天中支持文件路径识别与跳转；ZIP 提取加固防止符号链接攻击；新增多语言 README 翻译。",
     "highlightEn": "Introduces agent-managed extension transactions with credential handling for MCP and Skill extensions. The plan workbench gains a presentation hook, history drawer, and task review. Streaming now features inactivity timeouts for long reasoning. Chat messages recognize and link file paths. ZIP extraction is hardened against symlink attacks. Seven new README translations are added.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
