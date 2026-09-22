@@ -130,6 +130,7 @@ const defaultAgentConfig: AgentConfig = {
   maxImportantOldTurns: AGENT_DEFAULTS.maxImportantOldTurns,
   enableLLMSummary: AGENT_DEFAULTS.enableLLMSummary,
   autoHandoff: AGENT_DEFAULTS.autoHandoff,
+  enableAutoContext: AGENT_DEFAULTS.enableAutoContext,
   loopDetection: { ...AGENT_DEFAULTS.loopDetection },
   ignoredDirectories: [...AGENT_DEFAULTS.ignoredDirectories],
 }

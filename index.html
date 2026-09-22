@@ -86,6 +86,8 @@
         document.documentElement.style.setProperty('--surface', '241 243 245');
         document.documentElement.style.setProperty('--border', '222 226 230');
         document.documentElement.setAttribute('data-theme', 'light');
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
       } else {
         document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app.png') + ')');
         document.documentElement.style.setProperty('--loader-glass-bg', 'rgba(255, 255, 255, 0.03)');
@@ -97,6 +99,8 @@
         document.documentElement.style.setProperty('--loader-aura-2', '#3b82f6');
         document.documentElement.style.setProperty('--loader-aura-opacity', '0.08');
         document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
       }
     })();
   </script>

@@ -38,11 +38,16 @@ describe('getToolsForContext - isSubAgent', () => {
     const main = getToolsForContext({ mode: 'agent' })
     const sub = getToolsForContext({ mode: 'agent', isSubAgent: true })
     const removed = main.filter(tool => !sub.includes(tool))
-    expect(removed.sort()).toEqual(['browser_action', 'browser_open', 'task'])
+    expect(removed.sort()).toEqual(['ask_user', 'browser_action', 'browser_open', 'task'])
     // 干活需要的读写工具一个都不能少
     for (const tool of ['read_file', 'edit_file', 'run_command', 'codebase_search']) {
       expect(sub, tool).toContain(tool)
     }
+  })
+
+  it('agent 模式下主 agent 持有 ask_user，子代理不持有', () => {
+    expect(getToolsForContext({ mode: 'agent' })).toContain('ask_user')
+    expect(getToolsForContext({ mode: 'agent', isSubAgent: true })).not.toContain('ask_user')
   })
 
   it('角色专属工具在子代理里同样保留', () => {

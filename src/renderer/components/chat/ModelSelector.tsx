@@ -328,23 +328,25 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
   return (
     <div ref={containerRef} className={`${alignLeft ? '' : 'relative'} flex items-center gap-2 min-w-0 max-w-full ${className}`}>
       <button
+        type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={`
-          flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium border border-transparent
-          transition-all duration-200 w-full min-w-0 text-left
+          group/model-btn inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium
+          transition-all duration-150 min-w-0 max-w-full text-left select-none border-0
           ${isOpen
-            ? 'bg-surface-active text-text-primary shadow-[0_0_0_2px_rgba(var(--accent)/0.15)]'
-            : 'bg-white/[0.03] text-text-secondary hover:text-text-primary hover:bg-white/[0.08]'
+            ? 'bg-text-primary/[0.08] text-text-primary'
+            : 'text-text-secondary hover:text-text-primary hover:bg-text-primary/[0.05]'
           }
         `}
       >
-        <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-text-primary/5 text-[9px] font-bold">
+        <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[4px] bg-accent/10 text-accent text-[9.5px] font-bold">
           {getIcon(currentProviderGroup.providerId, currentProviderGroup.providerName)}
         </span>
-        <span className="truncate flex-1 min-w-0 text-left" title={`${currentProviderGroup.providerName}/${currentModel.name}`}>
-          {currentProviderGroup.providerName}/{currentModel.name.split('/').pop()}
+        <span className="truncate min-w-0 tracking-tight" title={`${currentProviderGroup.providerName}/${currentModel.name}`}>
+          <span className="text-text-muted/70 font-normal mr-1">{currentProviderGroup.providerName}/</span>
+          <span className="font-medium text-text-primary">{currentModel.name.split('/').pop()}</span>
         </span>
-        <ChevronDown className={`w-3 h-3 text-text-muted transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-text-muted/60 group-hover/model-btn:text-text-primary transition-transform duration-200 flex-shrink-0 ${isOpen ? 'rotate-180 text-accent' : ''}`} />
       </button>
 
       {createPortal(dropdown, document.body)}

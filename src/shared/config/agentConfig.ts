@@ -181,7 +181,7 @@ export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
     },
   },
   // Auto-Context Configuration
-  enableAutoContext: true,
+  enableAutoContext: false,
 }
 
 // ============================================

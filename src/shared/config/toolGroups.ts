@@ -102,6 +102,7 @@ const CORE_TOOLS: string[] = [
   'browser_inspect',
   'browser_action',
   // 交互与记忆
+  'ask_user',
   'remember',
   // Skill 按需加载
   'apply_skill',

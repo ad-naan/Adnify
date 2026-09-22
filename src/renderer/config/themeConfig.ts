@@ -382,6 +382,8 @@ class ThemeManager {
     root.style.setProperty('--status-error', colors.statusError)
     root.style.setProperty('--status-info', colors.statusInfo)
     root.setAttribute('data-theme', theme.type)
+    root.classList.toggle('dark', theme.type === 'dark')
+    root.classList.toggle('light', theme.type === 'light')
   }
 
   private persistCustomThemes() {

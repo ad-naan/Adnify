@@ -405,7 +405,7 @@ export function AgentSettings({
                                     <div className="divide-y divide-border/30 border-t border-border/30 pt-1">
                                         <SettingToggle label={t('agentSettings.useModelGeneratedSummaries', language)} description={t('agentSettings.usesTheModelTo', language)} checked={agentConfig.enableLLMSummary ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableLLMSummary: checked })} />
                                         <SettingToggle label={t('agentSettings.handoffAutomaticallyWhenContext', language)} description={t('agentSettings.createsAStructuredHandoff', language)} checked={agentConfig.autoHandoff ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, autoHandoff: checked })} />
-                                        <SettingToggle label={t('agentSettings.retrieveRelevantCodeAutomatically', language)} description={t('agentSettings.searchesTheCodeIndex', language)} checked={agentConfig.enableAutoContext ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoContext: checked })} />
+                                        <SettingToggle label={t('agentSettings.retrieveRelevantCodeAutomatically', language)} description={t('agentSettings.searchesTheCodeIndex', language)} checked={agentConfig.enableAutoContext ?? false} onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoContext: checked })} />
                                     </div>
                                 </div>
 

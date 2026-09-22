@@ -1,8 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Brain } from 'lucide-react'
-import { Button } from '../ui'
-import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
+import { cn } from '@/renderer/utils/cn'
 import { t } from '@shared/i18n'
 
 interface ReasoningOption {
@@ -19,273 +17,8 @@ interface ReasoningParticleSliderProps {
   onCommit: () => void
 }
 
-interface ParticleSliderProps {
-  index: number
-  count: number
-  label: string
-  language: 'en' | 'zh'
-  onIndexChange: (index: number) => void
-  onCommit: () => void
-}
-
-interface FlowParticle {
-  delay: number
-  lane: number
-  phase: number
-  size: number
-  speed: number
-}
-
-const PANEL_WIDTH = 224
-const VIEWPORT_MARGIN = 10
-
-const ParticleSlider = memo(function ParticleSlider({
-  index,
-  count,
-  label,
-  language,
-  onIndexChange,
-  onCommit,
-}: ParticleSliderProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const previousIndexRef = useRef(index)
-  const decorativeAnimations = useDecorativeAnimations()
-  const progress = count > 1 ? index / (count - 1) : 0
-
-  useEffect(() => {
-    const previousIndex = previousIndexRef.current
-    previousIndexRef.current = index
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const hasTransition = previousIndex !== index
-
-    const canvas = canvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !context) return
-
-    const bounds = canvas.getBoundingClientRect()
-    const width = bounds.width
-    const height = bounds.height
-    const ratio = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = Math.round(width * ratio)
-    canvas.height = Math.round(height * ratio)
-    context.setTransform(ratio, 0, 0, ratio, 0, 0)
-
-    const thumbRadius = 10
-    const availableWidth = width - thumbRadius * 2
-    const fromProgress = count > 1 ? previousIndex / (count - 1) : 0
-    const startX = thumbRadius + fromProgress * availableWidth
-    const endX = thumbRadius + progress * availableWidth
-    const direction = endX >= startX ? 1 : -1
-    const centerY = height / 2
-    const accent = getComputedStyle(canvas).color
-    const particles: FlowParticle[] = Array.from({ length: 20 }, (_, particleIndex) => ({
-      delay: (particleIndex % 7) * 0.018,
-      lane: ((particleIndex * 7) % 17 - 8) / 8,
-      phase: (particleIndex / 20) * Math.PI * 2,
-      size: 0.55 + (particleIndex % 4) * 0.22,
-      speed: 0.9 + (particleIndex % 5) * 0.035,
-    }))
-    const duration = 1150
-    const startedAt = performance.now()
-    const needsAmbient = decorativeAnimations && progress > 0
-    let animationFrame = 0
-
-    const easeInOutQuint = (value: number) => value < 0.5
-      ? 16 * Math.pow(value, 5)
-      : 1 - Math.pow(-2 * value + 2, 5) / 2
-
-    const particlePosition = (particle: FlowParticle, local: number) => {
-      const travel = easeInOutQuint(Math.min(1, Math.max(0, local * particle.speed)))
-      const envelope = Math.sin(Math.PI * travel)
-      const orbit = particle.phase + travel * Math.PI * 2.25 * direction
-      return {
-        x: startX + (endX - startX) * travel + Math.cos(orbit) * 2.8 * envelope,
-        y: centerY + particle.lane * 2 + Math.sin(orbit) * (2.4 + Math.abs(particle.lane) * 1.7) * envelope,
-        envelope,
-      }
-    }
-
-    const draw = (now: number) => {
-      const elapsedSeconds = (now - startedAt) / 1000
-      const animationProgress = Math.min(1, (now - startedAt) / duration)
-      const travelProgress = Math.min(1, animationProgress / 0.48)
-      const fade = animationProgress < 0.72 ? 1 : Math.max(0, 1 - (animationProgress - 0.72) / 0.28)
-
-      context.clearRect(0, 0, width, height)
-
-      // Keep a quiet stream of particles alive across the entire selected area.
-      // The canvas is clipped at the thumb center so nothing leaks into the inactive side.
-      if (needsAmbient) {
-        context.save()
-        context.beginPath()
-        context.rect(0, 0, endX, height)
-        context.clip()
-        context.globalCompositeOperation = 'lighter'
-        for (let ambientIndex = 0; ambientIndex < 26; ambientIndex += 1) {
-          const speed = 0.055 + (ambientIndex % 5) * 0.012
-          const ambientProgress = (ambientIndex / 26 + elapsedSeconds * speed) % 1
-          const x = 3 + ambientProgress * Math.max(1, endX - 5)
-          const y = centerY
-            + Math.sin(ambientIndex * 2.17 + elapsedSeconds * (0.65 + (ambientIndex % 4) * 0.12)) * (2.2 + (ambientIndex % 3))
-          const size = 0.42 + (ambientIndex % 4) * 0.16
-          const alpha = 0.2 + (ambientIndex % 5) * 0.045
-
-          context.globalAlpha = alpha
-          context.strokeStyle = ambientIndex % 4 === 0 ? 'rgba(255,255,255,0.88)' : accent
-          context.lineWidth = Math.max(0.45, size * 0.55)
-          context.beginPath()
-          context.moveTo(x - 2.4, y)
-          context.lineTo(x, y)
-          context.stroke()
-
-          context.fillStyle = ambientIndex % 4 === 0 ? 'rgba(255,255,255,0.94)' : accent
-          context.shadowColor = accent
-          context.shadowBlur = ambientIndex % 3 === 0 ? 2 : 0
-          context.beginPath()
-          context.arc(x, y, size, 0, Math.PI * 2)
-          context.fill()
-        }
-        context.restore()
-      }
-
-      if (hasTransition && animationProgress < 1) {
-        context.save()
-        context.globalCompositeOperation = 'lighter'
-
-        particles.forEach((particle, particleIndex) => {
-          const local = (travelProgress - particle.delay) / (1 - particle.delay)
-          if (local <= 0 || local >= 1) return
-          const current = particlePosition(particle, local)
-          const previous = particlePosition(particle, Math.max(0, local - 0.045))
-          const visibility = Math.min(1, local * 7, (1 - local) * 7) * fade
-          const isWhite = particleIndex % 5 === 0
-
-          context.globalAlpha = visibility * 0.72
-          context.strokeStyle = isWhite ? 'rgba(255,255,255,0.95)' : accent
-          context.lineWidth = Math.max(0.5, particle.size * 0.65)
-          context.shadowColor = accent
-          context.shadowBlur = particleIndex % 3 === 0 ? 3 : 0
-          context.beginPath()
-          context.moveTo(previous.x, previous.y)
-          context.quadraticCurveTo((previous.x + current.x) / 2, centerY + particle.lane * current.envelope, current.x, current.y)
-          context.stroke()
-
-          context.fillStyle = isWhite ? 'rgba(255,255,255,0.98)' : accent
-          context.beginPath()
-          context.arc(current.x, current.y, particle.size, 0, Math.PI * 2)
-          context.fill()
-        })
-
-        if (animationProgress > 0.3 && fade > 0) {
-          for (let spark = 0; spark < 8; spark += 1) {
-            const sparkProgress = ((animationProgress - 0.3) * (2.8 + (spark % 3) * 0.35) + spark / 8) % 1
-            const x = startX + (endX - startX) * sparkProgress
-            const y = centerY + ((spark % 3) - 1) * 1.3 + Math.sin(sparkProgress * Math.PI * 3 + spark) * 0.6
-            context.globalAlpha = fade * (0.35 + (1 - Math.abs(sparkProgress - 0.5) * 2) * 0.45)
-            context.fillStyle = spark % 3 === 0 ? 'rgba(255,255,255,0.96)' : accent
-            context.shadowColor = accent
-            context.shadowBlur = 2
-            context.beginPath()
-            context.arc(x, y, spark % 3 === 0 ? 0.85 : 0.52, 0, Math.PI * 2)
-            context.fill()
-          }
-        }
-
-        context.restore()
-      }
-
-      // The ambient stream is a perpetual decoration; the transition burst is
-      // not. With no ambient work left the loop has to end — otherwise this
-      // canvas repaints 26 shadow-blurred, `lighter`-composited particles at
-      // display rate for as long as the popover stays open.
-      if (needsAmbient || (hasTransition && animationProgress < 1)) {
-        animationFrame = requestAnimationFrame(draw)
-      } else {
-        context.clearRect(0, 0, width, height)
-      }
-    }
-
-    animationFrame = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(animationFrame)
-  }, [count, index, progress, decorativeAnimations])
-
-  const updateFromPointer = useCallback((clientX: number) => {
-    const track = trackRef.current
-    if (!track) return
-    const rect = track.getBoundingClientRect()
-    const thumbRadius = 10
-    const usableWidth = Math.max(1, rect.width - thumbRadius * 2)
-    const pointerProgress = Math.min(1, Math.max(0, (clientX - rect.left - thumbRadius) / usableWidth))
-    onIndexChange(Math.round(pointerProgress * Math.max(0, count - 1)))
-  }, [count, onIndexChange])
-
-  return (
-    <div
-      ref={trackRef}
-      role="slider"
-      tabIndex={0}
-      aria-label={t('reasoningParticleSlider.reasoningEffortParticleSlider', language)}
-      aria-valuemin={0}
-      aria-valuemax={Math.max(0, count - 1)}
-      aria-valuenow={index}
-      aria-valuetext={label}
-      onKeyDown={(event) => {
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-        event.preventDefault()
-        const direction = event.key === 'ArrowRight' ? 1 : -1
-        onIndexChange(Math.min(count - 1, Math.max(0, index + direction)))
-      }}
-      onKeyUp={onCommit}
-      onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId)
-        updateFromPointer(event.clientX)
-      }}
-      onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event.clientX)
-      }}
-      onPointerUp={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-        onCommit()
-      }}
-      className="relative h-6 cursor-pointer touch-none overflow-hidden rounded-full border border-border/35 bg-text-primary/[0.055] shadow-inner outline-none ring-accent/20 transition-shadow focus:ring-2"
-    >
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out"
-        style={{
-          width: `calc(10px + ${progress * 100}% - ${progress * 20}px)`,
-          background: 'linear-gradient(90deg, rgb(var(--accent) / 0.56), rgb(var(--accent) / 0.76))',
-          boxShadow: 'inset 0 1px 0 rgb(255 255 255 / 0.16), 0 0 10px rgb(var(--accent) / 0.12)',
-        }}
-      />
-
-      {Array.from({ length: count }, (_, markerIndex) => {
-        const markerProgress = count > 1 ? markerIndex / (count - 1) : 0
-        return (
-          <span
-            key={markerIndex}
-            aria-hidden="true"
-            className={`pointer-events-none absolute top-1/2 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${markerIndex <= index ? 'bg-white/75' : 'bg-text-muted/45'}`}
-            style={{ left: `calc(10px + ${markerProgress * 100}% - ${markerProgress * 20}px)` }}
-          />
-        )
-      })}
-
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 z-20 h-5 w-5 -translate-y-1/2 rounded-full border border-accent/20 bg-background shadow-[0_2px_6px_rgba(0,0,0,0.16),0_0_0_1px_rgba(255,255,255,0.45)_inset] transition-[left] duration-300 ease-out"
-        style={{ left: `calc(${progress * 100}% - ${progress * 20}px)` }}
-      />
-
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-30 h-full w-full text-accent"
-      />
-    </div>
-  )
-})
+const PANEL_SIZE = 180
+const VIEWPORT_MARGIN = 12
 
 export default memo(function ReasoningParticleSlider({
   options,
@@ -299,19 +32,34 @@ export default memo(function ReasoningParticleSlider({
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value))
-  const selectedLabel = options[selectedIndex]?.label ?? ''
+  const activeOption = options[selectedIndex] || options[0]
+  const currentValue = activeOption?.value ?? 'medium'
+  const isThinkingActive = enabled && currentValue !== 'none'
+  const count = options.length
+
+  // Ergonomic dial arc: -135deg (bottom-left) to +135deg (bottom-right)
+  const sweepAngle = 270
+  const startAngle = -135
+  const currentAngle = count > 1
+    ? startAngle + (selectedIndex / (count - 1)) * sweepAngle
+    : 0
 
   const updatePosition = useCallback(() => {
     const button = buttonRef.current
     if (!button) return
     const rect = button.getBoundingClientRect()
-    const left = Math.min(window.innerWidth - PANEL_WIDTH - VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, rect.right - PANEL_WIDTH))
+    const left = Math.min(
+      window.innerWidth - PANEL_SIZE - VIEWPORT_MARGIN,
+      Math.max(VIEWPORT_MARGIN, rect.right - PANEL_SIZE),
+    )
     setPanelStyle({
       position: 'fixed',
       left,
-      bottom: window.innerHeight - rect.top + 10,
-      width: PANEL_WIDTH,
+      bottom: window.innerHeight - rect.top + 8,
+      width: PANEL_SIZE,
+      height: PANEL_SIZE,
       zIndex: 9999,
     })
   }, [])
@@ -331,38 +79,157 @@ export default memo(function ReasoningParticleSlider({
     if (!isOpen) return
     const closeOnOutsideClick = (event: PointerEvent) => {
       const target = event.target as Node
-      if (!buttonRef.current?.contains(target) && !panelRef.current?.contains(target)) setIsOpen(false)
+      if (!buttonRef.current?.contains(target) && !panelRef.current?.contains(target)) {
+        setIsOpen(false)
+      }
     }
     document.addEventListener('pointerdown', closeOnOutsideClick)
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
   }, [isOpen])
+
+  const handleSelectIndex = useCallback((idx: number) => {
+    const opt = options[idx]
+    if (opt) {
+      onChange(opt.value)
+      onCommit()
+    }
+  }, [options, onChange, onCommit])
+
+  const handleRotateNext = useCallback(() => {
+    const nextIdx = (selectedIndex + 1) % count
+    handleSelectIndex(nextIdx)
+  }, [selectedIndex, count, handleSelectIndex])
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    if (e.deltaY > 0) {
+      const nextIdx = Math.min(count - 1, selectedIndex + 1)
+      handleSelectIndex(nextIdx)
+    } else {
+      const prevIdx = Math.max(0, selectedIndex - 1)
+      handleSelectIndex(prevIdx)
+    }
+  }, [count, selectedIndex, handleSelectIndex])
+
+  const handleMiniWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.deltaY > 0) {
+      const nextIdx = Math.min(count - 1, selectedIndex + 1)
+      handleSelectIndex(nextIdx)
+    } else {
+      const prevIdx = Math.max(0, selectedIndex - 1)
+      handleSelectIndex(prevIdx)
+    }
+  }, [count, selectedIndex, handleSelectIndex])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      handleSelectIndex(Math.max(0, selectedIndex - 1))
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      handleSelectIndex(Math.min(count - 1, selectedIndex + 1))
+    } else if (e.key === 'Escape') {
+      setIsOpen(false)
+    }
+  }, [selectedIndex, count, handleSelectIndex])
+
+  // Geometry for 180x180 Popover
+  const cx = 90
+  const cy = 90
+  const radius = 44
 
   const panel = isOpen && panelStyle
     ? createPortal(
       <div
         ref={panelRef}
         style={panelStyle}
-        className="floating-surface rounded-xl border border-border/40 p-2.5 shadow-xl shadow-black/15 animate-scale-in"
+        onKeyDown={handleKeyDown}
+        onWheel={handleWheel}
+        tabIndex={-1}
+        className="floating-surface rounded-2xl border border-border/60 bg-background/95 backdrop-blur-2xl p-1 shadow-2xl shadow-black/40 animate-scale-in select-none relative flex items-center justify-center focus:outline-none overflow-hidden"
       >
-        <div className="mb-2 flex items-center justify-between gap-3 px-0.5">
-          <span className="text-[10px] font-medium text-text-muted">
-            {t('reasoningParticleSlider.reasoningEffort', language)}
-          </span>
-          <span className={`text-[10px] font-medium ${enabled ? 'text-accent' : 'text-text-muted'}`}>
-            {selectedLabel}
-          </span>
-        </div>
-        <ParticleSlider
-          index={selectedIndex}
-          count={options.length}
-          label={selectedLabel}
-          language={language}
-          onIndexChange={(nextIndex) => {
-            const option = options[nextIndex]
-            if (option) onChange(option.value)
+        {/* SVG Radial Ticks & Clickable Labels */}
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 180 180">
+          {options.map((opt, i) => {
+            const deg = count > 1 ? startAngle + (i / (count - 1)) * sweepAngle : 0
+            const rad = (deg - 90) * (Math.PI / 180)
+            const x1 = cx + (radius + 1) * Math.cos(rad)
+            const y1 = cy + (radius + 1) * Math.sin(rad)
+            const x2 = cx + (radius + 7) * Math.cos(rad)
+            const y2 = cy + (radius + 7) * Math.sin(rad)
+            const tx = cx + (radius + 20) * Math.cos(rad)
+            const ty = cy + (radius + 20) * Math.sin(rad) + 3.5
+            const isSelected = i === selectedIndex
+
+            return (
+              <g key={opt.value} className="cursor-pointer" onClick={() => handleSelectIndex(i)}>
+                <line
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke={isSelected ? 'rgb(var(--accent))' : 'currentColor'}
+                  className={isSelected ? '' : 'text-border-active/60'}
+                  strokeWidth={isSelected ? 2.5 : 1.5}
+                  strokeLinecap="round"
+                />
+                <text
+                  x={tx}
+                  y={ty}
+                  textAnchor="middle"
+                  fontSize={isSelected ? 11 : 9.5}
+                  fontWeight={isSelected ? 'bold' : '500'}
+                  fill={isSelected ? 'rgb(var(--accent))' : 'currentColor'}
+                  className={isSelected ? '' : 'text-text-secondary hover:text-text-primary transition-colors'}
+                >
+                  {opt.label}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+
+        {/* The Physical Milled Rotary Knob in Popover */}
+        <div
+          onClick={handleRotateNext}
+          style={{
+            transform: `rotate(${currentAngle}deg)`,
+            transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
-          onCommit={onCommit}
-        />
+          className="adnify-dial-knob w-[72px] h-[72px] rounded-full border border-border/80 flex items-center justify-center relative cursor-pointer shadow-xl select-none group active:scale-95"
+          title={language === 'zh' ? '点击或滚动滚轮步进' : 'Click or scroll to adjust'}
+        >
+          {/* Knurled ridge ring */}
+          <div className="absolute inset-1 rounded-full border adnify-knob-rim pointer-events-none" />
+
+          {/* Electric Accent Laser Notch - Perfectly centered horizontally at top rim */}
+          <div
+            className={cn(
+              "absolute top-1.5 inset-x-0 mx-auto w-1.5 h-3 rounded-full transition-colors pointer-events-none",
+              isThinkingActive
+                ? "bg-accent shadow-[0_0_8px_rgb(var(--accent)/0.8)]"
+                : "bg-text-muted/70",
+            )}
+          />
+
+          {/* Center Cap - Counter-rotated so text remains permanently upright */}
+          <div
+            style={{
+              transform: `rotate(${-currentAngle}deg)`,
+              transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+            className="w-10 h-10 rounded-full bg-surface border border-border/80 flex flex-col items-center justify-center text-center shadow-inner pointer-events-none"
+          >
+            <span className="text-[7.5px] font-mono text-text-muted font-bold tracking-wider leading-none">
+              TIER
+            </span>
+            <span className="text-[12px] font-bold text-accent mt-0.5 leading-none">
+              {activeOption?.label}
+            </span>
+          </div>
+        </div>
       </div>,
       document.body,
     )
@@ -370,18 +237,107 @@ export default memo(function ReasoningParticleSlider({
 
   return (
     <>
-      <Button
+      <style>{`
+        /* Dark Mode: default + [data-theme='dark'] + .dark */
+        .adnify-dial-knob,
+        [data-theme='dark'] .adnify-dial-knob,
+        .dark .adnify-dial-knob {
+          background: conic-gradient(
+            from 180deg at 50% 50%,
+            #1e2533 0deg,
+            #333e52 45deg,
+            #171c26 90deg,
+            #333e52 135deg,
+            #1e2533 180deg,
+            #333e52 225deg,
+            #171c26 270deg,
+            #333e52 315deg,
+            #1e2533 360deg
+          );
+          box-shadow: 
+            0 2px 6px -1px rgba(0, 0, 0, 0.6),
+            inset 0 1px 1.5px rgba(255, 255, 255, 0.16),
+            inset 0 -1.5px 3px rgba(0, 0, 0, 0.7),
+            0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .adnify-knob-rim,
+        [data-theme='dark'] .adnify-knob-rim,
+        .dark .adnify-knob-rim {
+          border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        /* Light Mode: [data-theme='light'] + .light */
+        [data-theme='light'] .adnify-dial-knob,
+        .light .adnify-dial-knob {
+          background: conic-gradient(
+            from 180deg at 50% 50%,
+            #e2e8f0 0deg,
+            #ffffff 45deg,
+            #cbd5e1 90deg,
+            #ffffff 135deg,
+            #e2e8f0 180deg,
+            #ffffff 225deg,
+            #cbd5e1 270deg,
+            #ffffff 315deg,
+            #e2e8f0 360deg
+          );
+          box-shadow: 
+            0 2px 5px -1px rgba(0, 0, 0, 0.12),
+            inset 0 1px 2px rgba(255, 255, 255, 0.95),
+            inset 0 -1.5px 2px rgba(0, 0, 0, 0.12),
+            0 0 0 1px rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme='light'] .adnify-knob-rim,
+        .light .adnify-knob-rim {
+          border-color: rgba(0, 0, 0, 0.08);
+        }
+      `}</style>
+
+      {/* Input Toolbar Mini Rotary Dial Button (Frameless, Clean, Prominent) */}
+      <button
         ref={buttonRef}
-        variant="ghost"
-        size="icon"
+        type="button"
         onClick={() => setIsOpen(open => !open)}
-        title={t('reasoningParticleSlider.reasoningEffort2', language, { selectedLabel })}
+        onWheel={handleMiniWheel}
+        title={t('reasoningParticleSlider.reasoningEffort2', language, { selectedLabel: activeOption?.label ?? '' })}
         aria-label={t('reasoningParticleSlider.selectReasoningEffort', language)}
         aria-expanded={isOpen}
-        className={`h-8 w-8 rounded-lg transition-all ${enabled ? 'text-accent hover:bg-accent/5' : 'text-text-muted hover:text-text-primary'}`}
+        className="w-8 h-8 flex items-center justify-center cursor-pointer select-none group focus:outline-none bg-transparent border-0 p-0 transition-transform hover:scale-105 active:scale-95"
       >
-        <Brain className="h-4 w-4" />
-      </Button>
+        {/* Prominent Physical Rotary Knob (26px) - Rotates smoothly around its center */}
+        <div
+          style={{
+            transform: `rotate(${currentAngle}deg)`,
+            transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className={cn(
+            "adnify-dial-knob w-[26px] h-[26px] rounded-full border relative flex items-center justify-center select-none shadow-sm",
+            isThinkingActive
+              ? "border-accent/40 shadow-[0_1px_6px_rgb(var(--accent)/0.35)] opacity-100"
+              : "border-border/80 opacity-70 group-hover:opacity-100",
+            isOpen && "ring-2 ring-accent/40 border-accent",
+          )}
+        >
+          {/* Inner knurling rim */}
+          <div className="absolute inset-0.5 rounded-full border adnify-knob-rim pointer-events-none" />
+
+          {/* Precision Laser Pointer Notch - Perfectly concentric at the top rim */}
+          <div
+            className={cn(
+              "absolute top-[2px] inset-x-0 mx-auto w-[2.5px] h-[5px] rounded-full pointer-events-none",
+              isThinkingActive
+                ? "bg-accent shadow-[0_0_6px_rgb(var(--accent))]"
+                : "bg-text-muted/70",
+            )}
+          />
+
+          {/* Center Micro Cap (perfectly centered circle) */}
+          <div className="w-2.5 h-2.5 rounded-full bg-surface border border-border/70 shadow-inner pointer-events-none" />
+        </div>
+      </button>
+
       {panel}
     </>
   )

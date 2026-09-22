@@ -197,6 +197,7 @@ export const AGENT_DEFAULTS = {
   maxImportantOldTurns: 3,
   enableLLMSummary: true,
   autoHandoff: true,
+  enableAutoContext: false,
 
   // 摘要生成配置
   summaryMaxContextChars: {

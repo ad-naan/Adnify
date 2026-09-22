@@ -4,20 +4,83 @@
  */
 import { memo, useRef, useCallback, useMemo, useState, useLayoutEffect } from 'react'
 import {
-  FileText, X, Code, GitBranch, Terminal, Database, ArrowUp, Plus, Folder, Globe, Wrench, Server, Image as ImageIcon, ListOrdered, Maximize2, Minimize2, WandSparkles, LoaderCircle
+  FileText, X, Code, GitBranch, Terminal, Database, ArrowUp, Plus, Folder, Globe, Wrench, Server, ListOrdered, Maximize2, Minimize2, LoaderCircle
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { t } from '@shared/i18n'
-import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
 import ReasoningParticleSlider from './ReasoningParticleSlider'
 import { KaomojiPet } from './KaomojiPet'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
+
+function MediaUploadIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <rect
+        x="2.5"
+        y="2.5"
+        width="15"
+        height="15"
+        rx="3.75"
+        className="stroke-current stroke-[1.6]"
+      />
+      <circle
+        cx="7"
+        cy="7"
+        r="1.8"
+        className="fill-current group-hover/btn:fill-accent transition-colors"
+      />
+      <path
+        d="M3.2 16.5L7.8 11.2C8.3 10.6 9.3 10.6 9.8 11.2L11.5 13L13.8 10C14.3 9.4 15.3 9.4 15.8 10L16.8 11.2V16.5H3.2Z"
+        className="fill-current opacity-15 group-hover/btn:opacity-25 transition-opacity"
+      />
+      <path
+        d="M3.2 16.5L7.8 11.2C8.3 10.6 9.3 10.6 9.8 11.2L11.5 13L13.8 10C14.3 9.4 15.3 9.4 15.8 10L16.8 11.2"
+        className="stroke-current stroke-[1.6] stroke-linecap-round stroke-linejoin-round"
+      />
+    </svg>
+  )
+}
+
+function PromptMagicIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path
+        d="M10 2.5C10 6.64 13.36 10 17.5 10C13.36 10 10 13.36 10 17.5C10 13.36 6.64 10 2.5 10C6.64 10 10 6.64 10 2.5Z"
+        className="fill-current opacity-15 group-hover/btn:opacity-30 transition-opacity"
+      />
+      <path
+        d="M10 2.5C10 6.64 13.36 10 17.5 10C13.36 10 10 13.36 10 17.5C10 13.36 6.64 10 2.5 10C6.64 10 10 6.64 10 2.5Z"
+        className="stroke-current stroke-[1.5] stroke-linejoin-round"
+      />
+      <path
+        d="M15.5 3C15.5 4.38 16.62 5.5 18 5.5C16.62 5.5 15.5 6.62 15.5 8C15.5 6.62 14.38 5.5 13 5.5C14.38 5.5 15.5 4.38 15.5 3Z"
+        className="fill-current group-hover/btn:fill-accent transition-colors"
+      />
+      <circle
+        cx="4.5"
+        cy="15.5"
+        r="1.25"
+        className="fill-current group-hover/btn:fill-accent transition-colors"
+      />
+    </svg>
+  )
+}
 
 const COLLAPSED_TEXTAREA_HEIGHT = 132
 const LONG_TEXT_THRESHOLD = 168
@@ -370,10 +433,10 @@ const ChatInput = memo(function ChatInput({
 
           {/* Bottom Actions */}
           <div className="relative flex items-center justify-between pt-1 gap-2">
-            <div className="flex flex-1 min-w-0 items-center overflow-hidden opacity-80 transition-opacity hover:opacity-100">
+            <div className="flex flex-1 min-w-0 items-center overflow-hidden">
               <ModelSelector alignLeft className="flex-1 max-w-full" />
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <ReasoningParticleSlider
                 options={reasoningOptions}
                 value={selectedReasoningEffort}
@@ -399,64 +462,66 @@ const ChatInput = memo(function ChatInput({
                   e.target.value = ''
                 }}
               />
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 title={t('uploadImage', language)}
-                className="rounded-xl w-8 h-8 hover:bg-surface-active text-text-muted hover:text-text-primary transition-all active:scale-95"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-text-primary/[0.06] transition-all duration-150 active:scale-90 group/btn"
               >
-                <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-              </Button>
+                <MediaUploadIcon className="w-[18px] h-[18px] opacity-75 group-hover/btn:opacity-100 group-hover/btn:scale-105 transition-all" />
+              </button>
 
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
+                type="button"
                 onClick={onOptimizePrompt}
                 disabled={!hasApiKey || !input.trim() || isOptimizingPrompt || isStreaming}
                 title={t('chatInput.improveThePromptUsing', language)}
                 aria-label={t('chatInput.improvePrompt', language)}
-                className="h-8 w-8 rounded-lg text-text-muted hover:bg-accent/10 hover:text-accent disabled:opacity-35"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-accent hover:bg-accent/10 transition-all duration-150 active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-muted disabled:cursor-not-allowed group/btn"
               >
                 {isOptimizingPrompt
-                  ? <LoaderCircle className="h-4 w-4 animate-spin" />
-                  : <WandSparkles className="h-4 w-4" />}
-              </Button>
+                  ? <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
+                  : <PromptMagicIcon className="w-[18px] h-[18px] opacity-75 group-hover/btn:opacity-100 group-hover/btn:scale-105 transition-all" />}
+              </button>
 
               {/* Send / Queue / Stop buttons */}
               {isStreaming ? (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   {/* Queue Send button - visible when there's input during streaming */}
                   {isSendable && (
                     <button
+                      type="button"
                       onClick={onSubmit}
                       disabled={!hasApiKey || hasPendingToolCall}
                       title={t('chatInput.queueMessage', language)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-accent/80 text-white shadow-sm shadow-accent/10 hover:bg-accent hover:shadow-accent/30 hover:-translate-y-0.5 active:translate-y-0 border border-transparent"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 bg-accent hover:bg-accent-hover text-white shadow-md shadow-accent/25 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-92"
                     >
                       <ListOrdered className="w-4 h-4 stroke-[2.5]" />
                     </button>
                   )}
-                  {/* Stop button */}
+                  {/* Stop button - illuminated emergency tactile kill switch */}
                   <button
+                    type="button"
                     onClick={onAbort}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                    title={t('common.stop', language)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-500 active:scale-90 transition-all duration-150 group/stop"
                   >
-                    <div className="w-2.5 h-2.5 bg-current rounded-[1px] animate-pulse" />
+                    <div className="w-2.5 h-2.5 rounded-[2px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)] group-hover/stop:scale-110 transition-transform" />
                   </button>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={onSubmit}
                   disabled={!hasApiKey || !isSendable || hasPendingToolCall}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200
                     ${isSendable
-                      ? 'bg-accent text-white shadow-md shadow-accent/20 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 border border-transparent'
-                      : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
+                      ? 'bg-accent hover:bg-accent-hover text-white shadow-md shadow-accent/25 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-92'
+                      : 'bg-text-primary/[0.05] text-text-muted/30 cursor-not-allowed'
                     }
                   `}
                 >
-                  <ArrowUp className="w-5 h-5 stroke-[3]" />
+                  <ArrowUp className="w-4 h-4 stroke-[2.75]" />
                 </button>
               )}
             </div>
