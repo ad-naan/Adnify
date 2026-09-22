@@ -3121,8 +3121,8 @@ export const zh = {
   // reasoningParticleSlider
   'reasoningParticleSlider.reasoningEffort': '思考强度',
   'reasoningParticleSlider.reasoningEffort2': '思考强度：{selectedLabel}',
-  'reasoningParticleSlider.reasoningEffortParticleSlider': '思考强度粒子滑块',
   'reasoningParticleSlider.selectReasoningEffort': '选择思考强度',
+  'reasoningParticleSlider.dialTip': '点击或滚动滚轮步进',
 
   // remoteFileBrowser
   'remoteFileBrowser.closeSftpPanel': '关闭 SFTP 面板',

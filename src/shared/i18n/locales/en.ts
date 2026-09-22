@@ -3120,8 +3120,8 @@ export const en = {
   // reasoningParticleSlider
   'reasoningParticleSlider.reasoningEffort': 'Reasoning effort',
   'reasoningParticleSlider.reasoningEffort2': 'Reasoning effort: {selectedLabel}',
-  'reasoningParticleSlider.reasoningEffortParticleSlider': 'Reasoning effort particle slider',
   'reasoningParticleSlider.selectReasoningEffort': 'Select reasoning effort',
+  'reasoningParticleSlider.dialTip': 'Click or scroll to adjust',
 
   // remoteFileBrowser
   'remoteFileBrowser.closeSftpPanel': 'Close SFTP panel',

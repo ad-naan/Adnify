@@ -59,7 +59,7 @@ export const MAX_SEARCH_RESULTS = PERFORMANCE_DEFAULTS.maxSearchResults
 export const MAX_TERMINAL_OUTPUT = DEFAULT_AGENT_CONFIG.maxTerminalChars
 export const MAX_CONTEXT_CHARS = DEFAULT_AGENT_CONFIG.maxTotalContextChars
 /** Guardrail for the composed prompt in a representative full-tool context. Tool schemas are sent separately. */
-export const SYSTEM_PROMPT_CHAR_BUDGET = 14_000
+export const SYSTEM_PROMPT_CHAR_BUDGET = 16_000
 
 export interface PromptContext {
   os: string

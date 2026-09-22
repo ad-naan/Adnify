@@ -148,6 +148,8 @@ export default memo(function ReasoningParticleSlider({
         onKeyDown={handleKeyDown}
         onWheel={handleWheel}
         tabIndex={-1}
+        role="dialog"
+        aria-label={t('reasoningParticleSlider.reasoningEffort', language)}
         className="floating-surface rounded-2xl border border-border/60 bg-background/95 backdrop-blur-2xl p-1 shadow-2xl shadow-black/40 animate-scale-in select-none relative flex items-center justify-center focus:outline-none overflow-hidden"
       >
         {/* SVG Radial Ticks & Clickable Labels */}
@@ -194,12 +196,18 @@ export default memo(function ReasoningParticleSlider({
         {/* The Physical Milled Rotary Knob in Popover */}
         <div
           onClick={handleRotateNext}
+          role="slider"
+          aria-label={t('reasoningParticleSlider.reasoningEffort', language)}
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, count - 1)}
+          aria-valuenow={selectedIndex}
+          aria-valuetext={activeOption?.label}
           style={{
             transform: `rotate(${currentAngle}deg)`,
             transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
           className="adnify-dial-knob w-[72px] h-[72px] rounded-full border border-border/80 flex items-center justify-center relative cursor-pointer shadow-xl select-none group active:scale-95"
-          title={language === 'zh' ? '点击或滚动滚轮步进' : 'Click or scroll to adjust'}
+          title={t('reasoningParticleSlider.dialTip', language)}
         >
           {/* Knurled ridge ring */}
           <div className="absolute inset-1 rounded-full border adnify-knob-rim pointer-events-none" />
