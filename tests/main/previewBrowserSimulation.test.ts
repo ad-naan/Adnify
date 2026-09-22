@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { domScript, elementActionScript, cursorOverlayScript } from '../../src/shared/preview/browserScripts'
-import { browserActionSchema, browserInspectSchema } from '../../src/shared/preview/browserAutomation'
+import { browserActionSchema } from '../../src/shared/preview/browserAutomation'
 
 describe('Browser Automation & jev-ultrafast Indexed Action Space', () => {
   it('validates browserActionSchema with element ID as integer or @string', () => {

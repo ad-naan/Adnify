@@ -112,29 +112,59 @@ export function cursorOverlayScript(): string {
 
       const cursor = document.createElement('div');
       cursor.id = 'adnify-agent-cursor';
-      cursor.style.cssText = 'position:fixed;top:0;left:0;width:24px;height:24px;margin-top:-2px;margin-left:-2px;pointer-events:none;transform:translate3d(-50px,-50px,0);filter:drop-shadow(0 2px 5px rgba(0,0,0,0.45));will-change:transform;';
-      cursor.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 3L11 20L14 13L21 10L4 3Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="14" cy="13" r="2.5" fill="#60a5fa"/></svg>';
+      cursor.style.cssText = 'position:fixed;top:0;left:0;width:52px;height:52px;margin-top:-2.5px;margin-left:-2.5px;pointer-events:none;transform-origin:2.5px 2.5px;transform:translate3d(-100px,-100px,0);filter:drop-shadow(0 4px 12px rgba(0,0,0,0.65)) drop-shadow(0 0 10px rgba(59,130,246,0.75));will-change:transform;transition:transform 0.04s ease-out;';
+      cursor.innerHTML = \`
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+          <defs>
+            <linearGradient id="adnify-cursor-grad" x1="2" y1="2" x2="38" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#3b82f6"/>
+              <stop offset="60%" stop-color="#2563eb"/>
+              <stop offset="100%" stop-color="#1d4ed8"/>
+            </linearGradient>
+          </defs>
+          <path d="M2.5 2.5L16 47L24 32L40 24L2.5 2.5Z" fill="url(#adnify-cursor-grad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          <circle cx="24" cy="32" r="3.5" fill="#bfdbfe" opacity="0.95"/>
+        </svg>
+        <div style="position:absolute;left:32px;top:28px;background:linear-gradient(135deg,#2563eb,#1e40af);color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.5),0 0 8px rgba(59,130,246,0.6);border:1.5px solid rgba(255,255,255,0.95);white-space:nowrap;user-select:none;pointer-events:none;line-height:14px;display:flex;align-items:center;gap:4px;">
+          <span style="width:6px;height:6px;border-radius:50%;background:#60a5fa;box-shadow:0 0 6px #93c5fd;display:inline-block;"></span>
+          <span>Agent</span>
+        </div>
+      \`;
       overlay.appendChild(cursor);
 
       const style = document.createElement('style');
       style.textContent = \`
         @keyframes adnify-ripple-anim {
-          0% { transform: translate3d(var(--rx), var(--ry), 0) translate(-50%, -50%) scale(0.2); opacity: 0.95; }
-          100% { transform: translate3d(var(--rx), var(--ry), 0) translate(-50%, -50%) scale(2.2); opacity: 0; }
+          0% { transform: translate3d(var(--rx), var(--ry), 0) translate(-50%, -50%) scale(0.15); opacity: 1; }
+          40% { opacity: 0.9; }
+          100% { transform: translate3d(var(--rx), var(--ry), 0) translate(-50%, -50%) scale(3.0); opacity: 0; }
         }
         .adnify-ripple {
-          position: fixed; top: 0; left: 0; width: 32px; height: 32px; border-radius: 50%;
-          border: 2.5px solid #2563eb; background: rgba(37, 99, 235, 0.25);
-          pointer-events: none; animation: adnify-ripple-anim 0.45s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+          position: fixed; top: 0; left: 0; width: 72px; height: 72px; border-radius: 50%;
+          border: 3.5px solid #3b82f6; background: radial-gradient(circle, rgba(59,130,246,0.45) 0%, rgba(37,99,235,0.18) 60%, transparent 100%);
+          box-shadow: 0 0 20px rgba(59,130,246,0.9);
+          pointer-events: none; animation: adnify-ripple-anim 0.5s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+        }
+        .adnify-cursor-click-press {
+          transform: translate3d(var(--cur-x), var(--cur-y), 0) scale(0.88) !important;
         }
       \`;
       overlay.appendChild(style);
       document.documentElement.appendChild(overlay);
     }
 
+    window.__adnifyCurrentX = -100;
+    window.__adnifyCurrentY = -100;
+
     window.__adnifyUpdateCursor = (x, y) => {
+      window.__adnifyCurrentX = x;
+      window.__adnifyCurrentY = y;
       const c = document.getElementById('adnify-agent-cursor');
-      if (c) c.style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0)';
+      if (c) {
+        c.style.setProperty('--cur-x', x + 'px');
+        c.style.setProperty('--cur-y', y + 'px');
+        c.style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0)';
+      }
     };
 
     window.__adnifyClickRipple = (x, y) => {
@@ -145,7 +175,15 @@ export function cursorOverlayScript(): string {
       ripple.style.setProperty('--rx', x + 'px');
       ripple.style.setProperty('--ry', y + 'px');
       container.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 500);
+
+      // Brief click press recoil animation anchored on the cursor tip
+      const c = document.getElementById('adnify-agent-cursor');
+      if (c) {
+        c.classList.add('adnify-cursor-click-press');
+        setTimeout(() => c.classList.remove('adnify-cursor-click-press'), 120);
+      }
+
+      setTimeout(() => ripple.remove(), 550);
     };
   })()`
 }
