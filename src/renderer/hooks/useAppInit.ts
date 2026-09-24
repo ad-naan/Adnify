@@ -79,6 +79,17 @@ export function useAppInit(options: UseAppInitOptions = {}) {
         removeInitialLoader()
         api.appReady()
         optionsRef.current.onInitialized?.(result)
+
+        // 空闲时预加载 Token 词表，避免首条消息发送时主线程初始化卡顿
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          window.requestIdleCallback(() => {
+            void import('@shared/utils/tokenCounter').then(m => m.ensureTokenEncoder())
+          })
+        } else {
+          setTimeout(() => {
+            void import('@shared/utils/tokenCounter').then(m => m.ensureTokenEncoder())
+          }, 1500)
+        }
       }, 50)
     }
 

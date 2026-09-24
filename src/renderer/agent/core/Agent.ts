@@ -156,6 +156,9 @@ export class AgentClass {
       })
       taskRegistered = true
 
+      // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
+      await new Promise(resolve => setTimeout(resolve, 0))
+
       // A second top-level Agent execution may write concurrently with the
       // already-running task. Isolate it at the execution-node boundary. Plan
       // and sub-agent callers own their lanes through the same shared service.
@@ -178,9 +181,6 @@ export class AgentClass {
           },
         })
       }
-
-      // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
-      await new Promise(resolve => setTimeout(resolve, 0))
 
       // Local validation happens after the optimistic commit. OAuth resolution
       // stays centralized in the main-process credential service.

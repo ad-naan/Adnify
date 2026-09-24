@@ -20,7 +20,10 @@ export function useEmotionHistory() {
     }
     const unsubscribe = EventBus.on('emotion:changed', updateHistory)
     updateHistory()
-    const intervalId = setInterval(updateHistory, POLL_INTERVAL_MS)
+    const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      updateHistory()
+    }, POLL_INTERVAL_MS)
     return () => {
       unsubscribe()
       clearInterval(intervalId)

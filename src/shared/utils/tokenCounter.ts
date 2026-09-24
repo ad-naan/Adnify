@@ -285,12 +285,17 @@ export function countMessagesTokens(
  */
 function estimateTokensFallback(text: string): number {
   if (!text) return 0
-  
-  // 统计中文字符
-  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
-  const totalChars = text.length
-  const nonChineseChars = totalChars - chineseChars
-  
+
+  let chineseChars = 0
+  const len = text.length
+  for (let i = 0; i < len; i++) {
+    const code = text.charCodeAt(i)
+    if (code >= 0x4e00 && code <= 0x9fa5) {
+      chineseChars++
+    }
+  }
+  const nonChineseChars = len - chineseChars
+
   // 中文按 1.5 字符/token，其他按 4 字符/token
   return Math.ceil(chineseChars / 1.5 + nonChineseChars / 4)
 }

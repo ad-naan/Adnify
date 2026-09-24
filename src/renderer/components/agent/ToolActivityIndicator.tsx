@@ -48,7 +48,10 @@ export function ToolElapsedTime({ state, startedAt, durationMs, className = '' }
 
   useEffect(() => {
     if (state !== 'running' || !startedAt) return
-    const timer = window.setInterval(() => setNow(Date.now()), 250)
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      setNow(Date.now())
+    }, 500)
     return () => window.clearInterval(timer)
   }, [startedAt, state])
 

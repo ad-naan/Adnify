@@ -389,6 +389,35 @@ export function updateStats(
   }
 }
 
+const messageTokenCache = new WeakMap<ChatMessage, number>()
+
+function estimateSingleMessageTokens(msg: ChatMessage): number {
+  const cached = messageTokenCache.get(msg)
+  if (cached !== undefined) return cached
+
+  let msgTokens = 4 // 每条消息的固定开销
+
+  if (msg.role === 'user') {
+    const userMsg = msg as UserMessage
+    msgTokens += countContentTokens(userMsg.content)
+  } else if (msg.role === 'assistant') {
+    const assistantMsg = msg as AssistantMessage
+    msgTokens += countTokens(assistantMsg.content || '')
+    for (const tc of assistantMsg.toolCalls || []) {
+      msgTokens += countTokens(tc.name)
+      msgTokens += countTokens(JSON.stringify(tc.arguments || {}))
+      msgTokens += 3 // 工具调用结构开销
+    }
+  } else if (msg.role === 'tool') {
+    const toolMsg = msg as ToolResultMessage
+    const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
+    msgTokens += countTokens(content)
+  }
+
+  messageTokenCache.set(msg, msgTokens)
+  return msgTokens
+}
+
 /**
  * 估算消息列表的 token 数
  */
@@ -396,24 +425,7 @@ export function estimateMessagesTokens(messages: ChatMessage[]): number {
   let total = 3 // 对话开始/结束的固定开销
 
   for (const msg of messages) {
-    total += 4 // 每条消息的固定开销
-
-    if (msg.role === 'user') {
-      const userMsg = msg as UserMessage
-      total += countContentTokens(userMsg.content)
-    } else if (msg.role === 'assistant') {
-      const assistantMsg = msg as AssistantMessage
-      total += countTokens(assistantMsg.content || '')
-      for (const tc of assistantMsg.toolCalls || []) {
-        total += countTokens(tc.name)
-        total += countTokens(JSON.stringify(tc.arguments || {}))
-        total += 3 // 工具调用结构开销
-      }
-    } else if (msg.role === 'tool') {
-      const toolMsg = msg as ToolResultMessage
-      const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
-      total += countTokens(content)
-    }
+    total += estimateSingleMessageTokens(msg)
   }
 
   return total

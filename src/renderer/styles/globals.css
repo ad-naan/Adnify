@@ -644,6 +644,10 @@ textarea,
   --decorative-layer: auto;
 }
 
+[data-decorative-motion='off'] .animate-shimmer {
+  animation: none !important;
+}
+
 /* A modal covers this surface. Freeze CSS indicators as well as decorative
    effects; data and Agent execution continue independently of presentation. */
 [data-motion-occluded='true'] *,

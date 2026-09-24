@@ -2,7 +2,7 @@ import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
-import { buildAgentSessionSnapshot, persistCriticalAgentSessionState, stageAgentSessionState } from '../agentStorage'
+import { schedulePersistedAgentSessionState, stageAgentSessionState } from '../agentStorage'
 import { bumpThreadMessageVersion, withReplacedMessages } from '../threadMessages'
 import type {
   ChatThread,
@@ -59,13 +59,13 @@ export interface CheckpointActions {
 
 export type CheckpointSlice = CheckpointState & CheckpointActions
 
-function persistCheckpointState(state: {
+function persistCheckpointState(getter: () => {
   threads: Record<string, unknown>
   currentThreadId: string | null
   branches: Record<string, unknown>
   activeBranchId: Record<string, unknown>
 }): void {
-  void persistCriticalAgentSessionState(buildAgentSessionSnapshot(state))
+  schedulePersistedAgentSessionState(getter)
 }
 
 function getThreadCheckpoints(thread?: ChatThread): MessageCheckpoint[] {
@@ -257,7 +257,7 @@ export const createCheckpointSlice: StateCreator<
       return { threads }
     })
 
-    persistCheckpointState(get())
+    persistCheckpointState(() => get())
     return checkpoint.id
   },
 
@@ -429,7 +429,7 @@ export const createCheckpointSlice: StateCreator<
       }
     })
 
-    persistCheckpointState(get())
+    persistCheckpointState(() => get())
 
     return {
       success: errors.length === 0,
@@ -466,7 +466,7 @@ export const createCheckpointSlice: StateCreator<
       }
     })
 
-    persistCheckpointState(get())
+    persistCheckpointState(() => get())
   },
 
   getMessageCheckpoints: () => {

@@ -214,7 +214,10 @@ class EmotionDetectionEngine {
       this._lastActivityTime = now
     }
     this.blurHandler = () => this.handlePause()
-    this.focusHandler = () => { this._lastActivityTime = Date.now() }
+    this.focusHandler = () => {
+      this._lastActivityTime = Date.now()
+      this.flushCountersToMetrics()
+    }
 
     window.addEventListener('keydown', this.keydownHandler)
     window.addEventListener('mousemove', this.mousemoveHandler)
@@ -229,6 +232,9 @@ class EmotionDetectionEngine {
     this.flushCountersToMetrics()
 
     this.samplingTimer = setInterval(() => {
+      // 窗口隐藏或用户持续闲置（超过60秒无任何输入/移动），跳过采样，节约 CPU
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (Date.now() - this._lastActivityTime > 60_000) return
       this.flushCountersToMetrics()
     }, SAMPLE_INTERVAL)
   }
@@ -297,6 +303,9 @@ class EmotionDetectionEngine {
     if (this.analysisTimer) clearInterval(this.analysisTimer)
 
     this.analysisTimer = setInterval(() => {
+      // 窗口隐藏或用户持续闲置，跳过复杂的情绪上下文分析
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (Date.now() - this._lastActivityTime > 60_000) return
       this.analyzeAndDetect()
     }, DETECTION_WINDOW)
   }
