@@ -574,6 +574,21 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 免费搜索 =====
   {
+    type: 'remote',
+    id: 'you-search',
+    name: 'You.com Search',
+    description: 'mcpPresets.youSearch.description',
+    category: 'search',
+    icon: 'Search',
+    url: 'https://api.you.com/mcp?profile=free',
+    envConfig: [],
+    defaultAutoApprove: ['you-search'],
+    requiresConfig: false,
+    docsUrl: 'https://github.com/youdotcom-oss/agent-skills',
+    tags: ['search', 'free', 'web', 'remote'],
+    usageExamples: ['mcpPresets.youSearch.usage1', 'mcpPresets.youSearch.usage2'],
+  },
+  {
     type: 'local',
     id: 'duckduckgo',
     name: 'DuckDuckGo Search',
