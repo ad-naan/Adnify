@@ -2609,6 +2609,10 @@ export const zh = {
   'mcpPresets.vercel.usage2': '显示最近的部署',
   'mcpPresets.vercel.usage3': '获取 my-app 的部署日志',
 
+  'mcpPresets.youcomSearch.description': '通过 You.com 托管的 MCP 服务器进行网络搜索，免费档无需 API 密钥',
+  'mcpPresets.youcomSearch.usage1': '搜索 TypeScript 最新发布说明',
+  'mcpPresets.youcomSearch.usage2': '查找这个报错的最新文档',
+
   // mcpSettings
   'mcpSettings.addMcpServersTo': '添加 MCP 服务器来扩展 AI 助手的能力',
   'mcpSettings.adnifyIsFullyCompliant': 'Adnify 完全兼容 MCP 规范，既支持通过 stdio 执行本地服务器指令（支持 Node/Python 运行环境与环境变量 env 注入），也支持基于 SSE (Server-Sent Events) 的远程 HTTP 连接，并具备自动 OAuth2 授权接入能力。',

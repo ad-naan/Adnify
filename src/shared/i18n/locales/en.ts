@@ -2608,6 +2608,10 @@ export const en = {
   'mcpPresets.vercel.usage2': 'Show recent deployments',
   'mcpPresets.vercel.usage3': 'Get deployment logs for my-app',
 
+  'mcpPresets.youcomSearch.description': 'Web search via the You.com hosted MCP server — keyless free profile, no API key required',
+  'mcpPresets.youcomSearch.usage1': 'Search for the latest TypeScript release notes',
+  'mcpPresets.youcomSearch.usage2': 'Find current docs for this error message',
+
   // mcpSettings
   'mcpSettings.addMcpServersTo': 'Add MCP servers to extend AI assistant capabilities',
   'mcpSettings.adnifyIsFullyCompliant': 'Adnify is fully compliant with the MCP spec. It supports running local command-based servers via stdio (with Node/Python env & env var injections) as well as remote SSE (Server-Sent Events) connections equipped with automated OAuth2 authentication flows.',

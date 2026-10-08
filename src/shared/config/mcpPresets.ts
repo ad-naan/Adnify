@@ -592,6 +592,22 @@ export const MCP_PRESETS: McpPreset[] = [
       { type: 'uv', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
+  {
+    type: 'remote',
+    id: 'youcom-search',
+    name: 'You.com Search',
+    description: 'mcpPresets.youcomSearch.description',
+    category: 'search',
+    icon: 'Search',
+    url: 'https://api.you.com/mcp?profile=free',
+    envConfig: [],
+    defaultAutoApprove: ['you-search'],
+    requiresConfig: false,
+    docsUrl: 'https://you.com/platform/api-keys',
+    official: true,
+    tags: ['search', 'free', 'web'],
+    usageExamples: ['mcpPresets.youcomSearch.usage1', 'mcpPresets.youcomSearch.usage2'],
+  },
 
   // ===== 时间工具 =====
   {
