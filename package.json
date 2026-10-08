@@ -94,7 +94,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "diff": "^8.0.2",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.16",
     "electron": "43.6.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
