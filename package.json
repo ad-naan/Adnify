@@ -103,7 +103,7 @@
     "framer-motion": "^12.25.0",
     "iconv-lite": "^0.6.3",
     "js-tiktoken": "^1.0.21",
-    "katex": "^0.16.45",
+    "katex": "^0.18.2",
     "lucide-react": "^0.562.0",
     "monaco-editor": "^0.55.1",
     "onnx-proto": "4.0.4",
