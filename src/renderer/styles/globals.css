@@ -869,7 +869,8 @@ textarea,
 
 /* Conversation disclosures interpolate their intrinsic height without JS
    measurement or max-height guesses. Collapsed content becomes non-focusable
-   through visibility after the transition completes. */
+   through visibility after the transition completes. Durations are mirrored by
+   AGENT_DISCLOSURE_COLLAPSE_MS in src/renderer/agent/presentation/disclosureMotion.ts. */
 .agent-disclosure {
   display: grid;
   grid-template-rows: 0fr;
@@ -877,9 +878,9 @@ textarea,
   overflow-anchor: none;
   visibility: hidden;
   transition:
-    grid-template-rows 460ms cubic-bezier(0.4, 0, 0.2, 1),
+    grid-template-rows 520ms cubic-bezier(0.4, 0, 0.2, 1),
     opacity 320ms ease-in,
-    visibility 0s linear 460ms;
+    visibility 0s linear 520ms;
 }
 
 .agent-disclosure.is-open {
@@ -984,6 +985,21 @@ textarea,
 .tool-activity-time[data-state="error"],
 .tool-activity-time[data-state="idle"] {
   color: rgb(var(--text-muted));
+}
+
+/* Option rows in an interactive card follow the tool rows: decelerating lift on
+   hover, no overshoot. The lift stays under 1px so it reads as feedback rather
+   than as a moving target. */
+.agent-option-row {
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.agent-option-row:hover {
+  transform: translateY(-0.5px);
 }
 
 .tool-row-enter {
@@ -1161,6 +1177,10 @@ textarea,
 
   .tool-row-enter {
     animation: none;
+  }
+
+  .agent-option-row:hover {
+    transform: none;
   }
 
   .agent-disclosure,

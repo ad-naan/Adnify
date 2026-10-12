@@ -1,16 +1,24 @@
 /**
  * 交互式选项卡片组件
  * 用于 ask_user 工具引导用户选择
- * 
+ *
  * 设计风格：与 ToolCallCard 统一的扁平时间线结构
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
-    Check, ChevronDown, CheckCircle2, ArrowRight, Send
+    Check, ChevronDown, CheckCircle2, Send, MessageSquare
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { InteractiveContent } from '@/renderer/agent/types'
+import {
+    AGENT_CONTENT_ENTER_TRANSITION,
+} from '@/renderer/agent/presentation/disclosureMotion'
+import {
+    decideCustomDraftVisibility,
+    isCustomOption,
+    resolveInteractiveSubmission,
+} from '@/renderer/agent/utils/interactiveResponse'
 import { useStore } from '@store'
 import { t } from '@shared/i18n'
 import SmoothCollapse from './SmoothCollapse'
@@ -20,14 +28,6 @@ interface InteractiveCardProps {
     content: InteractiveContent
     onSelect: (selectedIds: string[], customText?: string) => void
     disabled?: boolean
-}
-
-/** 检测是否是自定义/其他类型的选项 */
-const isCustomOption = (option: { id: string; label: string }) => {
-    const id = option.id.toLowerCase()
-    const label = option.label.toLowerCase()
-    return /(^|[-_])(custom|other)([-_]|$)/.test(id)
-        || ['其他', '自定义', 'custom', 'other'].includes(label.trim())
 }
 
 export function InteractiveCard({ content, onSelect, disabled }: InteractiveCardProps) {
@@ -64,81 +64,73 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
         }
     }, [showCustomInput])
 
+    const isMulti = Boolean(content.multiSelect)
+
+    const submission = resolveInteractiveSubmission(content.options, Array.from(selected), customText)
+    const hasCustomText = customText.trim().length > 0
+    const hasSelectedOption = selected.size > 0
+    const canSubmit = Boolean(submission) && !disabled && !submitted
+
+    const submit = useCallback(() => {
+        if (!submission || submittedRef.current) return
+        submittedRef.current = true
+        setSubmitted(true)
+        onSelect(submission.ids, submission.kind === 'custom' ? submission.text : undefined)
+        closeExpanded()
+    }, [closeExpanded, onSelect, submission])
+
+    /**
+     * 选项行点下去只做一件事：选中/取消选中。
+     *
+     * 单选不再"点完即发送"：提交点收敛到确认按钮和回车，这样点错了还能改，
+     * 自定义文本和选项之间也不会互相覆盖。多选和单选共用这一段，
+     * 区别只在"选下一个"要不要清空上一个。
+     */
     const handleToggle = useCallback((id: string) => {
         if (disabled || submittedRef.current) return
 
-        const option = content.options.find(o => o.id === id)
-        const isCustom = option && isCustomOption(option)
-
         setSelected(prev => {
             const next = new Set(prev)
-            if (content.multiSelect) {
-                if (next.has(id)) {
-                    next.delete(id)
-                    if (isCustom) setShowCustomInput(false)
-                } else {
-                    next.add(id)
-                    if (isCustom) setShowCustomInput(true)
-                }
-            } else {
-                next.clear()
+            if (next.has(id)) next.delete(id)
+            else {
+                if (!isMulti) next.clear()
                 next.add(id)
-                // 自定义选项：显示输入框，不立即提交
-                if (isCustom) {
-                    setShowCustomInput(true)
-                    return next
-                }
-                setShowCustomInput(false)
             }
             return next
         })
+    }, [disabled, isMulti])
 
-        // 单选 + 非自定义：立即提交
-        if (!content.multiSelect && !(option && isCustomOption(option))) {
-            submittedRef.current = true
-            setSubmitted(true)
-            onSelect([id])
-            closeExpanded()
-        }
-    }, [closeExpanded, content.multiSelect, content.options, disabled, onSelect])
-
-    const handleSubmit = useCallback(() => {
-        if (selected.size === 0 || submittedRef.current) return
-
-        // 检查是否有自定义选项并携带文本
-        const selectedArr = Array.from(selected)
-        const hasCustom = selectedArr.some(id => {
-            const opt = content.options.find(o => o.id === id)
-            return opt && isCustomOption(opt)
-        })
-
-        submittedRef.current = true
-        setSubmitted(true)
-        onSelect(selectedArr, hasCustom && customText.trim() ? customText.trim() : undefined)
-        closeExpanded()
-    }, [closeExpanded, selected, onSelect, customText, content.options])
-
-    const handleCustomSubmit = useCallback(() => {
-        if (!customText.trim() || submittedRef.current) return
-        submittedRef.current = true
-        setSubmitted(true)
-        onSelect(Array.from(selected), customText.trim())
-        closeExpanded()
-    }, [closeExpanded, customText, selected, onSelect])
-
-    const toggleCustomInput = useCallback(() => {
+    /**
+     * 自定义行：开关输入框。"自定义回答"本身也是一个选项，勾上它输入框才出现，
+     * 于是"写点什么"和"选一项"在提交时是同一条路。
+     */
+    const handleCustomRowToggle = useCallback(() => {
         if (disabled || submittedRef.current) return
-        setShowCustomInput(current => !current)
-        if (!content.multiSelect) setSelected(new Set())
-    }, [content.multiSelect, disabled])
 
-    const isMulti = content.multiSelect
+        const willOpen = !showCustomInput
+        setShowCustomInput(willOpen)
+
+        const customId = content.options.find(isCustomOption)?.id
+        if (!customId) return
+        setSelected(prev => {
+            const next = new Set(prev)
+            // 取消勾选时手上还有草稿就先留着 —— 用户多半只是想看看别的选项。
+            if (next.has(customId)) {
+                if (!decideCustomDraftVisibility(true, customText)) next.delete(customId)
+            } else {
+                if (!isMulti) next.clear()
+                next.add(customId)
+            }
+            return next
+        })
+    }, [content.options, customText, disabled, isMulti, showCustomInput])
 
     // 已选择的选项标签
-    const selectedLabels = content.options
+    const selectedLabels = useMemo(() => content.options
         .filter(o => selected.has(o.id))
         .map(o => o.label)
-        .join(', ')
+        .join(', '), [content.options, selected])
+    const answerSummary = customText.trim() || selectedLabels
 
     return (
         <div className={`group my-0.5 relative rounded-lg overflow-hidden transition-colors ${submitted
@@ -147,12 +139,12 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
             }`}>
             {/* Header */}
             <div
-                className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
+                className="flex min-h-9 items-center gap-2 py-1.5 cursor-pointer select-none"
                 onClick={toggleExpanded}
             >
                 <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-transform duration-300 hover:text-text-muted motion-reduce:transition-none ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
 
-                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+                <div className="shrink-0 w-3.5 h-3.5 flex items-center justify-center">
                     {submitted ? (
                         <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
                             <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
@@ -164,6 +156,8 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                     )}
                 </div>
 
+                <MessageSquare className="h-3.5 w-3.5 shrink-0 text-text-muted/55" aria-hidden="true" />
+
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span className={`text-[12px] truncate ${submitted
                         ? 'text-text-secondary group-hover:text-text-primary transition-colors'
@@ -171,9 +165,9 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                         }`}>
                         {content.question}
                     </span>
-                    {!isExpanded && submitted && (
+                    {!isExpanded && submitted && answerSummary && (
                         <span className="text-[11px] text-text-muted/40 truncate">
-                            — {selectedLabels}
+                            - {answerSummary}
                         </span>
                     )}
                 </div>
@@ -181,153 +175,177 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
 
             {/* Expanded Content */}
             <SmoothCollapse open={isExpanded}>
-                        <div className="pl-[26px] pr-3 pb-2 pt-0 relative border-t-0">
-                            <div className="absolute left-[13.5px] top-0 bottom-2 w-[1.5px] bg-border/40 rounded-full" />
+                <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
+                    <div className="absolute left-[13.5px] top-0 bottom-3 w-[1.5px] bg-border/40 rounded-full" />
 
-                            {/* Options */}
-                            <div className="relative z-10 mt-1 space-y-0.5">
-                                {content.options.map((option, index) => {
-                                    const isSelected = selected.has(option.id)
-                                    const isDisabled = disabled || submitted
+                    {/* Options */}
+                    <div className="relative z-10 mt-1 space-y-0.5">
+                        {content.options.map((option, index) => {
+                            const isSelected = selected.has(option.id)
+                            const isDisabled = disabled || submitted
 
-                                    return (
-                                        <motion.button
-                                            key={option.id}
-                                            initial={{ opacity: 0, x: -8 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.03 }}
-                                            onClick={() => handleToggle(option.id)}
-                                            disabled={isDisabled}
-                                            className={`
-                                                w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left
-                                                transition-all duration-150
-                                                ${isSelected
-                                                    ? 'bg-accent/10 text-text-primary'
-                                                    : 'hover:bg-surface-hover/50 text-text-secondary'
-                                                }
-                                                ${isDisabled ? 'opacity-50 cursor-default' : 'cursor-pointer'}
-                                            `}
-                                        >
-                                            <div className={`
-                                                w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-all
-                                                ${isSelected
-                                                    ? 'bg-accent border-accent'
-                                                    : 'border-text-muted/30 group-hover:border-accent/50'
-                                                }
-                                            `}>
-                                                {isSelected && <Check className="w-2 h-2 text-white" strokeWidth={3} />}
-                                            </div>
+                            return (
+                                <motion.button
+                                    key={option.id}
+                                    type="button"
+                                    initial={{ opacity: 0, x: -8 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{
+                                        ...AGENT_CONTENT_ENTER_TRANSITION,
+                                        delay: index * 0.03,
+                                    }}
+                                    onClick={() => handleToggle(option.id)}
+                                    disabled={isDisabled}
+                                    aria-pressed={isSelected}
+                                    className={`
+                                        agent-option-row
+                                        w-full flex items-start gap-2.5 px-2.5 py-2 rounded-md text-left
+                                        ${isSelected
+                                            ? 'bg-accent/10 text-text-primary'
+                                            : 'hover:bg-surface-hover/50 text-text-secondary'
+                                        }
+                                        ${isDisabled ? 'opacity-50 cursor-default' : 'cursor-pointer'}
+                                    `}
+                                >
+                                    <OptionMark kind={isMulti ? 'checkbox' : 'radio'} isSelected={isSelected} />
 
-                                            <div className="flex-1 min-w-0">
-                                                <span className={`text-[12px] font-medium block truncate ${isSelected ? 'text-text-primary' : ''}`}>
-                                                    {option.label}
-                                                </span>
-                                                {option.description && (
-                                                    <span className="text-[10px] text-text-muted block truncate mt-0.5">
-                                                        {option.description}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </motion.button>
-                                    )
-                                })}
-                            </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span className={`text-[12px] font-medium block truncate ${isSelected ? 'text-text-primary' : ''}`}>
+                                            {option.label}
+                                        </span>
+                                        {option.description && (
+                                            <span className="text-[10px] text-text-muted block truncate mt-0.5">
+                                                {option.description}
+                                            </span>
+                                        )}
+                                    </div>
+                                </motion.button>
+                            )
+                        })}
 
-                            {!submitted && (
+                        {!submitted && (() => {
+                            // 有些问题会把"自定义/其他"当普通选项给出，那一行就自己带输入框，
+                            // 不再额外画一条 —— 同一个意思不该出现两次。
+                            const customOption = content.options.find(isCustomOption)
+                            return (
                                 <button
                                     type="button"
-                                    onClick={toggleCustomInput}
-                                    className={`relative z-10 mt-1.5 w-full rounded-md border border-dashed px-2.5 py-2 text-left text-[11px] transition-colors ${showCustomInput
-                                        ? 'border-accent/45 bg-accent/10 text-text-primary'
-                                        : 'border-border/60 text-text-muted hover:border-accent/35 hover:text-text-secondary'
+                                    onClick={customOption ? () => handleToggle(customOption.id) : handleCustomRowToggle}
+                                    aria-pressed={customOption ? selected.has(customOption.id) : showCustomInput}
+                                    className={`agent-option-row relative z-10 flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left cursor-pointer ${showCustomInput
+                                        ? 'bg-accent/10 text-text-primary'
+                                        : 'hover:bg-surface-hover/50 text-text-secondary'
                                     }`}
                                 >
-                                    {t('common.customResponse', language)}
+                                    <OptionMark kind={customOption ? (isMulti ? 'checkbox' : 'radio') : 'custom'} isSelected={showCustomInput} />
+                                    <span className="min-w-0 flex-1 text-[12px] font-medium truncate">
+                                        {customOption?.label ?? t('common.customResponse', language)}
+                                    </span>
                                 </button>
-                            )}
+                            )
+                        })()}
+                    </div>
 
-                            {/* Custom Text Input */}
-                            <AnimatePresence>
-                                {showCustomInput && !submitted && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        transition={{ duration: 0.2 }}
-                                        className="relative z-10 mt-2"
-                                    >
-                                        <div className="relative">
-                                            <textarea
-                                                ref={inputRef}
-                                                value={customText}
-                                                onChange={e => setCustomText(e.target.value)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                                        e.preventDefault()
-                                                        handleCustomSubmit()
-                                                    }
-                                                }}
-                                                placeholder={t('interactiveCard.typeYourCustomResponse', language)}
-                                                rows={2}
-                                                className="w-full px-3 py-2 pr-10 text-[12px] text-text-primary bg-surface/60 border border-border/50 rounded-lg resize-none focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 placeholder:text-text-muted/40 transition-all custom-scrollbar"
-                                            />
-                                            <button
-                                                onClick={handleCustomSubmit}
-                                                disabled={!customText.trim()}
-                                                className={`absolute right-2 bottom-2 p-1 rounded-md transition-all ${customText.trim()
-                                                    ? 'text-accent hover:bg-accent/10 active:scale-90'
-                                                    : 'text-text-muted/30 cursor-not-allowed'
-                                                    }`}
-                                                title={t('interactiveCard.send', language)}
-                                            >
-                                                <Send className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            {/* Multi-select Confirm */}
-                            {isMulti && !submitted && !showCustomInput && (
-                                <div className="mt-2 flex justify-end relative z-10">
-                                    <button
-                                        onClick={handleSubmit}
-                                        disabled={selected.size === 0}
-                                        className={`
-                                            flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium rounded-md transition-all
-                                            ${selected.size > 0
-                                                ? 'bg-accent text-white hover:bg-accent-hover active:scale-95'
-                                                : 'bg-surface/50 text-text-muted cursor-not-allowed'
+                    {/* Custom Text Input */}
+                    <AnimatePresence initial={false}>
+                        {showCustomInput && !submitted && (
+                            <motion.div
+                                key="custom-input"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={AGENT_CONTENT_ENTER_TRANSITION}
+                                className="relative z-10 ml-[24px] mt-1.5 overflow-hidden"
+                            >
+                                <div className="relative">
+                                    <textarea
+                                        ref={inputRef}
+                                        value={customText}
+                                        onChange={e => setCustomText(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                submit()
                                             }
-                                        `}
+                                        }}
+                                        placeholder={t('interactiveCard.typeYourCustomResponse', language)}
+                                        rows={2}
+                                        className="w-full px-3 py-2 pr-10 text-[12px] text-text-primary bg-surface/60 border border-border/50 rounded-lg resize-none focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 placeholder:text-text-muted/40 transition-all custom-scrollbar"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={submit}
+                                        disabled={!canSubmit}
+                                        className={`absolute right-2 bottom-2 p-1 rounded-md transition-all ${canSubmit
+                                            ? 'text-accent hover:bg-accent/10 active:scale-90'
+                                            : 'text-text-muted/30 cursor-not-allowed'
+                                            }`}
+                                        title={t('interactiveCard.send', language)}
                                     >
-                                        <span>{t('interactiveCard.confirm', language, { size: selected.size })}</span>
-                                        <ArrowRight className="w-3 h-3" />
+                                        <Send className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
-                            )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                            {/* Multi-select with custom: show submit that includes custom text */}
-                            {isMulti && !submitted && showCustomInput && (
-                                <div className="mt-2 flex justify-end relative z-10">
-                                    <button
-                                        onClick={handleSubmit}
-                                        disabled={selected.size === 0}
-                                        className={`
-                                            flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium rounded-md transition-all
-                                            ${selected.size > 0
-                                                ? 'bg-accent text-white hover:bg-accent-hover active:scale-95'
-                                                : 'bg-surface/50 text-text-muted cursor-not-allowed'
-                                            }
-                                        `}
-                                    >
-                                        <span>{t('interactiveCard.confirm', language, { size: selected.size })}</span>
-                                        <ArrowRight className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            )}
+                    {/* 同一个提交点：选项和自定义回答都从这里出去，回车等价于点它 */}
+                    {!submitted && (
+                        <div className="mt-2 flex items-center justify-between gap-3 relative z-10">
+                            <span className="min-w-0 text-[10px] leading-4 text-text-muted/60">
+                                {hasCustomText
+                                    ? t('interactiveCard.pressEnterToSend', language)
+                                    : hasSelectedOption
+                                        ? ''
+                                        : isMulti
+                                            ? t('interactiveCard.pickOneOrMore', language)
+                                            : t('interactiveCard.pickOneOption', language)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={submit}
+                                disabled={!canSubmit}
+                                className={`
+                                    flex shrink-0 items-center gap-1.5 px-3 py-1 min-h-7 text-[11px] font-medium rounded-md transition-all
+                                    ${canSubmit
+                                        ? 'bg-accent text-white hover:bg-accent-hover active:scale-95'
+                                        : 'bg-surface/50 text-text-muted/70 cursor-not-allowed'
+                                    }
+                                `}
+                            >
+                                <span>{isMulti
+                                    ? t('interactiveCard.confirm', language, { size: selected.size })
+                                    : t('interactiveCard.sendAnswer', language)}</span>
+                                <Send className="w-3 h-3" />
+                            </button>
                         </div>
+                    )}
+                </div>
             </SmoothCollapse>
         </div>
+    )
+}
+
+/**
+ * 选项前的标记：单选画圆点、多选画方块、自定义画发送箭头。
+ * 形状差异先于文字被读到，所以按控件类型区分，而不是只靠主题色。
+ */
+function OptionMark({ kind, isSelected }: { kind: 'radio' | 'checkbox' | 'custom'; isSelected: boolean }) {
+    const shape = kind === 'radio' ? 'rounded-full' : kind === 'checkbox' ? 'rounded-[4px]' : 'rounded-full'
+
+    return (
+        <span
+            aria-hidden="true"
+            className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center border transition-colors duration-150 ${shape} ${isSelected
+                ? 'border-accent bg-accent text-white'
+                : 'border-text-muted/30 text-text-muted/50'
+                }`}
+        >
+            {isSelected
+                ? <Check className="w-2 h-2" strokeWidth={3} />
+                : kind === 'custom'
+                    ? <Send className="w-1.5 h-1.5" />
+                    : null}
+        </span>
     )
 }

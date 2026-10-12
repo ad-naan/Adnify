@@ -2295,6 +2295,10 @@ export const en = {
   // interactiveCard
   'interactiveCard.confirm': 'Confirm ({size})',
   'interactiveCard.send': 'Send',
+  'interactiveCard.sendAnswer': 'Send answer',
+  'interactiveCard.pickOneOption': 'Pick one option, then send',
+  'interactiveCard.pickOneOrMore': 'Pick one or more options, then send',
+  'interactiveCard.pressEnterToSend': 'Press Enter to send, Shift+Enter for a new line',
   'interactiveCard.typeYourCustomResponse': 'Type your custom response...',
 
   // kaomojiPet

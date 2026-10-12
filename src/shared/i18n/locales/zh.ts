@@ -2296,6 +2296,10 @@ export const zh = {
   // interactiveCard
   'interactiveCard.confirm': '确认 ({size})',
   'interactiveCard.send': '发送',
+  'interactiveCard.sendAnswer': '发送回答',
+  'interactiveCard.pickOneOption': '选中一项后发送',
+  'interactiveCard.pickOneOrMore': '选好一项或多项后发送',
+  'interactiveCard.pressEnterToSend': '回车发送，Shift+回车换行',
   'interactiveCard.typeYourCustomResponse': '请输入自定义内容...',
 
   // kaomojiPet

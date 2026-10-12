@@ -151,7 +151,7 @@ export function buildToolRoutingContract(ctx: PromptContractContext): string | n
     add('Validation', [tools.has('get_diagnostics') && '`get_diagnostics` for changed source; include referencing symbols after public API changes', tools.has('run_command') && '`run_command` for focused tests/builds'].filter(Boolean).join('; '), 'Do not run broad validation when a narrower check gives adequate evidence.')
   }
   if (tools.has('ask_user')) {
-    add('Clarify user requirements, choose between implementation options, or resolve product/architectural decisions', '`ask_user` with concise options and clear impact descriptions', 'Provide a small set of materially different choices with options so the user can easily click to select. Once answered, immediately proceed using the selected option.')
+    add('Clarify user requirements, choose between implementation options, or resolve product/architectural decisions', '`ask_user` with concise options and clear impact descriptions', 'Provide a small set of materially different choices so the user can click to select; the user submits the answer after selecting, so never rely on pick order to carry meaning. Once answered, immediately proceed using the selected option.')
   }
 
   if (rows.length === 0) return null
@@ -212,7 +212,7 @@ ${tools.has('browser_open') && tools.has('browser_action') ? `- Activate/open mi
     addChain('Plan workflow: turn discovered requirements into an executable task graph, update the existing graph when evidence changes it, start execution from the reviewed plan, and report meaningful milestones from real task state. The plan is shared operational state, not a prose duplicate.')
   }
   if (tools.has('ask_user')) {
-    addChain('User decision: present a small set of materially different choices with ask_user whenever user preference, requirement ambiguity, or architectural trade-offs have multiple valid paths; include the impact of each choice so the user can easily click to decide, and immediately drive the next implementation step from the selected option.')
+    addChain('User decision: present a small set of materially different choices with ask_user whenever user preference, requirement ambiguity, or architectural trade-offs have multiple valid paths; include the impact of each choice so the user can easily click to decide — the user selects an option and submits, so state the recommendation in the option description instead of relying on option order — and immediately drive the next implementation step from the selected option.')
   }
 
   const collaboration = chains.length > 0 ? `

@@ -239,6 +239,15 @@ if (!global.crypto?.randomUUID) {
 }
 
 // Mock mainWindow for monaco-editor
+//
+// 只给 `location`：这两个门本来是给 monaco 的模块级代码用的（`mainWindow.location`
+// 那几行在 import 阶段就跑）。补 `document.defaultView` 会顺带把 react-dom 的浏览器
+// 分支点着 —— 它比 monaco 更早 import，一见 `window.document` 就认为有真正的 DOM，
+// 于是 node 环境下直接 "document is not defined"。
+//
+// 也因此：不要在 node 环境的测试里 import 组件。任何一路拉进 monaco 的 import 都会
+// 在加载阶段撞上这些门，组件本身也就测不了 —— 会变的判断请像
+// `agent/utils/interactiveResponse.ts` 那样拆成纯函数再测。
 global.mainWindow = {
   location: {
     href: 'http://localhost:3000',

@@ -1089,16 +1089,19 @@ TIPS:
         detailedDescription: `Present interactive options to the user and wait for their selection.
 - Use to gather requirements, preferences, or confirmations
 - Options are displayed as clickable cards
-- Supports single or multiple selection
-- The tool blocks until user makes a selection`,
+- Single-select: the user picks one option, then submits the answer
+- Multi-select (multi_select=true): the user toggles any number of options, then confirms
+- The user can always answer with free text instead of the listed options
+- The tool blocks until the user submits an answer`,
         examples: [
             'ask_user question="What type of task?" options=[{id:"feature",label:"New Feature"},{id:"bugfix",label:"Bug Fix"}]',
             'ask_user question="Which files to modify?" options=[...] multi_select=true',
         ],
         criticalRules: [
             'Use to gather requirements, preferences, or confirmations',
-            'Keep options concise and clear',
-            'Provide descriptions for complex options',
+            'Keep option labels to a few words; put the reasoning and trade-offs in the option description, which the card renders under the label',
+            'The option order carries no meaning — the user clicks one and then submits, so mark a recommendation in the description instead of listing it first',
+            'Ask about one decision per call; each answer comes back as that decision’s text, so merged questions cannot be answered precisely',
         ],
         category: 'interaction',
         approvalType: 'none',
@@ -1111,7 +1114,7 @@ TIPS:
         requiresWorkspace: false,
         enabled: true,
         parameters: {
-            question: { type: 'string', description: 'Question to ask the user', required: true },
+            question: { type: 'string', description: 'Question to ask the user. Ask about a single decision; the answer comes back as the selected labels or the free-form text, not as structured data', required: true },
             options: {
                 type: 'array',
                 description: 'Options for user to select from',
@@ -1124,11 +1127,11 @@ TIPS:
                         id: { type: 'string', description: 'Unique option ID' },
                         value: { type: 'string', description: 'Alternative to id (will be used as id if id is not provided)' },
                         label: { type: 'string', description: 'Display label', required: true },
-                        description: { type: 'string', description: 'Optional description' },
+                        description: { type: 'string', description: 'What choosing this option means, including its trade-off — this is where the reasoning belongs' },
                     },
                 },
             },
-            multi_select: { type: 'boolean', description: 'Allow selecting multiple options (default: false)', default: false },
+            multi_select: { type: 'boolean', description: 'Allow selecting multiple options. Each toggled option stays selectable and the user confirms when done (default: false)', default: false },
         },
     },
 
