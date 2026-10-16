@@ -594,9 +594,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 右键菜单
   const handleContextMenu = useCallback((e: React.MouseEvent, node: FlattenedNode) => {
+    if (node.item.name === '__creating__' || renamingPath === node.item.path) return
     e.preventDefault()
     e.stopPropagation()
-    if (node.item.name === '__creating__') return
     setFocusedPath(node.item.path)
     const abortController = new AbortController()
     gitExcludeMenuAbortRef.current?.abort()

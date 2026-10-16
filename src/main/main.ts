@@ -570,6 +570,43 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
   registerWindowDiagnostics(win)
 
+  const showNativeContextMenu = (contents: Electron.WebContents, params: Electron.ContextMenuParams) => {
+    if (!params.isEditable && !params.selectionText) return
+    const language = asLanguage(configStore?.get('language') as string | undefined)
+    const template: Electron.MenuItemConstructorOptions[] = []
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo', label: t('appMenu.undo', language), enabled: params.editFlags.canUndo },
+        { role: 'redo', label: t('appMenu.redo', language), enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', label: t('appMenu.cut', language), enabled: params.editFlags.canCut },
+        { role: 'copy', label: t('copy', language), enabled: params.editFlags.canCopy },
+        { role: 'paste', label: t('paste', language), enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', label: t('selectAll', language), enabled: params.editFlags.canSelectAll },
+      )
+    } else if (params.selectionText) {
+      template.push(
+        { role: 'copy', label: t('copy', language), enabled: params.editFlags.canCopy },
+        { type: 'separator' },
+        { role: 'selectAll', label: t('selectAll', language), enabled: params.editFlags.canSelectAll },
+      )
+    }
+    if (template.length > 0) {
+      Menu.buildFromTemplate(template).popup({ window: win })
+    }
+  }
+
+  win.webContents.on('context-menu', (_event, params) => {
+    showNativeContextMenu(win.webContents, params)
+  })
+
+  win.webContents.on('did-attach-webview', (_event, webContents) => {
+    webContents.on('context-menu', (_e, params) => {
+      showNativeContextMenu(webContents, params)
+    })
+  })
+
   const windowId = win.id
   windows.set(windowId, win)
   lastActiveWindow = win

@@ -8,6 +8,7 @@ import { ToastProvider, useToast, setGlobalToast } from './components/common/Toa
 import { GlobalConfirmDialog } from './components/common/ConfirmDialog'
 import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
 import GlobalToastContainer from './components/common/GlobalToastContainer'
+import { GlobalContextMenu } from './components/common/GlobalContextMenu'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import WorkspaceWorkbench from './components/layout/WorkspaceWorkbench'
@@ -171,6 +172,7 @@ function AppContent() {
 
       <GlobalConfirmDialog />
       <GlobalToastContainer />
+      <GlobalContextMenu />
     </DecorativeAnimationScope>
   )
 }

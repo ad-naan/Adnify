@@ -82,6 +82,7 @@ export const ContextMenu = memo(function ContextMenu({ x, y, items, onClose }: C
         return (
           <button
             key={item.id}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => handleItemClick(item)}
             disabled={item.disabled}
             className={`
