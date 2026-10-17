@@ -69,6 +69,109 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.71",
+    "rawVersion": "1.7.71",
+    "date": "2026-10-17",
+    "title": "全局右键菜单、交互卡片体验升级与 Token 性能优化",
+    "titleEn": "Global Context Menu, Interactive Card Refinements & Token Performance Optimization",
+    "highlight": "引入全局输入与选区右键上下文菜单，支持 Electron 原生与自定义多级操作；深度重构 ask_user 交互卡片，优化单选/多选交互、草稿保留与快捷键体验；优化 Token 估算算法并支持词表空闲预加载；增加后台与闲置状态下的采样挂起机制以降低 CPU 开销；升级多项安全依赖并加固测试环境。",
+    "highlightEn": "Introduces a global context menu for text inputs and selections with native and custom support. Deeply refactors ask_user interactive cards with improved single/multi-select flows, draft preservation, and keyboard shortcuts. Optimizes token estimation with idle vocabulary preloading. Suspends background and idle sampling to reduce CPU consumption. Upgrades critical security dependencies and hardens test harnesses.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "全局上下文菜单与输入体验 / Global Context Menu and Input Experience",
+        "labelEn": "Global Context Menu and Input Experience",
+        "items": [
+          {
+            "title": "全局输入与选区右键上下文菜单",
+            "titleEn": "Global Context Menu for Input and Selection",
+            "details": [
+              "为应用内文本输入框（input、textarea、contenteditable）及页面选中文本提供全局右键上下文菜单，支持撤销、重做、剪切、复制、粘贴与全选等标准操作。",
+              "主进程监听 context-menu 与 did-attach-webview 事件，动态适配多语言文案与系统级快捷键提示；渲染端精确识别各类只读、禁用与密码输入状态并提供回退支持。"
+            ],
+            "detailsEn": [
+              "Introduces a global context menu for text inputs (input, textarea, contenteditable) and selection text across the app, supporting undo, redo, cut, copy, paste, and select-all actions.",
+              "Main process listens to context-menu and did-attach-webview events, dynamically binding localized action labels and platform keybindings while accurately detecting read-only, disabled, and password fields."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "Agent 交互决策与交互卡片 / Agent Decision and Interactive Cards",
+        "labelEn": "Agent Decision and Interactive Cards",
+        "items": [
+          {
+            "title": "交互决策卡片（ask_user）体验重构与提示合约优化",
+            "titleEn": "Interactive Card (ask_user) Refactoring and Prompt Contract Updates",
+            "details": [
+              "重构 ask_user 交互卡片的提交流程与草稿管理，抽取 resolveInteractiveSubmission 等纯函数，支持单选确认、多选批量发送与草稿输入实时保留。",
+              "新增交互指引文案并优化快捷键操作：支持单选确认、多选批量提交，支持回车发送与 Shift+回车换行。",
+              "强化系统提示词与工具参数规范，明确 ask_user 决策粒度为单次单问题，通过选项 description 沉淀各方案利弊权衡（trade-off）。"
+            ],
+            "detailsEn": [
+              "Refactored the submission flow and draft management of ask_user interactive cards into pure decision functions, supporting single-choice confirmation, multi-select batch submissions, and persistent draft inputs.",
+              "Added clear interaction guide copy and refined keyboard navigation: supports Enter to submit, Shift+Enter for newline, with explicit single-choice and multi-select prompts.",
+              "Strengthened system prompt contracts and tool parameter specifications, enforcing single-decision scope per ask_user call with option descriptions dedicated to trade-off analysis."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "性能优化与系统响应 / Performance and System Responsiveness",
+        "labelEn": "Performance and System Responsiveness",
+        "items": [
+          {
+            "title": "Token 快速估算与首屏启动优化",
+            "titleEn": "Fast Token Estimation and Cold-Start Optimization",
+            "details": [
+              "优化 Token fallback 估算算法，采用高效纯字符编码循环遍历代替正则表达式匹配，显著降低超长文本的计算开销。",
+              "应用启动后利用 requestIdleCallback 空闲调度机制异步预加载 Token 编码器词表，避免首条对话发送时因编译与词表加载引发界面卡顿。"
+            ],
+            "detailsEn": [
+              "Optimized fallback token estimation using efficient character code loops instead of regex matching, significantly reducing computation overhead on large text.",
+              "Preloads the token encoder vocabulary via requestIdleCallback during idle application startup to eliminate cold-start thread stalls on the first message."
+            ]
+          },
+          {
+            "title": "后台闲置资源挂起与状态持久化调度",
+            "titleEn": "Background Idle Throttling and Persistence Scheduling",
+            "details": [
+              "在窗口隐藏（document.hidden）或用户闲置超过 60 秒时，自动暂停情绪检测引擎的指标采样与深度分析，并挂起情绪历史与工具耗时计时器，降低后台 CPU 占用。",
+              "优化会话检查点状态持久化策略，引入排程防抖调度写入，消除高频变更下的界面卡顿；支持 data-decorative-motion='off' 属性关闭动态微光动效。"
+            ],
+            "detailsEn": [
+              "Automatically pauses emotion detection metrics sampling, analysis, emotion history polling, and tool elapsed timers when the window is hidden or idle for over 60 seconds, reducing idle CPU usage.",
+              "Optimized session checkpoint persistence with scheduled debounced writes to prevent UI lag during frequent state mutations, and added data-decorative-motion='off' support to freeze decorative shimmer effects."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "依赖安全与工程加固 / Dependencies and Infrastructure",
+        "labelEn": "Dependencies and Infrastructure",
+        "items": [
+          {
+            "title": "依赖包安全升级与测试环境加固",
+            "titleEn": "Dependency Security Updates and Test Harness Hardening",
+            "details": [
+              "升级 pnpm-workspace.yaml 中的依赖项安全覆盖（包含 brace-expansion、fast-uri、ip-address、undici、sharp、katex、dompurify 等），修复潜在漏洞。",
+              "修复测试运行环境中的 FakeHTMLElement 事件目标继承，完善事件派发与模拟测试环境隔离。"
+            ],
+            "detailsEn": [
+              "Updated dependency security overrides in pnpm-workspace.yaml (including brace-expansion, fast-uri, ip-address, undici, sharp, katex, dompurify, etc.) to address potential vulnerabilities.",
+              "Fixed FakeHTMLElement event target inheritance in unit tests, ensuring robust event dispatching and environment isolation."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.70",
     "rawVersion": "1.7.70",
     "date": "2026-09-23",
@@ -76,8 +179,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Interactive Decision Tool, Rotary Dial Knob & Realistic Browser Automation",
     "highlight": "引入 ask_user 核心决策工具，支持结构化可选项一键确认；思考强度全面重构为 270° 拟物金属滚花旋钮并完善 ARIA 无障碍访问；浏览器自动化新增元素 ID 支持与拟人化贝塞尔曲线鼠标交互；上下文压缩增强关键决策与用户约束追踪；优化流式期间 GPU 与终端性能，扩充多维度系统压测套件。",
     "highlightEn": "Introduces the ask_user core decision tool for fast structured option confirmations. Reimagines reasoning effort controls with a 270° physical milled rotary dial knob and full ARIA accessibility. Enhances browser automation with element ID targeting and realistic Bezier-curve mouse interactions. Context compression now retains key decisions and user constraints. Optimizes streaming GPU and terminal performance, and introduces comprehensive stress test suites.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",

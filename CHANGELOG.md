@@ -4,6 +4,36 @@
 
 ---
 
+## [1.7.71] - 2026-10-17 全局右键菜单、交互卡片体验升级与 Token 性能优化
+
+> **版本亮点**：引入全局输入与选区右键上下文菜单，支持 Electron 原生与自定义多级操作；深度重构 ask_user 交互卡片，优化单选/多选交互、草稿保留与快捷键体验；优化 Token 估算算法并支持词表空闲预加载；增加后台与闲置状态下的采样挂起机制以降低 CPU 开销；升级多项安全依赖并加固测试环境。
+
+### 全局上下文菜单与输入体验 / Global Context Menu and Input Experience
+- **全局输入与选区右键上下文菜单**
+  - 为应用内文本输入框（input、textarea、contenteditable）及页面选中文本提供全局右键上下文菜单，支持撤销、重做、剪切、复制、粘贴与全选等标准操作。
+  - 主进程监听 context-menu 与 did-attach-webview 事件，动态适配多语言文案与系统级快捷键提示；渲染端精确识别各类只读、禁用与密码输入状态并提供回退支持。
+
+### Agent 交互决策与交互卡片 / Agent Decision and Interactive Cards
+- **交互决策卡片（ask_user）体验重构与提示合约优化**
+  - 重构 ask_user 交互卡片的提交流程与草稿管理，抽取 resolveInteractiveSubmission 等纯函数，支持单选确认、多选批量发送与草稿输入实时保留。
+  - 新增交互指引文案并优化快捷键操作：支持单选确认、多选批量提交，支持回车发送与 Shift+回车换行。
+  - 强化系统提示词与工具参数规范，明确 ask_user 决策粒度为单次单问题，通过选项 description 沉淀各方案利弊权衡（trade-off）。
+
+### 性能优化与系统响应 / Performance and System Responsiveness
+- **Token 快速估算与首屏启动优化**
+  - 优化 Token fallback 估算算法，采用高效纯字符编码循环遍历代替正则表达式匹配，显著降低超长文本的计算开销。
+  - 应用启动后利用 requestIdleCallback 空闲调度机制异步预加载 Token 编码器词表，避免首条对话发送时因编译与词表加载引发界面卡顿。
+- **后台闲置资源挂起与状态持久化调度**
+  - 在窗口隐藏（document.hidden）或用户闲置超过 60 秒时，自动暂停情绪检测引擎的指标采样与深度分析，并挂起情绪历史与工具耗时计时器，降低后台 CPU 占用。
+  - 优化会话检查点状态持久化策略，引入排程防抖调度写入，消除高频变更下的界面卡顿；支持 data-decorative-motion='off' 属性关闭动态微光动效。
+
+### 依赖安全与工程加固 / Dependencies and Infrastructure
+- **依赖包安全升级与测试环境加固**
+  - 升级 pnpm-workspace.yaml 中的依赖项安全覆盖（包含 brace-expansion、fast-uri、ip-address、undici、sharp、katex、dompurify 等），修复潜在漏洞。
+  - 修复测试运行环境中的 FakeHTMLElement 事件目标继承，完善事件派发与模拟测试环境隔离。
+
+---
+
 ## [1.7.70] - 2026-09-23 交互决策工具、拟物思考旋钮与浏览器拟人化自动化
 
 > **版本亮点**：引入 ask_user 核心决策工具，支持结构化可选项一键确认；思考强度全面重构为 270° 拟物金属滚花旋钮并完善 ARIA 无障碍访问；浏览器自动化新增元素 ID 支持与拟人化贝塞尔曲线鼠标交互；上下文压缩增强关键决策与用户约束追踪；优化流式期间 GPU 与终端性能，扩充多维度系统压测套件。
