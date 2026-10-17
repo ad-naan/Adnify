@@ -6,7 +6,7 @@ describe('GlobalContextMenu - getEditableTarget', () => {
   let originalHTMLInputElement: unknown
   let originalHTMLTextAreaElement: unknown
 
-  class FakeHTMLElement {
+  class FakeHTMLElement extends EventTarget {
     contentEditable = 'inherit'
     parentElement: FakeHTMLElement | null = null
     getAttribute(attr: string) {
