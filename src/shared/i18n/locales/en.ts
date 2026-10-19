@@ -4030,7 +4030,7 @@ export const en = {
   'dojo.saved': 'Saved',
   'dojo.saveFailed': 'Save failed',
   // Project context and the decomposition process
-  'dojo.projectTree': 'Project',
+  'dojo.projectTree': 'Project files',
   'dojo.treeEmpty': 'No workspace open',
   'dojo.treeLoading': 'Loading…',
   'dojo.treeLoadFailed': 'Failed to load the tree',

@@ -37,6 +37,7 @@ import { t, tDynamic, asLanguage } from '@shared/i18n'
 import { useStore } from '@/renderer/store'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { materializeThreadMessages } from '@/renderer/agent/types'
 import type { AssistantMessage, ChatMessage } from '@/renderer/agent/types'
 import { api } from '@/renderer/services/electronAPI'
 import { useDojoStore } from './DojoStore'
@@ -110,10 +111,20 @@ function summarizeToolArgs(args: Record<string, unknown> | undefined): string {
   return typeof first === 'string' ? truncate(first) : ''
 }
 
-/** 拆解回复里 fenced JSON 之后的阶梯不属于"过程展示"，从流里切掉 */
+/**
+ * 拆解回复末尾的阶梯 JSON 不属于"过程展示"，从流里切掉。
+ * 只切 json 围栏（或包含 "steps" 的那个围栏），保留简报里的普通代码块。
+ */
 function stripTrailingJson(text: string): string {
-  const fence = text.indexOf('```')
-  return (fence === -1 ? text : text.slice(0, fence)).trim()
+  const jsonFence = text.search(/```json/i)
+  if (jsonFence !== -1) return text.slice(0, jsonFence).trim()
+
+  const stepsAt = text.indexOf('"steps"')
+  if (stepsAt !== -1) {
+    const fence = text.lastIndexOf('```', stepsAt)
+    if (fence !== -1) return text.slice(0, fence).trim()
+  }
+  return text.trim()
 }
 
 function buildMentorFeed(messages: ChatMessage[]): MentorFeedItem[] {
@@ -153,7 +164,11 @@ function buildMentorFeed(messages: ChatMessage[]): MentorFeedItem[] {
 function MentorLiveFeed({ threadId, language }: { threadId: string | null; language: string }) {
   const lang = asLanguage(language)
   const thread = useAgentStore(state => (threadId ? state.threads[threadId] : undefined))
-  const items = useMemo(() => (thread ? buildMentorFeed(thread.messages) : []), [thread])
+  // 流式期间权威内容是 liveAssistantMessage 覆盖层，thread.messages 是上一版快照
+  const items = useMemo(
+    () => (thread ? buildMentorFeed(materializeThreadMessages(thread)) : []),
+    [thread],
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastItem = items.length ? items[items.length - 1] : null
   const lastSignature = lastItem ? (lastItem.text ?? lastItem.toolDetail ?? '') : ''
@@ -668,11 +683,15 @@ function LearnerEditor({ workspacePath, step, filePath, onFilePathChange, langua
     void load(filePath)
   }, [filePath, load])
 
+  /**
+   * 只负责"切文件"：路径没变时绝不能读盘。
+   * 否则点击「保存」会先触发 input blur，把编辑中的内容覆盖成磁盘旧版。
+   */
   const commitPath = useCallback(() => {
     const next = pathInput.trim()
-    if (next !== filePath) onFilePathChange(next)
-    else void load(next)
-  }, [pathInput, filePath, onFilePathChange, load])
+    if (next === filePath) return
+    onFilePathChange(next)
+  }, [pathInput, filePath, onFilePathChange])
 
   const save = useCallback(async () => {
     const trimmed = pathInput.trim()
