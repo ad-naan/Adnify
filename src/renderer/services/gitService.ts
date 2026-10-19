@@ -1048,6 +1048,29 @@ class GitService {
     }
 
     /**
+     * 在指定 worktree 里合并车道分支，但冲突时**不** abort。
+     *
+     * 与 mergeWorktreeBranch 相反：那条路冲突即 `merge --abort` 还原基准工作区；
+     * 这一条保留冲突标记与未合并索引，供 AI 消解代理修复后自行提交。
+     * 只用于临时 worktree —— 绝不能作用于基准工作区，否则冲突状态会把用户的目录搞脏。
+     */
+    async mergeKeepConflicts(branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
+        const result = await this.exec(['merge', '--no-ff', branch, '-m', `Merge Adnify lane ${branch}`], rootPath)
+        if (result.exitCode === 0) return { success: true, branch }
+        const status = await this.exec(['status', '--porcelain'], rootPath)
+        const conflicts = status.stdout.split('\n')
+            .filter(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
+            .map(line => line.slice(3).trim())
+        return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
+    }
+
+    /** 索引里是否还有未合并（冲突）路径 */
+    async hasUnmergedPaths(rootPath?: string): Promise<boolean> {
+        const status = await this.exec(['status', '--porcelain'], rootPath)
+        return status.stdout.split('\n').some(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
+    }
+
+    /**
      * 删除车道分支（`branch -D`）。
      *
      * 走车道通道而不是 `deleteBranch`：`branch -D` 命中全局危险模式会弹一次安全审批，

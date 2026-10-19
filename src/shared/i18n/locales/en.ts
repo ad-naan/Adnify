@@ -1727,6 +1727,7 @@ export const en = {
   'worktreeLane.reason.dirtyBaseMerge': 'The base workspace has uncommitted changes, so this lane was not merged.',
   'worktreeLane.reason.baseBranchChanged': 'The workspace is now on {current} instead of the lane base {base}, so this lane was not merged.',
   'worktreeLane.reason.conflicts': 'The merge has conflicts: {files}.',
+  'worktreeLane.reason.aiMergeFailed': 'AI conflict resolution failed ({files}); the lane was kept. Retry or discard it from the lane panel.',
   'worktreeLane.reason.mergeFailed': 'Merge failed.',
   'worktreeLane.reason.commitFailed': 'Unable to commit the changes inside the lane.',
   'worktreeLane.reason.cleanupFailed': 'The lane had nothing worth keeping, but {branch} could not be cleaned up.',

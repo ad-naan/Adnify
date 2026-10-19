@@ -1728,6 +1728,7 @@ export const zh = {
   'worktreeLane.reason.dirtyBaseMerge': '基准工作区有未提交的改动，本次车道没有合并。',
   'worktreeLane.reason.baseBranchChanged': '工作区已切到 {current}，不再是车道的基准分支 {base}，因此没有合并。',
   'worktreeLane.reason.conflicts': '合并存在冲突：{files}。',
+  'worktreeLane.reason.aiMergeFailed': 'AI 消解合并冲突未成功（{files}），车道已保留，可再次重试或丢弃。',
   'worktreeLane.reason.mergeFailed': '合并失败。',
   'worktreeLane.reason.commitFailed': '无法在车道内提交改动。',
   'worktreeLane.reason.cleanupFailed': '车道里没有需要保留的内容，但 {branch} 没能清理干净。',

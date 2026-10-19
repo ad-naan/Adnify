@@ -74,6 +74,18 @@ export interface LaneActionResult {
 }
 
 /**
+ * 车道合并冲突的 AI 消解入口，由 LaneMergeService 懒加载注入。
+ *
+ * 本服务是纯 git 编排，不依赖 LLM/Agent；把消解能力作为注入点既保住这条边界，
+ * 也让单测可以在不引入 Agent 运行时的情况下覆盖「AI 成功 / 失败 / 不可用」三条路。
+ */
+export type LaneAiMergeResolver = (params: {
+  workspacePath: string
+  branch: string
+  conflicts: string[]
+}) => Promise<{ success: boolean; error?: string } | null | undefined>
+
+/**
  * 车道目录名/分支名片段。
  *
  * 保留 Unicode 字母与数字：任务标题常常是中文，`[^a-z0-9-]` 会把它整段吃掉，
@@ -87,6 +99,8 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 class WorktreeLaneServiceClass {
   private createQueue: Promise<unknown> = Promise.resolve()
   private mergeQueue: Promise<unknown> = Promise.resolve()
+  /** AI 冲突消解入口；未注册时冲突走原「归档保留」流程 */
+  aiMergeResolver?: LaneAiMergeResolver
   /**
    * 本会话仍在运行的车道，按 worktree 路径索引（回收时要跳过它们）。
    *
@@ -230,6 +244,16 @@ class WorktreeLaneServiceClass {
       }
     }
 
+    // 合并成功（含 AI 消解后成功）的公共收尾：删目录 → 删分支 → 报 merged。
+    const finalizeMerged = async (): Promise<WorktreeLaneCompletion> => {
+      const archived = await this.archive(handle)
+      if (archived) {
+        const deleted = await gitService.deleteBranch(handle.branch, false, handle.workspacePath)
+        if (!deleted.success) logger.agent.warn(`[WorktreeLane] Merged ${handle.branch}, but branch cleanup failed: ${deleted.error}`)
+      }
+      return { ...handle, success: true, outcome: 'merged', commit, merged: true, archived }
+    }
+
     if (!await gitService.isWorkingTreeClean(handle.workspacePath)) {
       return await retain(notice('dirtyBaseMerge'))
     }
@@ -243,18 +267,41 @@ class WorktreeLaneServiceClass {
     const merged = await gitService.mergeWorktreeBranch(handle.branch, handle.workspacePath)
     if (!merged.success) {
       const conflicts = merged.conflicts?.length ? merged.conflicts : undefined
-      return await retain(
-        conflicts ? notice('conflicts', { files: conflicts.join(', ') }) : notice('mergeFailed'),
-        { conflicts, error: merged.error },
-      )
+      // 冲突先交给 AI 消解（临时 worktree 里做语义合并）；消解不了才归档保留。
+      if (conflicts) {
+        const resolved = await this.resolveConflictsWithAi(handle.workspacePath, handle.branch, conflicts)
+        if (resolved?.success) return await finalizeMerged()
+        logger.agent.warn(`[WorktreeLane] AI conflict resolution failed for ${handle.branch}: ${resolved?.error ?? 'resolver unavailable'}`)
+        return await retain(
+          resolved ? notice('aiMergeFailed', { files: conflicts.join(', ') }) : notice('conflicts', { files: conflicts.join(', ') }),
+          { conflicts, error: resolved?.error ?? merged.error },
+        )
+      }
+      return await retain(notice('mergeFailed'), { error: merged.error })
     }
 
-    const archived = await this.archive(handle)
-    if (archived) {
-      const deleted = await gitService.deleteBranch(handle.branch, false, handle.workspacePath)
-      if (!deleted.success) logger.agent.warn(`[WorktreeLane] Merged ${handle.branch}, but branch cleanup failed: ${deleted.error}`)
+    return await finalizeMerged()
+  }
+
+  /**
+   * 冲突的 AI 语义消解入口。LaneMergeService 带着 LLM/Agent 依赖，静态 import
+   * 会把整套 agent 运行时拖进本模块（还会构成环），所以懒加载注册一次后复用。
+   */
+  private async resolveConflictsWithAi(
+    workspacePath: string,
+    branch: string,
+    conflicts: string[],
+  ): Promise<{ success: boolean; error?: string } | null | undefined> {
+    if (!this.aiMergeResolver) {
+      try {
+        const { attemptAiLaneMerge } = await import('./LaneMergeService')
+        this.aiMergeResolver = attemptAiLaneMerge
+      } catch (error) {
+        logger.agent.warn(`[WorktreeLane] Unable to load the AI conflict resolver: ${errorMessage(error)}`)
+        return null
+      }
     }
-    return { ...handle, success: true, outcome: 'merged', commit, merged: true, archived }
+    return await this.aiMergeResolver({ workspacePath, branch, conflicts })
   }
 
   /**
@@ -375,12 +422,24 @@ class WorktreeLaneServiceClass {
         const merged = await gitService.mergeWorktreeBranch(branch, workspacePath)
         if (!merged.success) {
           const conflicts = merged.conflicts?.length ? merged.conflicts : undefined
-          resolve({
-            success: false,
-            conflicts,
-            notice: conflicts ? notice('conflicts', { files: conflicts.join(', ') }) : notice('mergeFailed'),
-            error: merged.error,
-          })
+          // 与 mergeNow 同一条路：冲突先 AI 消解，失败才回「冲突未合并」。
+          if (conflicts) {
+            const resolved = await this.resolveConflictsWithAi(workspacePath, branch, conflicts)
+            if (resolved?.success) {
+              const deleted = await gitService.deleteBranch(branch, false, workspacePath)
+              if (!deleted.success) logger.agent.warn(`[WorktreeLane] Merged ${branch}, but branch cleanup failed: ${deleted.error}`)
+              resolve({ success: true })
+              return
+            }
+            resolve({
+              success: false,
+              conflicts,
+              notice: resolved ? notice('aiMergeFailed', { files: conflicts.join(', ') }) : notice('conflicts', { files: conflicts.join(', ') }),
+              error: resolved?.error ?? merged.error,
+            })
+            return
+          }
+          resolve({ success: false, notice: notice('mergeFailed'), error: merged.error })
           return
         }
         const deleted = await gitService.deleteBranch(branch, false, workspacePath)

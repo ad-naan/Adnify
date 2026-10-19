@@ -39,8 +39,13 @@ out/
 /.kiro
 /ui-ux-pro-max-skill-main
 
-# package-lock.json
+# package-lock.json（本项目使用 pnpm，npm 锁文件不应出现）
 package-lock.json
+yarn.lock
+
+# 本地运行产物 / 手动下载的 LSP 服务器
+/output/
+/lsp-servers/
 /CC-Source
 /tmp
 /.tmp

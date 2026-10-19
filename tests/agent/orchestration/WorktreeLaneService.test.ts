@@ -17,9 +17,11 @@ const git = vi.hoisted(() => ({
   deleteLaneBranch: vi.fn(),
 }))
 const exclude = vi.hoisted(() => ({ update: vi.fn() }))
+const laneMerge = vi.hoisted(() => ({ attemptAiLaneMerge: vi.fn() }))
 
 vi.mock('@/renderer/services/gitService', () => ({ gitService: git }))
 vi.mock('@/renderer/services/gitExcludeService', () => ({ gitExcludeService: exclude }))
+vi.mock('@/renderer/agent/orchestration/LaneMergeService', () => ({ attemptAiLaneMerge: laneMerge.attemptAiLaneMerge }))
 
 type LaneService = typeof import('@/renderer/agent/orchestration/WorktreeLaneService')['WorktreeLaneService']
 
@@ -29,6 +31,7 @@ describe('WorktreeLaneService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    laneMerge.attemptAiLaneMerge.mockReset()
     git.isInsideWorkTree.mockResolvedValue(true)
     git.hasCommits.mockResolvedValue(true)
     git.isWorkingTreeClean.mockResolvedValue(true)
@@ -110,6 +113,46 @@ describe('WorktreeLaneService', () => {
     expect(result).toMatchObject({ success: false, outcome: 'retained', archived: true, conflicts: ['src/a.ts'] })
     expect(git.removeWorktree).toHaveBeenCalledWith(lane.path, 'D:/repo')
     expect(git.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  it('finishes a conflicting merge via AI resolution and cleans up like a normal merge', async () => {
+    git.mergeWorktreeBranch.mockResolvedValue({ success: false, conflicts: ['src/a.ts'], error: 'conflict' })
+    laneMerge.attemptAiLaneMerge.mockResolvedValue({ success: true })
+    const lane = await service.create('D:/repo', 'write task')
+    const result = await service.complete(lane, 'done')
+    expect(laneMerge.attemptAiLaneMerge).toHaveBeenCalledWith({ workspacePath: 'D:/repo', branch: lane.branch, conflicts: ['src/a.ts'] })
+    expect(result).toMatchObject({ success: true, outcome: 'merged', merged: true, commit: 'abc', archived: true })
+    expect(git.removeWorktree).toHaveBeenCalledWith(lane.path, 'D:/repo')
+    expect(git.deleteBranch).toHaveBeenCalledWith(lane.branch, false, 'D:/repo')
+  })
+
+  it('retains with an aiMergeFailed notice when AI resolution fails', async () => {
+    git.mergeWorktreeBranch.mockResolvedValue({ success: false, conflicts: ['src/a.ts'], error: 'conflict' })
+    laneMerge.attemptAiLaneMerge.mockResolvedValue({ success: false, error: 'resolver gave up' })
+    const lane = await service.create('D:/repo', 'write task')
+    const result = await service.complete(lane, 'done')
+    expect(result).toMatchObject({ success: false, outcome: 'retained', archived: true, conflicts: ['src/a.ts'] })
+    expect(result.notice).toEqual({ code: 'aiMergeFailed', params: { files: 'src/a.ts' } })
+    expect(result.error).toBe('resolver gave up')
+    expect(git.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the legacy conflicts notice when the AI resolver is unavailable', async () => {
+    git.mergeWorktreeBranch.mockResolvedValue({ success: false, conflicts: ['src/a.ts'], error: 'conflict' })
+    // resolver 未注册成功（返回 null/undefined）时必须完全走回原来的路，不能比之前更差
+    laneMerge.attemptAiLaneMerge.mockResolvedValue(null)
+    const lane = await service.create('D:/repo', 'write task')
+    const result = await service.complete(lane, 'done')
+    expect(result).toMatchObject({ success: false, outcome: 'retained', archived: true })
+    expect(result.notice).toEqual({ code: 'conflicts', params: { files: 'src/a.ts' } })
+  })
+
+  it('does not consult the AI resolver when the merge failed without conflicts', async () => {
+    git.mergeWorktreeBranch.mockResolvedValue({ success: false, error: 'not a fast-forward situation' })
+    const lane = await service.create('D:/repo', 'write task')
+    const result = await service.complete(lane, 'done')
+    expect(laneMerge.attemptAiLaneMerge).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ success: false, outcome: 'retained', notice: { code: 'mergeFailed' } })
   })
 
   it('refuses to merge onto a different branch than the lane base', async () => {
@@ -310,6 +353,28 @@ describe('WorktreeLaneService', () => {
       expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
       expect(git.deleteBranch).not.toHaveBeenCalled()
       expect(git.deleteLaneBranch).not.toHaveBeenCalled()
+    })
+
+    it('resolves conflicts through the AI resolver when retrying a retained lane', async () => {
+      git.mergeWorktreeBranch.mockResolvedValueOnce({ success: false, conflicts: ['src/a.ts'], error: 'conflict' })
+      laneMerge.attemptAiLaneMerge.mockResolvedValue({ success: true })
+      const result = await service.retryMerge('D:/repo', 'adnify/lane-archived-5678ef01')
+      expect(result).toEqual({ success: true })
+      expect(laneMerge.attemptAiLaneMerge).toHaveBeenCalledWith({
+        workspacePath: 'D:/repo',
+        branch: 'adnify/lane-archived-5678ef01',
+        conflicts: ['src/a.ts'],
+      })
+      expect(git.deleteBranch).toHaveBeenCalledWith('adnify/lane-archived-5678ef01', false, 'D:/repo')
+    })
+
+    it('reports aiMergeFailed when the AI resolver cannot retry-merge the conflicts either', async () => {
+      git.mergeWorktreeBranch.mockResolvedValueOnce({ success: false, conflicts: ['src/a.ts'], error: 'conflict' })
+      laneMerge.attemptAiLaneMerge.mockResolvedValue({ success: false, error: 'still conflicting' })
+      const result = await service.retryMerge('D:/repo', 'adnify/lane-archived-5678ef01')
+      expect(result).toMatchObject({ success: false, conflicts: ['src/a.ts'] })
+      expect(result.notice).toEqual({ code: 'aiMergeFailed', params: { files: 'src/a.ts' } })
+      expect(git.deleteBranch).not.toHaveBeenCalled()
     })
 
     it('refuses to drop a lane that is still running', async () => {

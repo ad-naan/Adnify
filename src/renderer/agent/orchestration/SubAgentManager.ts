@@ -42,8 +42,18 @@ interface SubAgentHandle {
   laneAssignment?: ExecutionLaneAssignment
 }
 
-/** 默认超时：单个子代理最多运行 5 分钟 */
+/**
+ * 无活动超时窗口：子代理这么久没有任何进展（一轮 LLM 迭代 / 一次工具执行）
+ * 才会被判定卡死。原来是纯墙钟 5 分钟 —— 干得再勤快也会在整 5 分钟时被杀，
+ * 这是「子代理经常超时」的根因。真正卡死（等待一个永远不会来的事件）才会触到窗口。
+ */
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
+
+/** 绝对生命上限：进展再频繁也不允许无限跑下去 */
+const MAX_SUB_AGENT_DURATION_MS = 30 * 60 * 1000
+
+/** 允许通过 task 参数申请的无活动窗口下限，避免传个 1 秒进来自杀 */
+const MIN_TIMEOUT_MS = 60 * 1000
 
 /** 默认最大并行子代理数 */
 const DEFAULT_MAX_CONCURRENCY = 3
@@ -91,7 +101,8 @@ class SubAgentManagerClass {
     lifecycle?: SubAgentLifecycleCallbacks,
   ): Promise<SubAgentResult> {
     const id = crypto.randomUUID()
-    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const requestedTimeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const timeoutMs = Math.min(Math.max(requestedTimeout, MIN_TIMEOUT_MS), MAX_SUB_AGENT_DURATION_MS)
 
     // 递归硬拦截。工具加载那层（getToolsForContext 的 isSubAgent）只是不把
     // task 喂给模型，它是模块级单例、并发线程会互相覆盖，不能当唯一防线；
@@ -290,14 +301,46 @@ class SubAgentManagerClass {
     return new Promise<SubAgentResult>((resolve) => {
       let settled = false
       let finishing = false
-      let timer: ReturnType<typeof setTimeout> | null = null
+      let inactivityTimer: ReturnType<typeof setTimeout> | null = null
+
+      const fireTimeout = (message: string): void => {
+        if (settled) return
+        logger.agent.warn(`[SubAgent] ${message} (thread ${handle.threadId})`)
+        Agent.abort(handle.threadId)
+        this.settleWithLaneRelease(handle, message, {
+          success: false,
+          error: message,
+          subAgentId: handle.id,
+          threadId: handle.threadId,
+        })
+      }
+
+      // 绝对生命上限独立计时：进展重置的只是无活动窗口，不是这个。
+      const hardCapTimer = setTimeout(
+        () => fireTimeout(`Sub-agent ${handle.id} exceeded the maximum duration of ${MAX_SUB_AGENT_DURATION_MS}ms`),
+        MAX_SUB_AGENT_DURATION_MS,
+      )
+
+      const clearInactivityTimer = () => {
+        if (inactivityTimer) {
+          clearTimeout(inactivityTimer)
+          inactivityTimer = null
+        }
+      }
+
+      const armInactivityTimer = () => {
+        clearInactivityTimer()
+        inactivityTimer = setTimeout(
+          () => fireTimeout(`Sub-agent ${handle.id} timed out after ${timeoutMs}ms of inactivity`),
+          timeoutMs,
+        )
+      }
 
       const cleanup = () => {
-        if (timer) {
-          clearTimeout(timer)
-          timer = null
-        }
+        clearInactivityTimer()
+        clearTimeout(hardCapTimer)
         unsubscribe()
+        unsubscribeProgress()
       }
 
       this.completionResolvers.set(handle.id, (result: SubAgentResult) => {
@@ -306,6 +349,22 @@ class SubAgentManagerClass {
         cleanup()
         resolve(result)
       })
+
+      // 进展信号：每个 LLM 迭代 / 工具事件都重置无活动窗口。只订阅带 threadId
+      // 的事件（stream:* / llm:* 不带，无法区分是谁的进展）。
+      const onProgress = (event: { threadId?: string }): void => {
+        if (event.threadId === handle.threadId) armInactivityTimer()
+      }
+      const progressUnsubscribers = [
+        EventBus.on('loop:iteration', onProgress),
+        EventBus.on('tool:running', onProgress),
+        EventBus.on('tool:completed', onProgress),
+        EventBus.on('tool:error', onProgress),
+        EventBus.on('tool:rejected', onProgress),
+      ]
+      const unsubscribeProgress = () => progressUnsubscribers.forEach(off => off())
+
+      armInactivityTimer()
 
       const unsubscribe = EventBus.on('loop:end', (event) => {
         if (event.threadId !== handle.threadId) return
@@ -334,11 +393,7 @@ class SubAgentManagerClass {
         }
 
         const output = this.extractOutput(handle)
-        if (timer) {
-          clearTimeout(timer)
-          timer = null
-        }
-        unsubscribe()
+        cleanup()
 
         // 没成功的子代理也必须归还车道：否则 worktree 目录和分支会一直留在仓库里，
         // 并且残留会弄脏基准工作区，后续并行子代理全都建不出车道。
@@ -375,17 +430,6 @@ class SubAgentManagerClass {
         })()
       })
 
-      timer = setTimeout(() => {
-        if (settled) return
-        logger.agent.warn(`[SubAgent] Sub-agent ${handle.id} timed out after ${timeoutMs}ms`)
-        Agent.abort(handle.threadId)
-        this.settleWithLaneRelease(handle, `sub-agent timed out after ${timeoutMs}ms`, {
-          success: false,
-          error: `Sub-agent timed out after ${timeoutMs}ms`,
-          subAgentId: handle.id,
-          threadId: handle.threadId,
-        })
-      }, timeoutMs)
     })
   }
 

@@ -3826,6 +3826,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     : ['Read-only mode: do NOT modify any files or run commands that change state.'],
                 writeCapable: Boolean(args.enable_write_tools),
                 concurrent: Boolean(args.parallel),
+                timeoutMs: typeof args.timeout_ms === 'number' ? args.timeout_ms : undefined,
             },
             llmConfig,
             ctx.workspacePath,

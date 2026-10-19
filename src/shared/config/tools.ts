@@ -1331,6 +1331,7 @@ Best practices:
             prompt: { type: 'string', description: 'The full, self-contained task instruction for the sub-agent. Include all context: file paths, requirements, constraints, and the expected deliverable format.', required: true },
             enable_write_tools: { type: 'boolean', description: 'If true, allow the sub-agent to use write/edit/terminal tools. Default false (read-only research mode).', default: false },
             parallel: { type: 'boolean', description: 'If true, allow this sub-agent to run concurrently with other independent sub-agents. Default false (sequential).', default: false },
+            timeout_ms: { type: 'number', description: 'Inactivity timeout in milliseconds before the sub-agent is killed (default 300000, range 60000-1800000). The timer resets whenever the sub-agent makes progress (LLM iteration or tool execution). Raise it for long-running work such as builds, test suites, or large multi-file refactors.', default: 300000 },
         },
     },
 

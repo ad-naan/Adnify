@@ -25,6 +25,7 @@ export type ExecutionLaneNoticeCode =
   | 'dirtyBaseMerge'
   | 'baseBranchChanged'
   | 'conflicts'
+  | 'aiMergeFailed'
   | 'mergeFailed'
   | 'commitFailed'
   | 'cleanupFailed'

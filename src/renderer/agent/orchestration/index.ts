@@ -7,5 +7,7 @@
 
 export { SubAgentManager } from './SubAgentManager'
 export { WorktreeLaneService } from './WorktreeLaneService'
+export type { LaneAiMergeResolver } from './WorktreeLaneService'
 export { ExecutionLaneCoordinator } from './ExecutionLaneCoordinator'
+export { attemptAiLaneMerge } from './LaneMergeService'
 export type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStartedInfo, SubAgentStatus } from './types'
