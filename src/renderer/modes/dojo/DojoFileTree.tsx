@@ -78,6 +78,38 @@ export function DojoFileTree({ workspacePath, stepFiles, activeFile, onOpenFile,
     void loadDirectory(workspacePath, refreshTick > 0).finally(() => setLoading(false))
   }, [workspacePath, refreshTick, loadDirectory])
 
+  // 「我在哪」：打开的文件若藏在折叠目录里，自动展开它的祖先目录
+  useEffect(() => {
+    if (!workspacePath || !activeFile) return
+    const segments = activeFile.replace(/\\/g, '/').split('/').filter(Boolean)
+    if (segments.length < 2) return
+
+    const root = workspacePath.replace(/[\\/]+$/, '')
+    const sep = workspacePath.includes('\\') ? '\\' : '/'
+    const ancestors: string[] = []
+    let cursor = root
+    for (const segment of segments.slice(0, -1)) {
+      cursor = `${cursor}${sep}${segment}`
+      ancestors.push(cursor)
+    }
+
+    setExpanded(prev => {
+      let changed = false
+      const next = new Set(prev)
+      for (const dir of ancestors) {
+        if (!next.has(dir)) {
+          next.add(dir)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+
+    for (const dir of ancestors) {
+      if (!children.has(dir)) void loadDirectory(dir)
+    }
+  }, [activeFile, workspacePath, children, loadDirectory])
+
   const toggleFolder = useCallback((path: string) => {
     setExpanded(prev => {
       const next = new Set(prev)
@@ -169,8 +201,10 @@ export function DojoFileTree({ workspacePath, stepFiles, activeFile, onOpenFile,
           {t('dojo.projectTree', lang)}
         </span>
         <button
+          type="button"
           onClick={handleRefresh}
           title={t('dojo.treeRefresh', lang)}
+          aria-label={t('dojo.treeRefresh', lang)}
           className="rounded p-0.5 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
         >
           <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />

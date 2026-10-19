@@ -388,6 +388,21 @@ export async function runVerification(command: string, workspacePath: string): P
   }
 }
 
+/**
+ * 中止正在运行的导师线程（勘察途中放弃、或用户等待超时）。
+ * runMentor 的 loop:end 监听会以「未成功结束」收尾并抛错；
+ * UI 侧用序号守卫丢弃过期结果，不会把旧结果写回界面。
+ */
+export function abortMentor(threadId: string | null): void {
+  if (!threadId) return
+  try {
+    Agent.abort(threadId)
+    logger.agent.info(`[Dojo] Mentor aborted on thread ${threadId}`)
+  } catch (error) {
+    logger.agent.info(`[Dojo] Mentor abort skipped: ${errorMessage(error)}`)
+  }
+}
+
 /** 训练结束时回收验收终端 */
 export async function disposeVerifyTerminal(): Promise<void> {
   if (!verifyTerminalId) return
