@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import {
   Search, FolderOpen, Settings, Terminal,
   MessageSquare, History, Trash2, RefreshCw, Save,
-  X, Zap, Keyboard, Sparkles, Plus, FolderPlus, PanelRight, BookOpen
+  X, Zap, Keyboard, Sparkles, Plus, FolderPlus, PanelRight, BookOpen, GraduationCap
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -143,6 +143,16 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
         setChatVisible(true)
         setMode('agent')
         if (query) setInputPrompt(query)
+      }
+    },
+    {
+      id: 'mode-dojo',
+      label: t('commandPalette.enterDojo', language),
+      description: t('commandPalette.enterDojoDesc', language),
+      icon: GraduationCap,
+      category: t('commandPalette.aiHelper', language),
+      action: () => {
+        setMode('dojo')
       }
     },
     {

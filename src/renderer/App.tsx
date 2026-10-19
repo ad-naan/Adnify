@@ -17,6 +17,7 @@ import SystemPrivilegeCoordinator from './components/system/SystemPrivilegeCoord
 import { useBackgroundTasks } from './backgroundTasks/useBackgroundTasks'
 import { useNotificationBridge } from './notifications/useNotificationBridge'
 import { DecorativeAnimationScope } from './components/common/DecorativeAnimationScope'
+import { useModeStore } from './modes/modeStore'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -29,6 +30,7 @@ const AboutDialog = lazy(() => import('./components/dialogs/AboutDialog'))
 const ChangelogDialog = lazy(() => import('./components/dialogs/ChangelogDialog'))
 const UserAvatarDialog = lazy(() => import('./components/dialogs/UserAvatarDialog'))
 const WelcomePage = lazy(() => import('./components/welcome/WelcomePage'))
+const DojoWorkbench = lazy(() => import('./modes/dojo/DojoWorkbench'))
 
 function ToastInitializer() {
   const toastContext = useToast()
@@ -60,6 +62,7 @@ function AppContent() {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const isDojoMode = useModeStore(state => state.currentMode === 'dojo')
 
   useEffect(() => {
     window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -103,13 +106,21 @@ function AppContent() {
 
         {hasWorkspace ? (
           <>
-            <div className="flex-1 flex overflow-hidden">
-              <ActivityBar />
+            {isDojoMode ? (
+              <div className="flex-1 overflow-hidden">
+                <Suspense fallback={<FullScreenLoading />}>
+                  <DojoWorkbench />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="flex-1 flex overflow-hidden">
+                <ActivityBar />
 
-              <WorkspaceWorkbench />
-            </div>
+                <WorkspaceWorkbench />
+              </div>
+            )}
 
-            <StatusBar />
+            {!isDojoMode && <StatusBar />}
           </>
         ) : (
           <div className="flex-1 overflow-hidden">

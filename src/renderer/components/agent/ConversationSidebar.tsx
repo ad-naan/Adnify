@@ -23,6 +23,7 @@ import { getRelativeTime } from '@shared/utils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 import { useModeStore } from '@/renderer/modes/modeStore'
+import type { WorkMode } from '@/renderer/modes/types'
 import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 import { t, type Language } from '@shared/i18n'
@@ -181,7 +182,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
   )
 }
 
-function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: string, onClose: () => void, language: Language, mode: 'agent' | 'plan' }) {
+function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: string, onClose: () => void, language: Language, mode: WorkMode }) {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const { switchThread, deleteThread, renameThread } = useAgentActions()
   const allThreads = useAllThreads()
