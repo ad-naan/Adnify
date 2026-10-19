@@ -2707,6 +2707,7 @@ export const en = {
   // modeSelector
   'modeSelector.executeDirectly': 'Execute directly',
   'modeSelector.planBeforeExecution': 'Plan before execution',
+  'modeSelector.handsOnTraining': 'Mentor-guided, must learn to proceed',
   'modeSelector.workMode': 'Work mode',
 
   // notificationCenterContent

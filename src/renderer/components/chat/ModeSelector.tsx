@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react'
 import type { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
 import { t } from '@shared/i18n'
+import type { TranslationKey } from '@shared/i18n'
 
 interface ModeSelectorProps {
   mode: WorkMode
@@ -13,7 +14,17 @@ interface ModeSelectorProps {
 const MODE_OPTIONS: Array<{ id: WorkMode; label: string }> = [
   { id: 'agent', label: 'Agent' },
   { id: 'plan', label: 'Plan' },
+  { id: 'dojo', label: 'Dojo' },
 ]
+
+/** Each option cell is 65px wide inside the 3px-padded track; the thumb travels in 66px steps. */
+const OPTION_WIDTH = 66
+
+const MODE_DESCRIPTION_KEYS: Record<WorkMode, TranslationKey> = {
+  agent: 'modeSelector.executeDirectly',
+  plan: 'modeSelector.planBeforeExecution',
+  dojo: 'modeSelector.handsOnTraining',
+}
 
 interface FlowParticle {
   delay: number
@@ -47,11 +58,14 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
     canvas.height = Math.round(height * ratio)
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
 
-    const direction = mode === 'plan' ? 1 : -1
-    const startX = mode === 'plan' ? width * 0.25 : width * 0.75
-    const endX = mode === 'plan' ? width * 0.75 : width * 0.25
-    const filamentStartX = mode === 'plan' ? width * 0.39 : width * 0.61
-    const filamentEndX = mode === 'plan' ? width * 0.61 : width * 0.39
+    const fromIndex = Math.max(0, MODE_OPTIONS.findIndex(option => option.id === fromMode))
+    const toIndex = Math.max(0, MODE_OPTIONS.findIndex(option => option.id === mode))
+    const forward = toIndex > fromIndex
+    const direction = forward ? 1 : -1
+    const startX = forward ? width * 0.25 : width * 0.75
+    const endX = forward ? width * 0.75 : width * 0.25
+    const filamentStartX = forward ? width * 0.39 : width * 0.61
+    const filamentEndX = forward ? width * 0.61 : width * 0.39
     const centerY = height / 2
     const accent = getComputedStyle(canvas).color
     const particles: FlowParticle[] = Array.from({ length: 18 }, (_, index) => ({
@@ -219,6 +233,8 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
     return () => cancelAnimationFrame(animationFrame)
   }, [mode])
 
+  const activeIndex = Math.max(0, MODE_OPTIONS.findIndex(option => option.id === mode))
+
   const selectMode = (nextMode: WorkMode) => {
     if (nextMode !== mode) onModeChange(nextMode)
   }
@@ -226,27 +242,33 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
-    selectMode(event.key === 'ArrowLeft' || event.key === 'Home' ? 'agent' : 'plan')
+    const lastIndex = MODE_OPTIONS.length - 1
+    if (event.key === 'Home') selectMode(MODE_OPTIONS[0].id)
+    else if (event.key === 'End') selectMode(MODE_OPTIONS[lastIndex].id)
+    else {
+      const delta = event.key === 'ArrowLeft' ? -1 : 1
+      const nextIndex = Math.min(lastIndex, Math.max(0, activeIndex + delta))
+      selectMode(MODE_OPTIONS[nextIndex].id)
+    }
   }
 
   return (
     <div
-      className={`relative h-9 w-[136px] overflow-hidden rounded-xl border border-border/25 bg-text-primary/[0.035] p-[3px] shadow-inner ${className}`}
+      className={`relative h-9 w-[201px] overflow-hidden rounded-xl border border-border/25 bg-text-primary/[0.035] p-[3px] shadow-inner ${className}`}
       role="radiogroup"
       aria-label={t('modeSelector.workMode', language)}
       onKeyDown={handleKeyDown}
     >
       <span
         aria-hidden="true"
-        className={`absolute bottom-[3px] top-[3px] w-[63px] rounded-[9px] bg-gradient-to-b from-surface-active to-accent/[0.055] shadow-[0_3px_10px_rgba(0,0,0,0.16),0_1px_0_rgba(255,255,255,0.035)_inset] transition-transform duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${mode === 'plan' ? 'translate-x-[66px]' : 'translate-x-0'}`}
+        style={{ transform: `translateX(${activeIndex * OPTION_WIDTH}px)` }}
+        className="absolute bottom-[3px] top-[3px] w-[63px] rounded-[9px] bg-gradient-to-b from-surface-active to-accent/[0.055] shadow-[0_3px_10px_rgba(0,0,0,0.16),0_1px_0_rgba(255,255,255,0.035)_inset] transition-transform duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
       />
 
-      <div className="relative z-10 grid h-full grid-cols-2">
+      <div className="relative z-10 grid h-full grid-cols-3">
         {MODE_OPTIONS.map(option => {
           const selected = option.id === mode
-          const description = option.id === 'agent'
-            ? (t('modeSelector.executeDirectly', language))
-            : (t('modeSelector.planBeforeExecution', language))
+          const description = t(MODE_DESCRIPTION_KEYS[option.id], language)
 
           return (
             <button

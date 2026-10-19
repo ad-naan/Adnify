@@ -2708,6 +2708,7 @@ export const zh = {
   // modeSelector
   'modeSelector.executeDirectly': '直接执行任务',
   'modeSelector.planBeforeExecution': '先规划再执行',
+  'modeSelector.handsOnTraining': '手把手带练，学会才放行',
   'modeSelector.workMode': '工作模式',
 
   // notificationCenterContent
