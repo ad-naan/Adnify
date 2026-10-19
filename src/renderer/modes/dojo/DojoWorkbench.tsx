@@ -1,25 +1,46 @@
 /**
  * Dojo（道场）工作台 —— 手艺训练模式的全屏界面
  *
- * 三栏：
- * - 左：任务阶梯 + 手艺图谱
- * - 中：学员专属编辑器（AI 写入锁定的物理体现：这里的一切改动只来自键盘）
- * - 右：导师面板（示范 / 分级提示 / 双门禁 / 复盘）
+ * 四栏，从"看懂项目"到"学会这步"形成闭环：
+ * 1. 最左：项目目录树（步骤涉及文件高亮）+ 手艺图谱 —— 学员随时掌握项目全貌
+ * 2. 左二：拆解蓝图 + 训练阶梯 —— 为什么这样拆、每步的知识点/文件/验收
+ * 3. 中间：学员专属编辑器（AI 写入锁定的物理体现：改动只来自键盘）
+ * 4. 右侧：导师面板（示范 / 分级提示 / 双门禁 / 复盘）
+ *
+ * 拆解不再是黑盒 spinner：进入"勘察"阶段后订阅导师隐藏线程的消息流，
+ * 实时展示它读了哪些文件、搜了什么、想了什么，结束后沉淀为蓝图供审阅。
  *
  * 复用：Agent 循环（导师 = 隐藏线程只读代理）、终端执行（第一门禁）、
- * Monaco（loader 已由主编辑器配置，这里幂等再配一次）。
+ * 目录缓存（directoryCacheService）、Monaco（loader 已由主编辑器配置）。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MonacoEditor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { GraduationCap, X, Play, ChevronRight, Lightbulb, Terminal, RotateCcw, Save } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  GraduationCap,
+  Lightbulb,
+  Loader2,
+  Lock,
+  Play,
+  Plus,
+  RotateCcw,
+  Save,
+  Terminal,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { t, tDynamic, asLanguage } from '@shared/i18n'
 import { useStore } from '@/renderer/store'
 import { useModeStore } from '@/renderer/modes/modeStore'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import type { AssistantMessage, ChatMessage } from '@/renderer/agent/types'
 import { api } from '@/renderer/services/electronAPI'
 import { useDojoStore } from './DojoStore'
+import { DojoFileTree } from './DojoFileTree'
 import {
   decomposeRequirement,
   demonstrateStep,
@@ -51,10 +72,133 @@ const MASTERY_LABEL: Record<string, string> = {
 
 const HINT_LABEL: string[] = ['dojo.hintLevel.1', 'dojo.hintLevel.2', 'dojo.hintLevel.3']
 
+/** 目录树/文件读取用的路径拼接 */
 function joinPath(workspacePath: string, relative: string): string {
   const clean = relative.replace(/^[./\\]+/, '').replace(/\\/g, '/')
   return `${workspacePath.replace(/[\\/]+$/, '')}/${clean}`
 }
+
+/* ==================== 导师实时动态 ==================== */
+
+interface MentorFeedItem {
+  key: string
+  kind: 'tool' | 'text'
+  toolName?: string
+  toolDetail?: string
+  text?: string
+  streaming?: boolean
+}
+
+const TOOL_ARG_KEYS = ['file_path', 'path', 'target_file', 'pattern', 'query', 'command', 'glob', 'url', 'symbol', 'name']
+
+function truncate(value: string, max = 76): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+/** 从工具参数里挑出人类最关心的那一个（文件名 / 搜索词 / 命令） */
+function summarizeToolArgs(args: Record<string, unknown> | undefined): string {
+  if (!args) return ''
+  for (const key of TOOL_ARG_KEYS) {
+    const value = args[key]
+    if (typeof value === 'string' && value.trim()) return truncate(value.trim())
+    if (Array.isArray(value)) {
+      const joined = value.filter((item): item is string => typeof item === 'string').join(', ')
+      if (joined) return truncate(joined)
+    }
+  }
+  const first = Object.values(args).find(value => typeof value === 'string' && value.trim())
+  return typeof first === 'string' ? truncate(first) : ''
+}
+
+/** 拆解回复里 fenced JSON 之后的阶梯不属于"过程展示"，从流里切掉 */
+function stripTrailingJson(text: string): string {
+  const fence = text.indexOf('```')
+  return (fence === -1 ? text : text.slice(0, fence)).trim()
+}
+
+function buildMentorFeed(messages: ChatMessage[]): MentorFeedItem[] {
+  const items: MentorFeedItem[] = []
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    const assistant = message as AssistantMessage
+    if (assistant.parts.length === 0) {
+      const text = stripTrailingJson(assistant.content ?? '')
+      if (text) {
+        items.push({ key: `${assistant.id}:content`, kind: 'text', text, streaming: assistant.isStreaming })
+      }
+      continue
+    }
+    assistant.parts.forEach((part, index) => {
+      if (part.type === 'tool_call') {
+        const toolCall = part.toolCall
+        items.push({
+          key: `${assistant.id}:tool:${toolCall.id || index}`,
+          kind: 'tool',
+          toolName: toolCall.name,
+          toolDetail: summarizeToolArgs(toolCall.arguments),
+        })
+        return
+      }
+      if (part.type === 'text') {
+        const text = stripTrailingJson(part.content ?? '')
+        if (text) {
+          items.push({ key: `${assistant.id}:text:${index}`, kind: 'text', text, streaming: assistant.isStreaming })
+        }
+      }
+    })
+  }
+  return items
+}
+
+function MentorLiveFeed({ threadId, language }: { threadId: string | null; language: string }) {
+  const lang = asLanguage(language)
+  const thread = useAgentStore(state => (threadId ? state.threads[threadId] : undefined))
+  const items = useMemo(() => (thread ? buildMentorFeed(thread.messages) : []), [thread])
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const lastItem = items.length ? items[items.length - 1] : null
+  const lastSignature = lastItem ? (lastItem.text ?? lastItem.toolDetail ?? '') : ''
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [items.length, lastSignature])
+
+  return (
+    <div
+      ref={scrollRef}
+      className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3"
+      aria-live="polite"
+    >
+      {items.length === 0 && (
+        <p className="text-xs text-text-muted">{t('dojo.mentorWaiting', lang)}</p>
+      )}
+      {items.map(item => (
+        item.kind === 'tool' ? (
+          <div key={item.key} className="flex items-start gap-2 rounded-lg border border-border/40 bg-surface/25 px-2.5 py-1.5">
+            <Wrench size={12} className="mt-0.5 shrink-0 text-accent" />
+            <div className="min-w-0">
+              <div className="font-mono text-[11px] text-text-secondary">{item.toolName}</div>
+              {item.toolDetail && (
+                <div className="truncate font-mono text-[10px] text-text-muted" title={item.toolDetail}>
+                  {item.toolDetail}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p key={item.key} className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">
+            {item.text}
+            {item.streaming && (
+              <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle" />
+            )}
+          </p>
+        )
+      ))}
+    </div>
+  )
+}
+
+/* ==================== 主界面 ==================== */
 
 export default function DojoWorkbench() {
   const language = useStore(state => state.language)
@@ -67,15 +211,31 @@ export default function DojoWorkbench() {
   const mentorBusy = useDojoStore(state => state.mentorBusy)
   const verifyResult = useDojoStore(state => state.verifyResult)
   const error = useDojoStore(state => state.error)
+  const resetSession = useDojoStore(state => state.resetSession)
+
+  const [activeFile, setActiveFile] = useState('')
+  const [treeTick, setTreeTick] = useState(0)
 
   const step = useMemo<DojoStep | null>(() => {
     if (!session || !session.steps.length) return null
     return session.steps[Math.min(session.currentStepIndex, session.steps.length - 1)] ?? null
   }, [session])
 
+  const stepId = step?.id ?? ''
+  const stepFirstFile = step?.files[0] ?? ''
+  // 进入新步骤时，默认打开本步第一个涉及的文件
+  useEffect(() => {
+    setActiveFile(stepFirstFile)
+  }, [stepId, stepFirstFile])
+
   const exitDojo = useCallback(() => {
     setMode('agent')
   }, [setMode])
+
+  const startNewTraining = useCallback(() => {
+    resetSession()
+    setActiveFile('')
+  }, [resetSession])
 
   useEffect(() => () => { void disposeVerifyTerminal() }, [])
 
@@ -83,19 +243,29 @@ export default function DojoWorkbench() {
     <div className="flex h-full flex-col overflow-hidden bg-transparent text-text-primary">
       {/* 顶栏 */}
       <header className="flex items-center gap-3 border-b border-border/60 px-4 py-2">
-        <div className="flex items-center gap-2 text-accent">
+        <div className="flex shrink-0 items-center gap-2 text-accent">
           <GraduationCap size={18} />
           <span className="text-sm font-semibold">{t('dojo.title', lang)}</span>
         </div>
-        <span className="truncate text-xs text-text-muted">
+        <span className="min-w-0 truncate text-xs text-text-muted">
           {session ? session.requirement : t('dojo.tagline', lang)}
         </span>
-        <span className="ml-auto rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 text-[10px] text-amber-400">
+        <span className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 text-[10px] text-amber-400">
+          <Lock size={10} />
           {t('dojo.aiWriteLock', lang)}
         </span>
+        {session && (
+          <button
+            onClick={startNewTraining}
+            className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+          >
+            <Plus size={13} />
+            {t('dojo.newTraining', lang)}
+          </button>
+        )}
         <button
           onClick={exitDojo}
-          className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+          className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
         >
           <X size={14} />
           {t('dojo.exit', lang)}
@@ -104,51 +274,25 @@ export default function DojoWorkbench() {
 
       <div className="flex min-h-0 flex-1">
         {!session ? (
-          <StartScreen />
+          <DecomposeFlow workspacePath={workspacePath} language={lang} />
         ) : !step ? (
           <div className="flex flex-1 items-center justify-center text-sm text-text-muted">
             {t('dojo.emptySteps', lang)}
           </div>
         ) : (
           <>
-            {/* 左栏：阶梯 + 手艺图谱 */}
-            <aside className="flex w-60 shrink-0 flex-col border-r border-border/60">
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  {t('dojo.ladder', lang)}
-                </h2>
-                <ol className="space-y-1.5">
-                  {session.steps.map((item, index) => {
-                    const isCurrent = index === session.currentStepIndex
-                    return (
-                      <li
-                        key={item.id}
-                        className={`rounded-lg border px-2.5 py-2 text-xs transition-colors ${
-                          isCurrent
-                            ? 'border-accent/50 bg-accent/10 text-text-primary'
-                            : item.phase === 'passed'
-                              ? 'border-transparent bg-surface/30 text-text-muted'
-                              : 'border-transparent bg-surface/20 text-text-secondary'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span className={`tabular-nums ${isCurrent ? 'text-accent' : 'text-text-muted'}`}>
-                            {item.phase === 'passed' ? '✓' : index + 1}
-                          </span>
-                          <span className="truncate">{item.title}</span>
-                        </div>
-                        {isCurrent && (
-                          <div className="mt-1 text-[10px] text-text-muted">
-                            {tDynamic(PHASE_LABEL[item.phase], lang, PHASE_LABEL[item.phase])}
-                          </div>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ol>
-              </div>
-              <div className="border-t border-border/60 p-3">
-                <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+            {/* 栏 1：项目目录 + 手艺图谱 */}
+            <aside className="flex w-[212px] shrink-0 flex-col border-r border-border/60">
+              <DojoFileTree
+                workspacePath={workspacePath}
+                stepFiles={step.files}
+                activeFile={activeFile}
+                onOpenFile={setActiveFile}
+                refreshTick={treeTick}
+                language={lang}
+              />
+              <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/60 p-3">
+                <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                   {t('dojo.skillGraph', lang)}
                 </h2>
                 {skills.length === 0 ? (
@@ -176,10 +320,99 @@ export default function DojoWorkbench() {
               </div>
             </aside>
 
-            {/* 中栏：学员编辑器 */}
-            <LearnerEditor workspacePath={workspacePath} step={step} language={lang} />
+            {/* 栏 2：拆解蓝图 + 训练阶梯 */}
+            <aside className="flex w-[268px] shrink-0 flex-col border-r border-border/60">
+              <BlueprintCard blueprint={session.blueprint} language={lang} />
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  {t('dojo.ladder', lang)}
+                </h2>
+                <ol className="space-y-1.5">
+                  {session.steps.map((item, index) => {
+                    const isCurrent = index === session.currentStepIndex
+                    return (
+                      <li
+                        key={item.id}
+                        className={`rounded-lg border px-2.5 py-2 text-xs transition-colors ${
+                          isCurrent
+                            ? 'border-accent/50 bg-accent/10 text-text-primary'
+                            : item.phase === 'passed'
+                              ? 'border-transparent bg-surface/30 text-text-muted'
+                              : 'border-transparent bg-surface/20 text-text-secondary'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`tabular-nums ${isCurrent ? 'text-accent' : 'text-text-muted'}`}>
+                            {item.phase === 'passed' ? '✓' : index + 1}
+                          </span>
+                          <span className="truncate">{item.title}</span>
+                          {isCurrent && (
+                            <span className="ml-auto shrink-0 text-[9px] text-accent">
+                              {tDynamic(PHASE_LABEL[item.phase], lang, PHASE_LABEL[item.phase])}
+                            </span>
+                          )}
+                        </div>
 
-            {/* 右栏：导师面板 */}
+                        {isCurrent && (
+                          <div className="mt-2 space-y-1.5">
+                            {item.goal && (
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider text-text-muted">{t('dojo.stepGoal', lang)}</div>
+                                <p className="text-[10px] leading-relaxed text-text-secondary">{item.goal}</p>
+                              </div>
+                            )}
+                            {item.files.length > 0 && (
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider text-text-muted">{t('dojo.stepFiles', lang)}</div>
+                                <div className="mt-0.5 space-y-0.5">
+                                  {item.files.map(file => (
+                                    <button
+                                      key={file}
+                                      onClick={() => setActiveFile(file)}
+                                      title={file}
+                                      className={`block w-full truncate rounded px-1.5 py-0.5 text-left font-mono text-[10px] transition-colors ${
+                                        activeFile === file
+                                          ? 'bg-accent/15 text-accent'
+                                          : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'
+                                      }`}
+                                    >
+                                      {file}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {item.verifyCommand && (
+                              <div>
+                                <div className="text-[9px] uppercase tracking-wider text-text-muted">{t('dojo.stepVerify', lang)}</div>
+                                <div
+                                  className="mt-0.5 truncate rounded border border-border/40 bg-surface/30 px-1.5 py-1 font-mono text-[9px] text-text-secondary"
+                                  title={item.verifyCommand}
+                                >
+                                  {item.verifyCommand}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+            </aside>
+
+            {/* 栏 3：学员编辑器 */}
+            <LearnerEditor
+              workspacePath={workspacePath}
+              step={step}
+              filePath={activeFile}
+              onFilePathChange={setActiveFile}
+              language={lang}
+              onSaved={() => setTreeTick(tick => tick + 1)}
+            />
+
+            {/* 栏 4：导师面板 */}
             <MentorPanel
               step={step}
               workspacePath={workspacePath}
@@ -195,42 +428,175 @@ export default function DojoWorkbench() {
   )
 }
 
-/* ==================== 开始屏 ==================== */
+/* ==================== 拆解蓝图 ==================== */
 
-function StartScreen() {
-  const language = useStore(state => state.language)
+function BlueprintCard({ blueprint, language }: { blueprint?: string; language: string }) {
   const lang = asLanguage(language)
-  const workspacePath = useStore(state => state.workspacePath)
-  const startSession = useDojoStore(state => state.startSession)
-  const setMentorBusy = useDojoStore(state => state.setMentorBusy)
-  const setError = useDojoStore(state => state.setError)
-  const error = useDojoStore(state => state.error)
-  const busy = useDojoStore(state => state.mentorBusy)
-  const [requirement, setRequirement] = useState('')
+  const [open, setOpen] = useState(true)
 
-  const handleStart = useCallback(async () => {
+  return (
+    <div className="shrink-0 border-b border-border/60">
+      <button
+        onClick={() => setOpen(value => !value)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left"
+      >
+        <ChevronDown size={12} className={`shrink-0 text-text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          {t('dojo.blueprint', lang)}
+        </span>
+      </button>
+      {open && (
+        <div className="max-h-64 overflow-y-auto px-3 pb-3">
+          {blueprint ? (
+            <Markdown className="text-[11px] leading-relaxed text-text-secondary">{blueprint}</Markdown>
+          ) : (
+            <p className="text-[11px] text-text-muted">{t('dojo.noBlueprint', lang)}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ==================== 拆解流程（输入 → 勘察流 → 蓝图审阅） ==================== */
+
+type DecomposeStage = 'input' | 'working' | 'review'
+
+function DecomposeFlow({ workspacePath, language }: { workspacePath: string; language: string }) {
+  const lang = asLanguage(language)
+  const startSession = useDojoStore(state => state.startSession)
+  const recordSkill = useDojoStore(state => state.recordSkill)
+
+  const [stage, setStage] = useState<DecomposeStage>('input')
+  const [requirement, setRequirement] = useState('')
+  const [mentorThreadId, setMentorThreadId] = useState<string | null>(null)
+  const [blueprint, setBlueprint] = useState('')
+  const [steps, setSteps] = useState<Array<DojoStep & { skill: string }>>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const runDecompose = useCallback(async () => {
     const trimmed = requirement.trim()
     if (!trimmed || !workspacePath) return
-    setMentorBusy(true)
+    setStage('working')
     setError(null)
+    setBlueprint('')
+    setSteps([])
+    setMentorThreadId(null)
     try {
-      const steps = await decomposeRequirement(trimmed, workspacePath)
-      startSession({
-        id: crypto.randomUUID(),
-        requirement: trimmed,
-        steps: steps.map(({ skill: _skill, ...step }) => step),
-        currentStepIndex: 0,
-        createdAt: Date.now(),
-      })
-      // 技能先记为 learning，结业时按表现升级
-      const { recordSkill } = useDojoStore.getState()
-      for (const item of steps) recordSkill(item.skill, 'learning')
+      // 订阅导师线程：勘察过程可见，而不是黑盒等待
+      const result = await decomposeRequirement(trimmed, workspacePath, setMentorThreadId)
+      setBlueprint(result.briefing)
+      setSteps(result.steps)
+      setStage('review')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setMentorBusy(false)
+      setStage('input')
     }
-  }, [requirement, workspacePath, startSession, setMentorBusy, setError])
+  }, [requirement, workspacePath])
+
+  const confirmStart = useCallback(() => {
+    if (!steps.length) return
+    startSession({
+      id: crypto.randomUUID(),
+      requirement: requirement.trim(),
+      blueprint,
+      steps: steps.map(({ skill: _skill, ...step }) => step),
+      currentStepIndex: 0,
+      createdAt: Date.now(),
+    })
+    // 技能先记为 learning，结业时按表现升级
+    for (const item of steps) recordSkill(item.skill, 'learning')
+  }, [steps, requirement, blueprint, startSession, recordSkill])
+
+  if (stage === 'working') {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-2xl flex-col px-6 py-6">
+        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <Loader2 size={15} className="animate-spin text-accent" />
+          {t('dojo.reconTitle', lang)}
+        </div>
+        <p className="mb-3 text-xs leading-relaxed text-text-muted">{t('dojo.reconHint', lang)}</p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-surface/20">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-border/50 px-3 py-1.5 text-[10px] uppercase tracking-wider text-text-muted">
+            <Wrench size={11} />
+            {t('dojo.mentorLive', lang)}
+          </div>
+          <MentorLiveFeed threadId={mentorThreadId} language={lang} />
+        </div>
+      </div>
+    )
+  }
+
+  if (stage === 'review') {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-6 py-6">
+        <h1 className="text-base font-semibold">{t('dojo.blueprint', lang)}</h1>
+        <p className="mt-1 text-xs text-text-muted">{t('dojo.reviewBlueprint', lang)}</p>
+        <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+          <section className="rounded-xl border border-accent/30 bg-accent/[0.04] p-3">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-accent">
+              {t('dojo.blueprintHint', lang)}
+            </div>
+            {blueprint ? (
+              <Markdown className="text-xs leading-relaxed text-text-secondary">{blueprint}</Markdown>
+            ) : (
+              <p className="text-xs text-text-muted">{t('dojo.noBlueprint', lang)}</p>
+            )}
+          </section>
+          <ol className="space-y-2">
+            {steps.map((item, index) => (
+              <li key={item.id} className="rounded-xl border border-border/60 bg-surface/25 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs tabular-nums text-accent">{index + 1}</span>
+                  <span className="text-xs font-medium">{item.title}</span>
+                  <span className="ml-auto shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[9px] text-text-muted">
+                    {item.skill}
+                  </span>
+                </div>
+                {item.goal && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{item.goal}</p>
+                )}
+                {item.files.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {item.files.map(file => (
+                      <span key={file} className="rounded bg-surface/60 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                        {file}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.verifyCommand && (
+                  <div
+                    className="mt-1.5 truncate rounded border border-border/40 bg-surface/40 px-1.5 py-1 font-mono text-[10px] text-text-muted"
+                    title={item.verifyCommand}
+                  >
+                    {item.verifyCommand}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="mt-3 flex shrink-0 items-center gap-2">
+          <button
+            onClick={confirmStart}
+            disabled={!steps.length}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity disabled:opacity-40"
+          >
+            <ChevronRight size={13} />
+            {t('dojo.confirmStart', lang)}
+          </button>
+          <button
+            onClick={() => setStage('input')}
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface/40 px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+          >
+            <RotateCcw size={13} />
+            {t('dojo.recompose', lang)}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-xl flex-col justify-center gap-4 p-8">
@@ -245,11 +611,11 @@ function StartScreen() {
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
       <button
-        onClick={() => void handleStart()}
-        disabled={busy || !requirement.trim() || !workspacePath}
+        onClick={() => void runDecompose()}
+        disabled={!requirement.trim() || !workspacePath}
         className="flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-40"
       >
-        {busy ? t('dojo.decomposing', lang) : t('dojo.startTraining', lang)}
+        {t('dojo.startTraining', lang)}
       </button>
     </div>
   )
@@ -257,55 +623,82 @@ function StartScreen() {
 
 /* ==================== 学员编辑器 ==================== */
 
-function LearnerEditor({ workspacePath, step, language }: {
+function LearnerEditor({ workspacePath, step, filePath, onFilePathChange, language, onSaved }: {
   workspacePath: string
   step: DojoStep
+  filePath: string
+  onFilePathChange: (next: string) => void
   language: string
+  onSaved?: () => void
 }) {
   const lang = asLanguage(language)
-  const [relativePath, setRelativePath] = useState(step.files[0] ?? '')
+  const [pathInput, setPathInput] = useState(filePath)
   const [content, setContent] = useState('')
   const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    setRelativePath(step.files[0] ?? '')
+  const load = useCallback(async (relative: string) => {
+    const trimmed = relative.trim()
     setStatus(null)
-  }, [step.id, step.files])
-
-  const open = useCallback(async () => {
-    const trimmed = relativePath.trim()
-    if (!trimmed || !workspacePath) return
-    setStatus(null)
-    const text = await api.file.readFull(joinPath(workspacePath, trimmed))
-    if (text === null || text === undefined) {
-      setStatus(t('dojo.fileNotFound', lang))
+    if (!trimmed || !workspacePath) {
+      setContent('')
+      setDirty(false)
       return
     }
-    setContent(text)
-    setDirty(false)
-  }, [relativePath, workspacePath, lang])
+    setLoading(true)
+    try {
+      const text = await api.file.readFull(joinPath(workspacePath, trimmed))
+      if (text === null || text === undefined) {
+        setContent('')
+        setDirty(false)
+        setStatus(t('dojo.fileNotFound', lang))
+        return
+      }
+      setContent(text)
+      setDirty(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [workspacePath, lang])
+
+  // 目录树点击 / 阶梯文件点击 / 步骤切换都会改 filePath —— 统一在这里加载
+  useEffect(() => {
+    setPathInput(filePath)
+    void load(filePath)
+  }, [filePath, load])
+
+  const commitPath = useCallback(() => {
+    const next = pathInput.trim()
+    if (next !== filePath) onFilePathChange(next)
+    else void load(next)
+  }, [pathInput, filePath, onFilePathChange, load])
 
   const save = useCallback(async () => {
-    const trimmed = relativePath.trim()
+    const trimmed = pathInput.trim()
     if (!trimmed || !workspacePath) return
     const result = await api.file.writeDetailed(joinPath(workspacePath, trimmed), content)
-    setStatus(result?.success ? t('dojo.saved', lang) : t('dojo.saveFailed', lang))
-    if (result?.success) setDirty(false)
-  }, [relativePath, workspacePath, content, lang])
-
-  // 步骤切换时自动打开第一个涉及的文件
-  useEffect(() => {
-    void open()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step.id])
+    const ok = Boolean(result?.success)
+    setStatus(ok ? t('dojo.saved', lang) : t('dojo.saveFailed', lang))
+    if (ok) {
+      setDirty(false)
+      onSaved?.()
+    }
+  }, [pathInput, workspacePath, content, lang, onSaved])
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5">
         <input
-          value={relativePath}
-          onChange={event => setRelativePath(event.target.value)}
+          value={pathInput}
+          onChange={event => setPathInput(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitPath()
+            }
+          }}
+          onBlur={commitPath}
           placeholder={t('dojo.filePathPlaceholder', lang)}
           className="min-w-0 flex-1 rounded-lg border border-border/50 bg-surface/30 px-2 py-1 font-mono text-xs outline-none focus:border-accent/50"
         />
@@ -314,10 +707,10 @@ function LearnerEditor({ workspacePath, step, language }: {
             {step.files.slice(0, 4).map(file => (
               <button
                 key={file}
-                onClick={() => setRelativePath(file)}
+                onClick={() => onFilePathChange(file)}
                 title={file}
                 className={`max-w-28 truncate rounded px-1.5 py-1 text-[10px] transition-colors ${
-                  relativePath === file ? 'bg-accent/10 text-accent' : 'bg-surface/40 text-text-muted hover:bg-surface-hover'
+                  filePath === file ? 'bg-accent/10 text-accent' : 'bg-surface/40 text-text-muted hover:bg-surface-hover'
                 }`}
               >
                 {file}
@@ -325,6 +718,7 @@ function LearnerEditor({ workspacePath, step, language }: {
             ))}
           </div>
         )}
+        {loading && <Loader2 size={12} className="shrink-0 animate-spin text-text-muted" />}
         <button
           onClick={() => void save()}
           disabled={!dirty}
@@ -339,7 +733,7 @@ function LearnerEditor({ workspacePath, step, language }: {
         <MonacoEditor
           height="100%"
           theme="adnify-dynamic"
-          language={guessLanguage(relativePath)}
+          language={guessLanguage(pathInput)}
           value={content}
           onChange={value => {
             setContent(value ?? '')
@@ -457,7 +851,7 @@ function MentorPanel({ step, workspacePath, language, mentorBusy, verifyResult, 
   const ghostButton = 'flex items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-surface/40 px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:opacity-40'
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-border/60">
+    <aside className="flex w-[360px] shrink-0 flex-col border-l border-border/60">
       <div className="border-b border-border/60 px-4 py-2.5">
         <div className="text-[10px] uppercase tracking-wider text-text-muted">
           {t('dojo.stepN', lang, { index: (session?.currentStepIndex ?? 0) + 1, total: session?.steps.length ?? 0 })}

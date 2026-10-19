@@ -54,6 +54,11 @@ export interface DojoSession {
     id: string
     /** 用户输入的真实需求 —— 学完的产出直接进 repo */
     requirement: string
+    /**
+     * 拆解蓝图：导师勘察项目后写下的简报（markdown）。
+     * 让"为什么拆成这几步"可回溯，而不是黑盒产出一张任务清单。
+     */
+    blueprint?: string
     steps: DojoStep[]
     currentStepIndex: number
     createdAt: number

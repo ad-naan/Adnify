@@ -56,8 +56,15 @@ interface GradeContract {
 
 /**
  * 派一个隐藏线程的导师并等它结束，返回最终回复文本。
+ * onThreadCreated 在线程创建后立刻回调 —— UI 可以借此订阅该线程的消息流，
+ * 把导师"正在读哪个文件 / 正在想什么"实时展示出来，而不是黑盒等待。
  */
-async function runMentor(prompt: string, workspacePath: string, label: string): Promise<string> {
+async function runMentor(
+  prompt: string,
+  workspacePath: string,
+  label: string,
+  onThreadCreated?: (threadId: string) => void,
+): Promise<string> {
   const llmConfig = useStore.getState().llmConfig
   if (!llmConfig) throw new Error('No LLM config available for the Dojo mentor')
 
@@ -73,6 +80,7 @@ async function runMentor(prompt: string, workspacePath: string, label: string): 
   })
   const requestId = crypto.randomUUID()
   store.renameThread(threadId, `⌘ Dojo 导师: ${label}`)
+  onThreadCreated?.(threadId)
 
   const completion = new Promise<boolean>((resolve) => {
     let settled = false
@@ -120,10 +128,8 @@ async function runMentor(prompt: string, workspacePath: string, label: string): 
   return text
 }
 
-/** 提取回复中的 fenced JSON 代码块并解析 */
-function parseFencedJson<T>(text: string): T {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const raw = fenced ? fenced[1] : text
+/** 从一段文本里抠出第一个 JSON 对象/数组并解析 */
+function parseJsonObject<T>(raw: string): T {
   const start = raw.indexOf('{')
   const arrayStart = raw.indexOf('[')
   const from = start === -1 ? arrayStart : (arrayStart === -1 ? start : Math.min(start, arrayStart))
@@ -136,11 +142,40 @@ function parseFencedJson<T>(text: string): T {
   }
 }
 
+/** 提取回复中的 fenced JSON 代码块并解析 */
+function parseFencedJson<T>(text: string): T {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  return parseJsonObject<T>(fenced ? fenced[1] : text)
+}
+
+/**
+ * 找到真正承载阶梯的那个 fenced 块。
+ * 简报里可能也有代码围栏（比如引用 `npm test`），所以不能盲取第一个。
+ */
+function findStepsBlock(text: string): { raw: string; start: number } | null {
+  const fence = /```(?:json)?\s*([\s\S]*?)```/gi
+  let picked: { raw: string; start: number } | null = null
+  for (const match of text.matchAll(fence)) {
+    const body = match[1] ?? ''
+    if (body.includes('"steps"')) picked = { raw: body, start: match.index ?? 0 }
+  }
+  return picked
+}
+
 /**
  * 拆解：把用户的真实需求编译成阶梯式教学步骤。
  * 每步只引入一个新知识点，并绑定一条可客观执行的验收命令。
+ *
+ * 产出两段式回复（markdown 简报 + fenced JSON）：
+ * - briefing：导师勘察项目后的简报 —— 读到了什么、代码现状、为什么这样拆。
+ *   UI 在拆解过程中流式展示它，拆解完沉淀为会话的"拆解蓝图"。
+ * - steps：结构化阶梯，parseFencedJson 从混合文本中提取。
  */
-export async function decomposeRequirement(requirement: string, workspacePath: string): Promise<Array<DojoStep & { skill: string }>> {
+export async function decomposeRequirement(
+  requirement: string,
+  workspacePath: string,
+  onThreadCreated?: (threadId: string) => void,
+): Promise<{ briefing: string; steps: Array<DojoStep & { skill: string }> }> {
   const prompt = [
     '# Dojo Task Decomposition',
     '',
@@ -152,7 +187,9 @@ export async function decomposeRequirement(requirement: string, workspacePath: s
     '## Your job',
     'Break this requirement into a ladder of 3-6 teaching steps. Each step introduces exactly ONE new concept (i+1 principle) and ends with objectively verifiable state. First read the repository to ground the plan in the actual code layout.',
     '',
-    '## Output format (reply with ONLY one fenced ```json block, no prose around it)',
+    '## Output format (exactly two parts, in order)',
+    'Part 1 — a recon briefing in markdown, 6-15 lines. Cover: (a) what you found in the repo (key files/modules and existing patterns relevant to the requirement), (b) the project\'s build/test scripts you will reuse for verification, (c) your rationale for the ladder: why these steps, in this order. Write it for the learner to read while you work.',
+    'Part 2 — one fenced ```json block, no prose after it:',
     '```json',
     '{',
     '  "steps": [',
@@ -171,11 +208,20 @@ export async function decomposeRequirement(requirement: string, workspacePath: s
     'Constraints: verifyCommand must not modify the repo. Prefer the project\'s existing scripts. Steps must build on each other toward the full requirement.',
   ].join('\n')
 
-  const reply = await runMentor(prompt, workspacePath, '拆解需求')
-  const parsed = parseFencedJson<DecomposeContract>(reply)
+  const reply = await runMentor(prompt, workspacePath, '拆解需求', onThreadCreated)
+  const stepsBlock = findStepsBlock(reply)
+  const parsed = stepsBlock
+    ? parseJsonObject<DecomposeContract>(stepsBlock.raw)
+    : parseFencedJson<DecomposeContract>(reply)
+
+  // 简报 = 阶梯 JSON 之前的全部文本（去掉围栏残余）
+  const briefing = (stepsBlock ? reply.slice(0, stepsBlock.start) : reply)
+    .replace(/```[a-z]*\s*$/i, '')
+    .trim()
+
   if (!parsed.steps?.length) throw new Error('The mentor produced no teaching steps')
 
-  return parsed.steps.map((step, index) => ({
+  const steps = parsed.steps.map((step, index) => ({
     id: crypto.randomUUID(),
     title: step.title?.trim() || `Step ${index + 1}`,
     goal: step.goal?.trim() || '',
@@ -186,6 +232,8 @@ export async function decomposeRequirement(requirement: string, workspacePath: s
     skill: step.skill?.trim() || step.title?.trim() || `Step ${index + 1}`,
     phase: 'demo' as const,
   }))
+
+  return { briefing, steps }
 }
 
 /** 示范：导师像师傅一样演示这一步的思路与写法（观摩用，不落盘）。 */
