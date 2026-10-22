@@ -64,6 +64,7 @@ export function isAbortedLoopEnd(reason: LoopEndReason): boolean {
 
 export type AgentEvent =
   // 流式事件
+  | { type: 'stream:activity'; threadId: string; requestId: string; assistantId?: string }
   | { type: 'stream:text'; text: string }
   | { type: 'stream:reasoning'; text: string; phase: 'start' | 'delta' | 'end' }
   | { type: 'stream:tool_start'; id: string; name: string }
@@ -92,7 +93,7 @@ export type AgentEvent =
   // 循环事件
   | { type: 'loop:start'; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
   | { type: 'loop:iteration'; count: number; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
-  | { type: 'loop:end'; reason: LoopEndReason; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
+  | { type: 'loop:end'; reason: LoopEndReason; error?: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
   | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
 
   // 情绪感知事件

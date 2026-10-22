@@ -160,4 +160,42 @@ describe('toolExecutors timeout wrapper', () => {
     expect(result.success).toBe(true)
     expect(result.result).toBe('sub-agent complete')
   })
+  it('passes a sub-agent failure through the error field instead of producing Unknown error', async () => {
+    const { SubAgentManager } = await import('@/renderer/agent/orchestration')
+    vi.mocked(SubAgentManager.spawn).mockResolvedValueOnce({
+      success: false, error: 'Sub-agent timed out after 300000ms of inactivity', subAgentId: 'sub-failed',
+    })
+    const result = await toolExecutors.task(
+      { description: 'inspect symbols', prompt: 'inspect the project' },
+      { workspacePath: '/workspace' } as any,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Sub-agent timed out after 300000ms of inactivity')
+    expect(result.result).toBe(result.error)
+  })
+
+  it('provides a specific fallback error when the manager has no error message', async () => {
+    const { SubAgentManager } = await import('@/renderer/agent/orchestration')
+    vi.mocked(SubAgentManager.spawn).mockResolvedValueOnce({ success: false, subAgentId: 'sub-failed' })
+    const result = await toolExecutors.task(
+      { description: 'inspect symbols', prompt: 'inspect the project' },
+      { workspacePath: '/workspace' } as any,
+    )
+    expect(result.error).toBe('Sub-agent failed.')
+  })
+
+  it('passes the parent cancellation signal to the sub-agent manager', async () => {
+    const { SubAgentManager } = await import('@/renderer/agent/orchestration')
+    const parent = new AbortController()
+    const resultPromise = toolExecutors.task(
+      { description: 'inspect symbols', prompt: 'inspect the project' },
+      { workspacePath: '/workspace', abortSignal: parent.signal } as any,
+    )
+    await vi.advanceTimersByTimeAsync(50)
+    await resultPromise
+    expect(SubAgentManager.spawn).toHaveBeenLastCalledWith(
+      expect.anything(), expect.anything(), '/workspace', undefined, undefined,
+      expect.objectContaining({ abortSignal: parent.signal }),
+    )
+  })
 })

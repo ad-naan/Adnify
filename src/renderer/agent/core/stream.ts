@@ -104,6 +104,18 @@ export function createStreamProcessor(
   }
 
   const handleStream = (data: RendererStreamChunk) => {
+    if (isCleanedUp) return
+    // Use the raw request-scoped stream, including reasoning and argument deltas.
+    // Visible-text events can be filtered or buffered and have no thread identity.
+    if (store.threadId && (
+      ((data.type === 'text' || data.type === 'reasoning') && Boolean(data.content))
+      || (data.type === 'tool_call_delta' && Boolean(data.argumentsDelta))
+      || data.type === 'tool_call_start'
+      || data.type === 'tool_call_available'
+      || data.type === 'source'
+    )) {
+      EventBus.emit({ type: 'stream:activity', threadId: store.threadId, requestId, assistantId: assistantId || undefined })
+    }
     switch (data.type) {
       case 'text':
         if (data.content) {

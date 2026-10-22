@@ -3832,7 +3832,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             ctx.workspacePath,
             ctx.chatMode,
             ctx.threadId,
-            { onStarted: bindSubAgent },
+            { onStarted: bindSubAgent, abortSignal: ctx.abortSignal },
         )
         // 车道保留下来时任务本身是成功的（success=true），但改动还在分支上没合并。
         // 这件事必须写进 result 文本里：meta 模型读不到，不说它就会以为文件已经落地。
@@ -3846,6 +3846,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             result: (result.success
                 ? result.output ?? 'Sub-agent completed with no output.'
                 : result.error ?? 'Sub-agent failed.') + pendingLane,
+            error: result.success ? undefined : result.error || 'Sub-agent failed.',
             meta: {
                 subAgentId: result.subAgentId,
                 subAgentThreadId: result.threadId,

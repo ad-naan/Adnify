@@ -40,10 +40,13 @@ interface SubAgentHandle {
   completedAt?: number
   abortController: AbortController
   laneAssignment?: ExecutionLaneAssignment
+  finishing?: boolean
+  cleanupCompletion?: () => void
+  executionPromise?: Promise<unknown>
 }
 
 /**
- * 无活动超时窗口：子代理这么久没有任何进展（一轮 LLM 迭代 / 一次工具执行）
+ * 无活动超时窗口：子代理这么久没有任何进展（流式输出 / LLM 迭代 / 工具事件）
  * 才会被判定卡死。原来是纯墙钟 5 分钟 —— 干得再勤快也会在整 5 分钟时被杀，
  * 这是「子代理经常超时」的根因。真正卡死（等待一个永远不会来的事件）才会触到窗口。
  */
@@ -51,6 +54,9 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
 
 /** 绝对生命上限：进展再频繁也不允许无限跑下去 */
 const MAX_SUB_AGENT_DURATION_MS = 30 * 60 * 1000
+
+/** 取消后给执行循环短暂收尾；未停止时不能删除仍在使用的车道。 */
+const ABORT_GRACE_MS = 5 * 1000
 
 /** 允许通过 task 参数申请的无活动窗口下限，避免传个 1 秒进来自杀 */
 const MIN_TIMEOUT_MS = 60 * 1000
@@ -102,11 +108,14 @@ class SubAgentManagerClass {
   ): Promise<SubAgentResult> {
     const id = crypto.randomUUID()
     const requestedTimeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS
-    const timeoutMs = Math.min(Math.max(requestedTimeout, MIN_TIMEOUT_MS), MAX_SUB_AGENT_DURATION_MS)
+    const timeoutMs = Number.isFinite(requestedTimeout)
+      ? Math.min(Math.max(requestedTimeout, MIN_TIMEOUT_MS), MAX_SUB_AGENT_DURATION_MS)
+      : DEFAULT_TIMEOUT_MS
+    const parentSignal = lifecycle?.abortSignal
 
-    // 递归硬拦截。工具加载那层（getToolsForContext 的 isSubAgent）只是不把
-    // task 喂给模型，它是模块级单例、并发线程会互相覆盖，不能当唯一防线；
-    // 这里按线程血缘判定，不受加载顺序影响。
+    if (parentSignal?.aborted) {
+      return { success: false, error: 'Sub-agent was cancelled because its parent task was cancelled', subAgentId: id }
+    }
     if (this.isSubAgentThread(parentThreadId)) {
       logger.agent.warn(`[SubAgent] Rejected nested spawn from sub-agent thread ${parentThreadId}`)
       return {
@@ -115,8 +124,6 @@ class SubAgentManagerClass {
         subAgentId: id,
       }
     }
-
-    // 并发上限检查
     if (this.activeHandles.size >= DEFAULT_MAX_CONCURRENCY) {
       return {
         success: false,
@@ -126,7 +133,6 @@ class SubAgentManagerClass {
     }
 
     logger.agent.info(`[SubAgent] Spawning sub-agent "${request.description.slice(0, 60)}" (id=${id})`)
-
     let laneAssignment: ExecutionLaneAssignment
     try {
       laneAssignment = await ExecutionLaneCoordinator.acquire({
@@ -137,7 +143,13 @@ class SubAgentManagerClass {
       return { success: false, error: error instanceof Error ? error.message : String(error), subAgentId: id }
     }
 
-    // 1. 创建隐藏线程（不激活，不影响主 UI）
+    // Cancellation may arrive while Git is creating the lane. Do not dispatch it.
+    if (parentSignal?.aborted) {
+      const error = 'Sub-agent was cancelled because its parent task was cancelled'
+      const released = await ExecutionLaneCoordinator.release(laneAssignment, error)
+      return { success: false, error, subAgentId: id, worktree: released ? projectLane(released) : undefined }
+    }
+
     const store = useAgentStore.getState()
     const parentThread = parentThreadId ? store.threads[parentThreadId] : undefined
     const threadId = store.createThread({
@@ -148,71 +160,62 @@ class SubAgentManagerClass {
       rootThreadId: parentThread?.rootThreadId || parentThreadId || undefined,
     })
     const requestId = crypto.randomUUID()
-    const abortController = new AbortController()
-
-    // 登记血缘：这条线程往后再调 task 会被上面的硬拦截挡掉
-    this.subAgentThreadIds.add(threadId)
-
     const handle: SubAgentHandle = {
-      id,
-      description: request.description,
-      threadId,
-      requestId,
-      status: 'running',
-      startedAt: Date.now(),
-      abortController,
-      laneAssignment,
+      id, description: request.description, threadId, requestId,
+      status: 'running', startedAt: Date.now(),
+      abortController: new AbortController(), laneAssignment,
     }
+    this.subAgentThreadIds.add(threadId)
     this.activeHandles.set(id, handle)
     store.renameThread(threadId, `↳ ${request.description.slice(0, 72)}`)
-    lifecycle?.onStarted?.({
-      subAgentId: id,
-      threadId,
-      requestId,
-      startedAt: handle.startedAt,
-    })
 
-    // 2. 设置完成监听（通过 EventBus 的 loop:end 事件）
+    // Install cancellation/completion before notifying the caller; onStarted can cancel synchronously.
     const completionPromise = this.setupCompletionListener(handle, timeoutMs)
+    const onParentAbort = () => handle.abortController.abort('Sub-agent was cancelled because its parent task was cancelled')
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true })
+    if (parentSignal?.aborted) onParentAbort()
 
-    // 3. 构建子代理的初始消息（注入任务描述 + 约束）
-    const message = this.buildSubAgentMessage(request)
-
-    // 4. 派发执行（复用 Agent.send，绑定到隐藏线程）
     try {
-      const execution = await Agent.send(
-        message,
-        config,
-        laneAssignment.workspacePath,
-        chatMode,
-        {
-          // 子代理使用简洁模板，不携带主 agent 的完整 skills / 上下文
-          promptTemplateId: request.promptTemplateId || 'concise',
-          customInstructions: request.customInstructions,
-        },
-        {
-          threadId,
-          requestId,
-          // 让 runLoop / PromptBuilder 知道这是子代理，从工具集里剔掉 task 等
-          isSubAgent: true,
-        },
-      )
+      lifecycle?.onStarted?.({ subAgentId: id, threadId, requestId, startedAt: handle.startedAt })
+      if (!handle.finishing) {
+        const message = this.buildSubAgentMessage(request)
+        let executionStopped!: () => void
+        handle.executionPromise = new Promise<void>(resolve => { executionStopped = resolve })
 
-      handle.assistantId = execution.assistantId
-      logger.agent.info(`[SubAgent] Sub-agent ${id} dispatched on thread ${threadId}`)
+        // Agent.send awaits the whole run, not just dispatch. Do not await it here:
+        // otherwise a stuck run prevents even an already-resolved timeout from reaching task.
+        void (async () => {
+          try {
+            const execution = await Agent.send(
+              message, config, laneAssignment.workspacePath, chatMode,
+              { promptTemplateId: request.promptTemplateId || 'concise', customInstructions: request.customInstructions },
+              { threadId, requestId, isSubAgent: true },
+            )
+            handle.assistantId = execution.assistantId
+            logger.agent.info(`[SubAgent] Sub-agent ${id} execution stopped on thread ${threadId}`)
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            logger.agent.error(`[SubAgent] Execution failed for ${id}:`, error)
+            this.settleWithLaneRelease(handle, 'sub-agent execution failed', {
+              success: false, error: `Sub-agent execution failed: ${detail}`, subAgentId: id,
+            })
+          } finally {
+            executionStopped()
+          }
+        })()
+      }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      logger.agent.error(`[SubAgent] Failed to dispatch sub-agent ${id}:`, error)
+      const detail = error instanceof Error ? error.message : String(error)
       this.settleWithLaneRelease(handle, 'sub-agent failed to start', {
-        success: false,
-        error: `Failed to start sub-agent: ${errorMsg}`,
-        subAgentId: id,
+        success: false, error: `Failed to start sub-agent: ${detail}`, subAgentId: id,
       })
     }
 
-    // 5. 等待完成
-    const result = await completionPromise
-    return result
+    try {
+      return await completionPromise
+    } finally {
+      parentSignal?.removeEventListener('abort', onParentAbort)
+    }
   }
 
   /**
@@ -251,10 +254,9 @@ class SubAgentManagerClass {
    */
   abort(subAgentId: string): void {
     const handle = this.activeHandles.get(subAgentId)
-    if (!handle) return
-
-    handle.abortController.abort()
-    Agent.abort(handle.threadId)
+    if (!handle || handle.finishing) return
+    // The request-scoped listener claims completion and aborts only this Agent thread.
+    handle.abortController.abort('Sub-agent was cancelled by user')
     logger.agent.info(`[SubAgent] Aborted sub-agent ${subAgentId}`)
   }
 
@@ -300,136 +302,117 @@ class SubAgentManagerClass {
   private setupCompletionListener(handle: SubAgentHandle, timeoutMs: number): Promise<SubAgentResult> {
     return new Promise<SubAgentResult>((resolve) => {
       let settled = false
-      let finishing = false
       let inactivityTimer: ReturnType<typeof setTimeout> | null = null
 
-      const fireTimeout = (message: string): void => {
-        if (settled) return
+      const fireTimeout = (message: string) => {
+        if (settled || handle.finishing) return
         logger.agent.warn(`[SubAgent] ${message} (thread ${handle.threadId})`)
-        Agent.abort(handle.threadId)
-        this.settleWithLaneRelease(handle, message, {
-          success: false,
-          error: message,
-          subAgentId: handle.id,
-          threadId: handle.threadId,
-        })
+        handle.abortController.abort(message)
       }
-
-      // 绝对生命上限独立计时：进展重置的只是无活动窗口，不是这个。
       const hardCapTimer = setTimeout(
         () => fireTimeout(`Sub-agent ${handle.id} exceeded the maximum duration of ${MAX_SUB_AGENT_DURATION_MS}ms`),
         MAX_SUB_AGENT_DURATION_MS,
       )
-
-      const clearInactivityTimer = () => {
-        if (inactivityTimer) {
-          clearTimeout(inactivityTimer)
-          inactivityTimer = null
-        }
-      }
-
       const armInactivityTimer = () => {
-        clearInactivityTimer()
+        if (settled || handle.finishing) return
+        if (inactivityTimer !== null) clearTimeout(inactivityTimer)
         inactivityTimer = setTimeout(
           () => fireTimeout(`Sub-agent ${handle.id} timed out after ${timeoutMs}ms of inactivity`),
           timeoutMs,
         )
       }
-
-      const cleanup = () => {
-        clearInactivityTimer()
-        clearTimeout(hardCapTimer)
-        unsubscribe()
-        unsubscribeProgress()
-      }
-
-      this.completionResolvers.set(handle.id, (result: SubAgentResult) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve(result)
-      })
-
-      // 进展信号：每个 LLM 迭代 / 工具事件都重置无活动窗口。只订阅带 threadId
-      // 的事件（stream:* / llm:* 不带，无法区分是谁的进展）。
-      const onProgress = (event: { threadId?: string }): void => {
+      const onProgress = (event: { threadId?: string }) => {
         if (event.threadId === handle.threadId) armInactivityTimer()
       }
       const progressUnsubscribers = [
+        EventBus.on('stream:activity', onProgress),
         EventBus.on('loop:iteration', onProgress),
         EventBus.on('tool:running', onProgress),
         EventBus.on('tool:completed', onProgress),
         EventBus.on('tool:error', onProgress),
         EventBus.on('tool:rejected', onProgress),
       ]
-      const unsubscribeProgress = () => progressUnsubscribers.forEach(off => off())
 
-      armInactivityTimer()
+      const onAbort = () => {
+        if (handle.finishing) return
+        const reason = handle.abortController.signal.reason
+        const error = typeof reason === 'string' ? reason : 'Sub-agent was cancelled by user'
+        // Claim the terminal state BEFORE aborting Agent: abort can synchronously emit loop:end.
+        this.settleWithLaneRelease(handle, error, { success: false, error, subAgentId: handle.id })
+        if (handle.executionPromise) {
+          try {
+            Agent.abort(handle.threadId)
+          } catch (abortError) {
+            logger.agent.warn(`[SubAgent] Unable to abort ${handle.id}:`, abortError)
+          }
+        }
+      }
 
       const unsubscribe = EventBus.on('loop:end', (event) => {
-        if (event.threadId !== handle.threadId) return
-        if (event.requestId !== handle.requestId) return
-        if (finishing) return
-        finishing = true
-
-        // 用共享判定，不要在这里各自列举 reason。原来列的是失败项且含一个
-        // 从不存在的 'failed'，于是 handoff_required / no_messages /
-        // waiting_for_user 三种「没干完」都落进 else 被当成成功回传。
+        if (event.threadId !== handle.threadId || event.requestId !== handle.requestId || handle.finishing) return
+        handle.assistantId = event.assistantId || handle.assistantId
         const succeeded = isSuccessfulLoopEnd(event.reason)
-        const isAborted = isAbortedLoopEnd(event.reason)
-
-        handle.status = isAborted ? 'aborted' : succeeded ? 'completed' : 'failed'
-        handle.completedAt = Date.now()
-
-        if (isAborted) {
-          this.settleWithLaneRelease(handle, 'sub-agent aborted', {
-            success: false,
-            error: 'Sub-agent was aborted',
-            subAgentId: handle.id,
-            threadId: handle.threadId,
-            durationMs: Date.now() - handle.startedAt,
-          })
-          return
-        }
-
-        const output = this.extractOutput(handle)
-        cleanup()
-
-        // 没成功的子代理也必须归还车道：否则 worktree 目录和分支会一直留在仓库里，
-        // 并且残留会弄脏基准工作区，后续并行子代理全都建不出车道。
         if (!succeeded) {
-          this.settleWithLaneRelease(handle, `sub-agent did not finish (${event.reason})`, {
-            success: false,
-            error: `Sub-agent did not finish (${event.reason})`,
-            subAgentId: handle.id,
-            threadId: handle.threadId,
-            assistantId: handle.assistantId,
-            durationMs: Date.now() - handle.startedAt,
-          })
+          const error = event.error || (isAbortedLoopEnd(event.reason)
+            ? event.reason === 'user_rejected'
+              ? 'Sub-agent stopped because a tool was rejected'
+              : 'Sub-agent was cancelled'
+            : `Sub-agent did not finish (${event.reason})`)
+          this.settleWithLaneRelease(handle, error, { success: false, error, subAgentId: handle.id })
           return
         }
 
+        handle.finishing = true
+        handle.status = 'completed'
+        handle.completedAt = Date.now()
+        cleanup()
         void (async () => {
-          const laneResult = handle.laneAssignment?.isolated
-            ? await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`) || undefined
-            : undefined
-          // `retained` 不是失败：agent 干完了活，只是改动没能自动合并，提交仍在分支上
-          // 等人工处理。把它当失败会连 output 一起丢掉 —— 那才是任务的真正答案。
-          // 保留下来的车道通过 worktree 投影告诉调用方还需要合并。
-          const laneFailed = Boolean(laneResult) && !laneResult!.success && laneResult!.outcome !== 'retained'
-          this.settle(handle.id, {
-            success: !laneFailed,
-            output: laneFailed ? undefined : output || 'Sub-agent completed with no output.',
-            error: laneResult?.error,
-            subAgentId: handle.id,
-            threadId: handle.threadId,
-            assistantId: handle.assistantId,
-            durationMs: Date.now() - handle.startedAt,
-            worktree: laneResult ? projectLane(laneResult) : undefined,
-          })
+          try {
+            if (!await this.waitForExecutionStop(handle)) {
+              const error = 'Sub-agent execution did not stop; its lane was left untouched for recovery.'
+              this.settle(handle.id, { success: false, error, subAgentId: handle.id, worktree: this.preservedLane(handle, error) })
+              return
+            }
+            const output = this.extractOutput(handle)
+            const laneResult = handle.laneAssignment?.isolated
+              ? await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`)
+              : null
+            // Work completed but automatic merge was blocked: keep the answer and the recovery projection.
+            const laneFailed = Boolean(laneResult && !laneResult.success && laneResult.outcome !== 'retained')
+            this.settle(handle.id, {
+              success: !laneFailed,
+              output: laneFailed ? undefined : output || 'Sub-agent completed with no output.',
+              error: laneFailed ? laneResult?.error || 'Sub-agent completed, but its lane could not be finalized.' : undefined,
+              subAgentId: handle.id,
+              worktree: laneResult ? projectLane(laneResult) : undefined,
+            })
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            this.settle(handle.id, {
+              success: false, error: `Unable to finalize sub-agent: ${detail}`, subAgentId: handle.id,
+              worktree: this.preservedLane(handle, detail),
+            })
+          }
         })()
       })
 
+      const cleanup = () => {
+        if (inactivityTimer !== null) clearTimeout(inactivityTimer)
+        inactivityTimer = null
+        clearTimeout(hardCapTimer)
+        unsubscribe()
+        progressUnsubscribers.forEach(off => off())
+        handle.abortController.signal.removeEventListener('abort', onAbort)
+      }
+      handle.cleanupCompletion = cleanup
+      this.completionResolvers.set(handle.id, result => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(result)
+      })
+      handle.abortController.signal.addEventListener('abort', onAbort, { once: true })
+      armInactivityTimer()
     })
   }
 
@@ -439,12 +422,54 @@ class SubAgentManagerClass {
    * 车道回收是异步的（提交 WIP → 删目录），但 settle 是同步的；把两者串起来，
    * 保证调用方拿到的 worktree 投影已经是终态，而不是一个还在的临时目录。
    */
-  private settleWithLaneRelease(handle: SubAgentHandle, reason: string, result: SubAgentResult): void {
+  private async waitForExecutionStop(handle: SubAgentHandle): Promise<boolean> {
+    if (!handle.executionPromise) return true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        handle.executionPromise.then(() => true, () => true),
+        new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), ABORT_GRACE_MS) }),
+      ])
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  private preservedLane(handle: SubAgentHandle, error: string, stillRunning = false): SubAgentResult['worktree'] {
+    const lane = handle.laneAssignment?.lane
+    return lane ? {
+      status: 'failed', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch,
+      archived: false, error,
+      notice: stillRunning ? { code: 'laneStillRunning' } : { code: 'cleanupFailed', params: { branch: lane.branch } },
+    } : undefined
+  }
+
+  
+private settleWithLaneRelease(handle: SubAgentHandle, reason: string, result: SubAgentResult): void {
+    if (handle.finishing || !this.activeHandles.has(handle.id)) return
+    handle.finishing = true
+    handle.status = handle.abortController.signal.aborted ? 'aborted' : 'failed'
+    handle.completedAt = Date.now()
+    handle.cleanupCompletion?.()
     void (async () => {
-      const released = handle.laneAssignment?.isolated
-        ? await ExecutionLaneCoordinator.release(handle.laneAssignment, reason) || undefined
-        : undefined
-      this.settle(handle.id, { ...result, worktree: released ? projectLane(released) : undefined })
+      try {
+        if (!await this.waitForExecutionStop(handle)) {
+          const error = `${result.error || reason}. Execution did not stop; the lane was left untouched for recovery.`
+          this.settle(handle.id, { ...result, error, worktree: this.preservedLane(handle, error, true) })
+          return
+        }
+        const released = handle.laneAssignment?.isolated
+          ? await ExecutionLaneCoordinator.release(handle.laneAssignment, reason)
+          : null
+        this.settle(handle.id, { ...result, worktree: released ? projectLane(released) : undefined })
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        logger.agent.error(`[SubAgent] Unable to release lane for ${handle.id}:`, error)
+        this.settle(handle.id, {
+          ...result, error: `${result.error || reason}. Lane cleanup failed: ${detail}`,
+          worktree: this.preservedLane(handle, detail),
+        })
+      }
     })()
   }
 
@@ -473,19 +498,23 @@ class SubAgentManagerClass {
    * 结束子代理，清理资源并回传结果
    */
   private settle(subAgentId: string, result: SubAgentResult): void {
-    // 隐藏线程有意保留：用户可以事后翻看子代理的完整对话。
-    // 只摘掉活跃句柄，让并发额度立刻释放。
+    const handle = this.activeHandles.get(subAgentId)
+    if (!handle) return
+    handle.cleanupCompletion?.()
+    const completed = {
+      ...result,
+      threadId: result.threadId || handle.threadId,
+      assistantId: result.assistantId || handle.assistantId,
+      durationMs: result.durationMs ?? Date.now() - handle.startedAt,
+    }
+    // Keep hidden conversations for inspection; release only the active handle/quota.
     this.activeHandles.delete(subAgentId)
-
     const resolver = this.completionResolvers.get(subAgentId)
     if (resolver) {
       this.completionResolvers.delete(subAgentId)
-      resolver(result)
+      resolver(completed)
     }
-
-    logger.agent.info(
-      `[SubAgent] Settled ${subAgentId}: success=${result.success}, ${result.durationMs ?? 0}ms`,
-    )
+    logger.agent.info(`[SubAgent] Settled ${subAgentId}: success=${completed.success}, ${completed.durationMs}ms`)
   }
 
   /**

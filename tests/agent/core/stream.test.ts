@@ -146,4 +146,29 @@ describe('tool call stream assembly', () => {
     const result = await processor.wait()
     expect(result.content).toBe('visible <tool_')
   })
+  it('emits request-scoped activity for text, reasoning and tool argument streaming', async () => {
+    const { EventBus } = await import('@/renderer/agent/core/EventBus')
+    const activity = vi.fn()
+    const off = EventBus.on('stream:activity', activity)
+    const processor = createStreamProcessor(null, { threadId: 'sub-thread' } as never, 'sub-request')
+    try {
+      streamHarness.stream!({ type: 'text', content: '<tool_' })
+      streamHarness.stream!({ type: 'reasoning', content: 'thinking' })
+      streamHarness.stream!({ type: 'tool_call_start', id: 'call-activity', name: 'write_file' })
+      streamHarness.stream!({ type: 'tool_call_delta', id: 'call-activity', argumentsDelta: '{"path":' })
+      expect(activity).toHaveBeenCalledTimes(4)
+      expect(activity).toHaveBeenLastCalledWith({
+        type: 'stream:activity', threadId: 'sub-thread', requestId: 'sub-request', assistantId: undefined,
+      })
+      streamHarness.stream!({ type: 'text', content: '' })
+      expect(activity).toHaveBeenCalledTimes(4)
+      streamHarness.done!({})
+      await processor.wait()
+      streamHarness.stream!({ type: 'text', content: 'late chunk after cleanup' })
+      expect(activity).toHaveBeenCalledTimes(4)
+    } finally {
+      processor.cleanup()
+      off()
+    }
+  })
 })

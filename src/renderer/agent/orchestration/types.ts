@@ -24,7 +24,7 @@ export interface SubAgentRequest {
   constraints?: string[]
   /** 最大工具迭代次数（可选），默认由 budgetController 控制 */
   maxIterations?: number
-  /** 超时毫秒数（可选），默认 5 分钟 */
+  /** 无活动超时窗口（毫秒），默认 5 分钟；流式输出会刷新活动时间 */
   timeoutMs?: number
   /** Whether tools may mutate the repository. */
   writeCapable?: boolean
@@ -62,6 +62,8 @@ export interface SubAgentStartedInfo {
 
 export interface SubAgentLifecycleCallbacks {
   onStarted?: (info: SubAgentStartedInfo) => void
+  /** 父任务取消时同步取消子代理，不影响其他线程。 */
+  abortSignal?: AbortSignal
 }
 
 /**

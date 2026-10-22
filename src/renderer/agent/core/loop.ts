@@ -516,7 +516,7 @@ export async function runLoop(
         message: finalResult.error,
       })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
-      EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'error', error: finalResult.error, threadId, assistantId, requestId, planTaskId: context.planTaskId })
       return
     }
 
@@ -626,7 +626,7 @@ export async function runLoop(
         message: result.error,
       })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
-      EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'error', error: result.error, threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
