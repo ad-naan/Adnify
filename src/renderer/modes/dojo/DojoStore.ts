@@ -9,6 +9,11 @@ export function dojoWorkspaceKey(path: string): string {
   return /^[a-z]:|^\/\//i.test(normalized) ? normalized.toLowerCase() : normalized
 }
 
+export function dojoStepContract(step: DojoStep): string {
+  return JSON.stringify({ goal: step.goal, files: step.files, command: step.verifyCommand.trim(), criteria: step.acceptanceCriteria ?? [] })
+}
+
+
 export function isFreshVerification(session: DojoSession, step: DojoStep): boolean {
   const result = step.verification
   return Boolean(result?.success && !result.stale && result.stepId === step.id &&

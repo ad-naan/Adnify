@@ -4029,6 +4029,7 @@ export const zh = {
   'dojo.acceptanceRequired': '每项任务都需要可观察的验收标准。',
   'dojo.unsafeVerifyCommand': '这条命令包含写入操作或 shell 操作符，请改为项目已有的、范围明确的非破坏性检查。',
   'dojo.invalidFile': '这个文件路径不在训练工作区内，或路径无效。',
+  'dojo.verifyInterrupted': '验收已停止，未完成的命令不会作为通过证据。',
   'dojo.verificationBusy': '上一条命令还在结束中，请勿重复执行。',
   'dojo.saveBeforeVerify': '先保存这个项目中未保存的编辑器内容。检查针对磁盘文件执行，不会验证草稿。',
   'dojo.noVerifyCommand': '这项任务使用手动验收，请直接确认实际行为。',

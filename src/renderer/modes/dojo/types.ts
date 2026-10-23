@@ -62,6 +62,9 @@ export interface DojoVerifyResult {
   /** Immutable raw command output. Mentor feedback lives in step.diagnosis. */
   output: string
   ranAt: number
+  /** Bind evidence to its training session and the task contract that was actually checked. */
+  sessionId?: string
+  stepContract?: string
   stepId?: string
   workspacePath?: string
   command?: string

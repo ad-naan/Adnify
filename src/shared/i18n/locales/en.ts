@@ -4028,6 +4028,7 @@ export const en = {
   'dojo.acceptanceRequired': 'Every task needs an observable acceptance criterion.',
   'dojo.unsafeVerifyCommand': 'This command contains a mutating operation or shell operator. Edit it to use a focused, non-destructive project check.',
   'dojo.invalidFile': 'This file path is not valid inside the training workspace.',
+  'dojo.verifyInterrupted': 'Verification stopped. An unfinished command is not passing evidence.',
   'dojo.verificationBusy': 'The previous command is still finishing. Do not submit it twice.',
   'dojo.saveBeforeVerify': 'Save your project’s unsaved editor buffers before verification. Checks run against the files on disk.',
   'dojo.noVerifyCommand': 'This task uses manual verification. Confirm its acceptance criteria instead.',
