@@ -36,7 +36,7 @@ export default function DojoWorkbench() {
   const [requirement, setRequirement] = useState('')
   const [input, setInput] = useState('')
   const [includeSelection, setIncludeSelection] = useState(false)
-  const [retry, setRetry] = useState<(() => Promise<void>) | null>(null)
+  const [retry, setRetry] = useState<((isCurrent: () => boolean) => Promise<void>) | null>(null)
   const operationRef = useRef(false)
   const seqRef = useRef(0)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -69,20 +69,22 @@ export default function DojoWorkbench() {
     return () => { alive = false }
   }, [session?.id, step?.id, currentMode, workspacePath])
 
-  const runOperation = useCallback(async (work: () => Promise<void>) => {
+  const runOperation = useCallback(async (work: (isCurrent: () => boolean) => Promise<void>) => {
     if (operationRef.current) return
     operationRef.current = true
     const seq = ++seqRef.current
     const state = useDojoStore.getState()
+    const sessionId = state.session?.id
+    const isCurrent = () => seq === seqRef.current && useDojoStore.getState().session?.id === sessionId
     state.setMentorBusy(true); state.setError(null)
     setRetry(null)
-    try { await work() } catch (err) {
-      if (seq === seqRef.current) {
+    try { await work(isCurrent) } catch (err) {
+      if (isCurrent()) {
         useDojoStore.getState().setError(err instanceof Error ? err.message : String(err))
         setRetry(() => work)
       }
     } finally {
-      if (seq === seqRef.current) { operationRef.current = false; useDojoStore.getState().setMentorBusy(false) }
+      if (isCurrent()) { operationRef.current = false; useDojoStore.getState().setMentorBusy(false) }
     }
   }, [])
 
@@ -122,11 +124,11 @@ export default function DojoWorkbench() {
   }
   const start = () => {
     const text = requirement.trim()
-    if (!text || !workspacePath || !llmConfig) return
+    if (!text || !workspacePath || !llmConfig || operationRef.current) return
     const draft = createDojoSession(text, workspacePath)
     useDojoStore.getState().startSession(draft)
     useDojoStore.getState().appendMessage({ role: 'user', content: text })
-    const work = async () => { const result = await decomposeRequirement(text, workspacePath); if (useDojoStore.getState().session?.id === draft.id) applyPlan(result) }
+    const work = async (isCurrent: () => boolean) => { const result = await decomposeRequirement(text, workspacePath); if (isCurrent()) applyPlan(result) }
     void runOperation(work)
   }
   const beginPlan = () => {
@@ -139,26 +141,27 @@ export default function DojoWorkbench() {
   }
 
   const mentorAction = (label: string, work: () => Promise<string>, kind: DojoMessage['kind'] = 'conversation') => {
-    if (!session) return
-    const sessionId = session.id, stepId = step?.id, revision = session.codeRevision ?? 0
+    if (!session || busy || operationRef.current) return
+    const stepId = step?.id
     useDojoStore.getState().appendMessage({ role: 'user', content: label, stepId })
     setView('conversation')
-    void runOperation(async () => {
+    void runOperation(async isCurrent => {
+      const revision = useDojoStore.getState().session?.codeRevision ?? 0
       const reply = await work()
-      if (useDojoStore.getState().session?.id !== sessionId) return
+      if (!isCurrent()) return
       useDojoStore.getState().appendMessage({ role: 'mentor', content: reply, kind, stepId, codeRevision: revision })
       if (stepId && kind === 'demo') useDojoStore.getState().updateStep(stepId, { demo: reply })
       if (stepId && kind === 'review') useDojoStore.getState().updateStep(stepId, { review: reply })
+      if (stepId && kind === 'diagnosis') useDojoStore.getState().updateStep(stepId, { diagnosis: reply })
     })
   }
   const send = () => {
     const text = input.trim()
-    if (!text || !session || busy) return
+    if (!text || !session || busy || !llmConfig || operationRef.current) return
     setInput('')
     if (view === 'plan' || session.status === 'planning') {
-      const sessionId = session.id
       useDojoStore.getState().appendMessage({ role: 'user', content: text })
-      void runOperation(async () => { const result = await reviseDojoPlan(text, workspacePath); if (useDojoStore.getState().session?.id === sessionId) applyPlan(result) })
+      void runOperation(async isCurrent => { const result = await reviseDojoPlan(text, workspacePath); if (isCurrent()) applyPlan(result) })
     } else mentorAction(text, () => askDojoMentor(text, workspacePath, step, includeSelection))
   }
 
@@ -171,27 +174,28 @@ export default function DojoWorkbench() {
     setView('conversation')
   }
   const verify = () => {
-    if (!session || !step) return
-    const sessionId = session.id, task = step
+    if (!session || !step || busy || operationRef.current) return
+    const task = step
     setView('conversation')
-    void runOperation(async () => {
+    void runOperation(async isCurrent => {
       const result = await runVerification(task.verifyCommand, workspacePath, task)
-      if (useDojoStore.getState().session?.id !== sessionId) return
+      if (!isCurrent()) return
       useDojoStore.getState().setVerifyResult(result)
       const stored = useDojoStore.getState().session?.steps.find(item => item.id === task.id)?.verification
       useDojoStore.getState().appendMessage({ role: 'system', stepId: task.id, kind: 'verification', content: `${t(stored?.stale ? 'dojo.verifyStale' : result.success ? 'dojo.verifyPassed' : 'dojo.verifyFailed', language)}\n${task.verifyCommand}` })
     })
   }
   const complete = () => {
-    if (!session || !step) return
-    const sessionId = session.id, task = step
-    void runOperation(async () => {
+    if (!session || !step || busy || operationRef.current) return
+    const task = step
+    void runOperation(async isCurrent => {
       flushEditorBufferSnapshots()
       if (useStore.getState().openFiles.some(file => !file.remote && pathStartsWith(file.path, workspacePath) && file.isDirty)) throw new Error(t('dojo.saveBeforeVerify', language))
-      if (task.verifyCommand && !await checkDojoVerificationSnapshot(task, workspacePath)) {
+      const valid = !task.verifyCommand.trim() || await checkDojoVerificationSnapshot(task, workspacePath)
+      if (!isCurrent()) return
+      if (!valid) {
         useDojoStore.getState().invalidateVerification(); throw new Error(t('dojo.verifyStale', language))
       }
-      if (useDojoStore.getState().session?.id !== sessionId) return
       if (!useDojoStore.getState().completeStep(task.id)) throw new Error(t('dojo.completeRequirements', language))
       useDojoStore.getState().appendMessage({ role: 'system', stepId: task.id, content: `${t('dojo.taskCompleted', language)} · ${task.title}` })
     })
@@ -201,7 +205,7 @@ export default function DojoWorkbench() {
   const ready = session && step ? canCompleteDojoStep(session, step) : false
   const done = session?.steps.filter(item => item.phase === 'passed').length ?? 0
   const messages = session?.messages ?? []
-  const selectionAvailable = Boolean(selectedCode && activeFilePath)
+  const selectionAvailable = Boolean(selectedCode && activeFilePath && pathStartsWith(activeFilePath, workspacePath) && useStore.getState().openFiles.some(file => !file.remote && pathEquals(file.path, activeFilePath)))
 
   return <section className="dojo-surface" data-dojo-panel>
     <header className="dojo-header">
@@ -229,7 +233,7 @@ export default function DojoWorkbench() {
     </div> : <>
       <div className="dojo-main">
         {view === 'plan' ? <DojoPlanView session={session} language={language} disabled={busy} onOpenFile={path => void openFile(path)} onStart={beginPlan} /> : <>
-          {step && session.status !== 'planning' && <TaskCard session={session} step={step} language={language} busy={busy} fresh={fresh} onOpenFile={path => void openFile(path)} onVerify={verify} onComplete={complete} ready={ready} onHint={revealHint} onDemo={() => mentorAction(t('dojo.requestDemo', language), () => demonstrateStep(step, session.requirement, workspacePath), 'demo')} onReview={() => mentorAction(t('dojo.requestReview', language), () => reviewStep(step, session.requirement, workspacePath), 'review')} onQuiz={() => mentorAction(t('dojo.requestQuiz', language), () => quizForStep(step, workspacePath))} onDiagnose={() => mentorAction(t('dojo.askDiagnosis', language), async () => { const text = await diagnoseFailure(step, step.verification?.output ?? '', workspacePath); useDojoStore.getState().updateStep(step.id, { diagnosis: text }); return text })} />}
+          {step && session.status !== 'planning' && <TaskCard session={session} step={step} language={language} busy={busy} fresh={fresh} onOpenFile={path => void openFile(path)} onVerify={verify} onComplete={complete} ready={ready} onHint={revealHint} onDemo={() => mentorAction(t('dojo.requestDemo', language), () => demonstrateStep(step, session.requirement, workspacePath), 'demo')} onReview={() => mentorAction(t('dojo.requestReview', language), () => reviewStep(step, session.requirement, workspacePath), 'review')} onQuiz={() => mentorAction(t('dojo.requestQuiz', language), () => quizForStep(step, workspacePath))} onDiagnose={() => mentorAction(t('dojo.askDiagnosis', language), () => diagnoseFailure(step, step.verification?.output ?? '', workspacePath), 'diagnosis')} />}
           <div ref={timelineRef} className="dojo-timeline" onScroll={() => { const el = timelineRef.current; if (el) followsTail.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50 }} role="log" aria-label={t('dojo.conversation', language)}>
             {!messages.length && <p className="dojo-helper">{t('dojo.mentorWaiting', language)}</p>}
             {messages.map(item => <article key={item.id} className={`dojo-message dojo-message-${item.role}`}>
@@ -256,12 +260,14 @@ function TaskCard({ session, step, language, busy, fresh, ready, onOpenFile, onV
   onOpenFile: (path: string) => void; onVerify: () => void; onComplete: () => void; onHint: () => void; onDemo: () => void; onReview: () => void; onQuiz: () => void; onDiagnose: () => void
 }) {
   const result = step.verification
+  const verificationState = result?.cancelled ? 'cancelled' : result && (!fresh && result.success || result.stale) ? 'stale' : result?.success ? 'success' : 'failed'
+  const verificationLabel = verificationState === 'cancelled' ? 'dojo.verifyInterrupted' : verificationState === 'stale' ? 'dojo.verifyStale' : verificationState === 'success' ? 'dojo.verifyPassed' : 'dojo.verifyFailed'
   return <div className="dojo-task">
     <div className="dojo-task-heading"><span>{t('dojo.stepN', language, { index: session.currentStepIndex + 1, total: session.steps.length })}</span><select aria-label={t('dojo.selectTask', language)} value={step.id} disabled={busy} onChange={event => useDojoStore.getState().selectStep(event.target.value)}>{session.steps.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.title}{item.phase === 'passed' ? ' ✓' : ''}</option>)}</select></div>
     <h2>{step.title}</h2><p>{step.goal}</p><div className="dojo-file-links">{step.files.map(path => <button type="button" key={path} onClick={() => onOpenFile(path)} title={path}><FileText size={12} /><span>{path.split(/[\\/]/).pop()}</span></button>)}</div>
     <details className="dojo-task-details"><summary>{t('dojo.acceptance', language)}<span>{step.confirmedCriteria?.length ?? 0}/{step.acceptanceCriteria?.length ?? 0}</span></summary><p className="dojo-helper">{t('dojo.manualEvidence', language)}</p>{(step.acceptanceCriteria ?? []).map(item => <label key={item} className="dojo-criterion"><input type="checkbox" disabled={busy || step.phase === 'passed'} checked={step.confirmedCriteria?.includes(item) ?? false} onChange={event => useDojoStore.getState().updateStep(step.id, { confirmedCriteria: event.target.checked ? [...(step.confirmedCriteria ?? []), item] : (step.confirmedCriteria ?? []).filter(value => value !== item) })} /><span>{item}</span></label>)}
       {step.verifyCommand ? <div className="dojo-command"><Terminal size={12} /><code>{step.verifyCommand}</code></div> : <p className="dojo-helper">{t('dojo.manualOnly', language)}</p>}
-      {result && <div className="dojo-verification" data-state={result.stale ? 'stale' : result.success ? 'success' : 'failed'}><p>{t(result.stale ? 'dojo.verifyStale' : result.success ? 'dojo.verifyPassed' : 'dojo.verifyFailed', language)} · {result.exitCode ?? '—'}</p><pre>{result.output || t('dojo.verifyNoOutput', language)}</pre>{!result.success && <button type="button" className="dojo-secondary" disabled={busy} onClick={onDiagnose}>{t('dojo.askDiagnosis', language)}</button>}</div>}
+      {result && <div className="dojo-verification" data-state={verificationState}><p>{t(verificationLabel, language)} · {result.exitCode ?? '—'}</p><pre>{result.output || t('dojo.verifyNoOutput', language)}</pre>{!result.success && !result.cancelled && <button type="button" className="dojo-secondary" disabled={busy} onClick={onDiagnose}>{t('dojo.askDiagnosis', language)}</button>}</div>}
     </details>
     <div className="dojo-action-row">
       {step.phase === 'passed' ? <><span className="dojo-passed"><Check size={13} />{t('dojo.taskCompleted', language)}</span>{session.currentStepIndex < session.steps.length - 1 && <button type="button" className="dojo-primary" disabled={busy} onClick={() => useDojoStore.getState().advanceStep()}>{t('dojo.nextStep', language)}<ChevronRight size={13} /></button>}</> : <>

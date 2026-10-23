@@ -37,7 +37,7 @@ export interface DojoMessage {
   createdAt: number
   stepId?: string
   codeRevision?: number
-  kind?: 'conversation' | 'demo' | 'hint' | 'verification' | 'review'
+  kind?: 'conversation' | 'demo' | 'hint' | 'verification' | 'review' | 'diagnosis'
 }
 
 export interface DojoSession {

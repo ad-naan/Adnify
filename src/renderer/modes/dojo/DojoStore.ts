@@ -16,14 +16,15 @@ export function dojoStepContract(step: DojoStep): string {
 
 export function isFreshVerification(session: DojoSession, step: DojoStep): boolean {
   const result = step.verification
-  return Boolean(result?.success && !result.stale && result.stepId === step.id &&
-    result.command === step.verifyCommand && pathEquals(result.workspacePath ?? '', session.workspacePath) &&
+  return Boolean(result?.success && result.exitCode === 0 && !result.cancelled && !result.stale && result.stepId === step.id &&
+    result.sessionId === session.id && result.stepContract === dojoStepContract(step) &&
+    result.command === step.verifyCommand.trim() && pathEquals(result.workspacePath ?? '', session.workspacePath) &&
     result.codeRevision === (session.codeRevision ?? 0))
 }
 
 export function canCompleteDojoStep(session: DojoSession, step: DojoStep): boolean {
   const criteria = step.acceptanceCriteria ?? []
-  return criteria.length > 0 && criteria.every(item => step.confirmedCriteria?.includes(item)) &&
+  return session.status === 'active' && criteria.length > 0 && criteria.every(item => step.confirmedCriteria?.includes(item)) &&
     (!step.verifyCommand.trim() || isFreshVerification(session, step))
 }
 
@@ -177,10 +178,10 @@ export const useDojoStore = create<DojoStore>()(persist((set, get) => ({
   setVerifyResult: (result) => {
     const { session, sessions } = get()
     if (!result) { set({ verifyResult: null }); return }
-    if (!session || !result.stepId || !pathEquals(result.workspacePath ?? '', session.workspacePath)) return
+    if (!session || result.sessionId !== session.id || !result.stepId || !pathEquals(result.workspacePath ?? '', session.workspacePath)) return
     const step = session.steps.find(item => item.id === result.stepId)
-    if (!step || step.verifyCommand !== result.command) return
-    const verification = { ...result, stale: Boolean(result.stale || result.codeRevision !== (session.codeRevision ?? 0)) }
+    if (!step || step.verifyCommand.trim() !== result.command || result.stepContract !== dojoStepContract(step)) return
+    const verification = { ...result, stale: Boolean(result.stale || result.cancelled || result.codeRevision !== (session.codeRevision ?? 0)) }
     const steps = session.steps.map(item => item.id === step.id ? { ...item, verification } : item)
     set({ ...sessionPatch({ ...session, steps }, sessions), verifyResult: steps[session.currentStepIndex]?.verification ?? null })
   },

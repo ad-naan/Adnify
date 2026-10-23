@@ -20,7 +20,7 @@ export default function DojoPlanView({ session, language, disabled, onOpenFile, 
   useEffect(() => { setExpandedId(session.steps[session.currentStepIndex]?.id); setEditingId(null); setDraft(null) }, [session.id])
   const edit = (step: DojoStep) => { setEditingId(step.id); setExpandedId(step.id); setDraft(draftFor(step)) }
   const save = () => {
-    if (!draft || !editingId || !draft.title.trim() || !lines(draft.criteria).length) return
+    if (!draft || !editingId || disabled || !draft.title.trim() || !lines(draft.criteria).length) return
     useDojoStore.getState().updateStep(editingId, { title: draft.title.trim(), goal: draft.goal.trim(), files: lines(draft.files), verifyCommand: draft.verifyCommand.trim(), acceptanceCriteria: lines(draft.criteria) })
     setEditingId(null); setDraft(null)
   }

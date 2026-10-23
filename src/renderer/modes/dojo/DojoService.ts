@@ -149,7 +149,7 @@ export async function askDojoMentor(question: string, workspacePath: string, ste
   const active = main.openFiles.find(file => pathEquals(file.path, main.activeFilePath ?? ''))
   const code = active && !active.remote && pathStartsWith(active.path, workspacePath) ? getEditorBufferContent(active.path, active.content).slice(0, 18000) : ''
   return runMentor([step ? stepContext(step) : '', code ? `Current editor buffer (may be unsaved): ${active!.path}\n\`\`\`\n${code}\n\`\`\`` : '',
-    includeSelection && main.selectedCode ? `Learner selected:\n${main.selectedCode.slice(0, 8000)}` : '', `Learner asks:\n${question}`].filter(Boolean).join('\n\n'), workspacePath, 'Conversation')
+    includeSelection && active && !active.remote && pathStartsWith(active.path, workspacePath) && main.selectedCode ? `Learner selected:\n${main.selectedCode.slice(0, 8000)}` : '', `Learner asks:\n${question}`].filter(Boolean).join('\n\n'), workspacePath, 'Conversation')
 }
 
 export async function demonstrateStep(step: DojoStep, requirement: string, workspacePath: string) {

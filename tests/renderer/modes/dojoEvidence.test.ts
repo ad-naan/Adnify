@@ -1,10 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/renderer/services/electronAPI', () => ({ api: { settings: { get: async () => null, set: async () => true } } }))
-import { useDojoStore, isFreshVerification, canCompleteDojoStep, dojoWorkspaceKey } from '@/renderer/modes/dojo/DojoStore'
+import { useDojoStore, isFreshVerification, canCompleteDojoStep, dojoWorkspaceKey, dojoStepContract } from '@/renderer/modes/dojo/DojoStore'
 import type { DojoSession, DojoStep } from '@/renderer/modes/dojo/types'
 const step = (id = 's1', patch: Partial<DojoStep> = {}): DojoStep => ({ id, title: 'Wire export', goal: 'Event flow', skill: 'event handlers', files: ['src/settings.ts'], verifyCommand: 'pnpm test', acceptanceCriteria: ['Click exports current config'], confirmedCriteria: [], hints: ['Inspect the handler'], hintsRevealed: 0, phase: 'handsOn', ...patch })
 const training = (workspacePath = '/project/a', steps = [step()]): DojoSession => ({ id: workspacePath, workspacePath, requirement: 'Export config', steps, currentStepIndex: 0, codeRevision: 0, createdAt: 1, status: 'active' })
-function evidence(patch = {}) { useDojoStore.getState().setVerifyResult({ success: true, exitCode: 0, output: 'tests passed', ranAt: 2, stepId: 's1', command: 'pnpm test', workspacePath: '/project/a', codeRevision: 0, fileVersions: { 'src/settings.ts': 'abc' }, ...patch }) }
+  it('rejects evidence from an earlier training even when task ids are reused', () => {
+    useDojoStore.getState().startSession(training())
+    evidence()
+    const result = useDojoStore.getState().verifyResult!
+    useDojoStore.getState().startSession({ ...training(), id: 'replacement-training' })
+    useDojoStore.getState().setVerifyResult(result)
+    expect(useDojoStore.getState().verifyResult).toBeNull()
+  })
+  it('rejects a late result after task files or behavior criteria change', () => {
+    useDojoStore.getState().startSession(training())
+    evidence()
+    const result = useDojoStore.getState().verifyResult!
+    useDojoStore.getState().updateStep('s1', { files: ['src/other.ts'] })
+    useDojoStore.getState().setVerifyResult(result)
+    expect(useDojoStore.getState().verifyResult?.stale).toBe(true)
+    expect(isFreshVerification(useDojoStore.getState().session!, useDojoStore.getState().session!.steps[0])).toBe(false)
+  })
+  it('never treats cancelled commands or nonzero exits as passing evidence', () => {
+    useDojoStore.getState().startSession(training())
+    evidence({ cancelled: true })
+    let session = useDojoStore.getState().session!
+    expect(isFreshVerification(session, session.steps[0])).toBe(false)
+    evidence({ exitCode: 1 })
+    session = useDojoStore.getState().session!
+    expect(isFreshVerification(session, session.steps[0])).toBe(false)
+  })
+  it('does not complete a proposed plan before the learner starts practice', () => {
+    useDojoStore.getState().startSession({ ...training('/project/a', [step('s1', { verifyCommand: '', confirmedCriteria: ['Click exports current config'] })]), status: 'planning' })
+    expect(useDojoStore.getState().completeStep('s1')).toBe(false)
+  })
+
+
+function evidence(patch = {}) {
+  const session = useDojoStore.getState().session!
+  useDojoStore.getState().setVerifyResult({ success: true, exitCode: 0, output: 'tests passed', ranAt: 2, sessionId: session.id, stepContract: dojoStepContract(session.steps[0]), stepId: 's1', command: 'pnpm test', workspacePath: '/project/a', codeRevision: 0, fileVersions: { 'src/settings.ts': 'abc' }, ...patch })
+}
 beforeEach(() => useDojoStore.setState({ session: null, sessions: {}, skills: [], legacySession: null, activeWorkspacePath: '', verifyResult: null, mentorBusy: false, error: null }))
 
 describe('Dojo evidence and workspace boundaries', () => {
