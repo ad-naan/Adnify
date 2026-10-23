@@ -106,6 +106,7 @@ export class McpToolProvider implements ToolProvider {
 
   getToolDefinitions(): ToolDefinition[] {
     // Plan 模式的 planning 阶段不提供 MCP 工具
+    if (this.context.mode === 'dojo') return []
     if (this.context.mode === 'plan' && this.context.planPhase !== 'executing') {
       return []
     }
@@ -182,6 +183,7 @@ export class McpToolProvider implements ToolProvider {
     args: Record<string, unknown>,
     _context: ToolExecutionContext
   ): Promise<ToolExecutionResult> {
+    if (_context.chatMode === 'dojo') return { success: false, result: '', error: 'MCP tools are unavailable to Dojo mentors' }
     const parsed = McpToolProvider.parseToolName(toolName)
     if (!parsed) {
       return {

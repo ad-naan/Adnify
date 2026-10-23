@@ -213,7 +213,19 @@ export function getToolGroup(id: string): string[] | undefined {
  * - plan: plan 规划工具组（动态活动、需求确认、计划创建与修订）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
+export const DOJO_READ_ONLY_TOOLS: readonly string[] = [
+  'read_file', 'read_image', 'list_directory', 'search_files', 'codebase_search',
+  'find_symbol', 'find_references', 'navigate_symbol', 'get_hover_info',
+  'get_document_symbols', 'get_diagnostics', 'browser_inspect', 'web_search', 'read_url',
+]
+
+/** Independent of mutable provider loading context; also used at execution boundaries. */
+export function isDojoToolAllowed(toolName: string): boolean {
+  return DOJO_READ_ONLY_TOOLS.includes(toolName)
+}
+
 export function getToolsForContext(context: ToolLoadingContext): string[] {
+  if (context.mode === 'dojo') return [...DOJO_READ_ONLY_TOOLS]
   const tools = collectToolsForContext(context)
   if (!context.isSubAgent) return tools
   return tools.filter(tool => !SUB_AGENT_EXCLUDED_TOOLS.includes(tool))

@@ -14,7 +14,7 @@ import type {
   ToolExecutionContext,
   ToolApprovalType,
 } from '@/shared/types'
-import { type ToolLoadingContext, getToolsForContext } from '@/shared/config/toolGroups'
+import { type ToolLoadingContext, getToolsForContext, isDojoToolAllowed } from '@/shared/config/toolGroups'
 
 export class BuiltinToolProvider implements ToolProvider {
   readonly id = 'builtin'
@@ -63,6 +63,7 @@ export class BuiltinToolProvider implements ToolProvider {
     args: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<ToolExecutionResult> {
+    if (context.chatMode === 'dojo' && !isDojoToolAllowed(toolName)) return { success: false, result: '', error: `Dojo mentors are read-only: ${toolName} is unavailable` }
     return toolRegistry.execute(toolName, args, context)
   }
 }

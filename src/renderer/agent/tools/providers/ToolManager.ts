@@ -6,6 +6,7 @@
 import { logger } from '@utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getToolMetadata as getBuiltinToolMetadata } from '@/shared/config/tools'
+import { isDojoToolAllowed } from '@/shared/config/toolGroups'
 import type { ToolProvider, ToolMeta } from './types'
 import type {
   ToolDefinition,
@@ -241,6 +242,12 @@ class ToolManager {
   ): Promise<ToolExecutionResult> {
     const executionId = crypto.randomUUID()
     const startedAt = Date.now()
+    if (context.chatMode === 'dojo' && !isDojoToolAllowed(toolName)) {
+      return this.finalizeResult(toolName, executionId, startedAt, undefined, {
+        success: false, result: '', error: `Dojo mentors are read-only: ${toolName} is unavailable`,
+        outcome: { kind: 'error', code: 'DOJO_READ_ONLY', retryable: false },
+      }, 'validation')
+    }
     const provider = this.findProviderForTool(toolName)
 
     if (!provider) {

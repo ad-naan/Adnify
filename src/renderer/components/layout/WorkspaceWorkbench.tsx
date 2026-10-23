@@ -8,6 +8,7 @@ import { EmotionAmbientGlow } from '../agent/EmotionAmbientGlow'
 import DockWorkbench from './DockWorkbench'
 import { syncWorkbenchEditorVisibility } from './workbenchVisibility'
 import { usePlanPresentation } from '../plan/usePlanPresentation'
+import { useModeStore } from '@/renderer/modes/modeStore'
 
 const Editor = lazy(() => import('../editor/Editor'))
 const Sidebar = lazy(() => import('../sidebar/Sidebar'))
@@ -15,6 +16,7 @@ const ChatPanel = lazy(() => import('../agent/ChatPanel'))
 const ShellStudio = lazy(() => import('../../shell/components/ShellStudio'))
 const TerminalPanel = lazy(() => import('../panels/TerminalPanel'))
 const DebugPanel = lazy(() => import('../panels/DebugPanel'))
+const DojoWorkbench = lazy(() => import('../../modes/dojo/DojoWorkbench'))
 
 function LoadOnce({ active, children }: { active: boolean; children: ReactNode }) {
   const loaded = useRef(active)
@@ -24,6 +26,15 @@ function LoadOnce({ active, children }: { active: boolean; children: ReactNode }
 
 export default function WorkspaceWorkbench() {
   const { canvas: planCanvas } = usePlanPresentation()
+  const dojo = useModeStore(state => state.currentMode === 'dojo')
+  useEffect(() => {
+    if (!dojo) return
+    const store = useStore.getState()
+    store.setEditorVisible(true)
+    store.setChatVisible(true)
+    store.setFocusedPanel(null)
+    if (store.activeSidePanel === 'shell') store.setActiveSidePanel('explorer')
+  }, [dojo])
   const state = useStore(useShallow(s => ({
     layout: s.workbenchLayout, language: s.language, sidebar: s.activeSidePanel,
     editor: s.editorVisible, agent: s.chatVisible, terminal: s.terminalVisible, debug: s.debugVisible, focus: s.focusedPanel,
@@ -52,8 +63,8 @@ export default function WorkspaceWorkbench() {
       </DecorativeAnimationScope>
       {state.debug && !shell && <ErrorBoundary><Suspense fallback={null}><DebugPanel /></Suspense></ErrorBoundary>}
     </>,
-    agent: <ErrorBoundary><Suspense fallback={<ChatSkeleton />}><LoadOnce active={state.agent}><ChatPanel /></LoadOnce></Suspense></ErrorBoundary>,
-  }), [state.sidebar, state.agent, state.debug, shell, planCanvas])
+    agent: <ErrorBoundary><Suspense fallback={<ChatSkeleton />}><LoadOnce active={state.agent}>{dojo ? <DojoWorkbench /> : <ChatPanel />}</LoadOnce></Suspense></ErrorBoundary>,
+  }), [state.sidebar, state.agent, state.debug, shell, planCanvas, dojo])
   return <DockWorkbench layout={state.layout} visible={visible} focused={state.focus} language={state.language}
     panels={panelContent} editorOverlay={planCanvas ? 'agent' : undefined} terminalVisible={terminalVisible} terminalCollapsed={terminalCollapsed}
     terminal={<ErrorBoundary><Suspense fallback={null}><LoadOnce active={state.terminal && !shell}><TerminalPanel docked layoutVisible={terminalVisible} onCollapsedChange={setTerminalCollapsed} /></LoadOnce></Suspense></ErrorBoundary>}

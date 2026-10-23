@@ -6,6 +6,7 @@ import { useStore } from '@store'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
+import { isDojoToolAllowed } from '@/shared/config/toolGroups'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { createStreamProcessor } from './stream'
 import { EventBus } from './EventBus'
@@ -417,6 +418,7 @@ export async function runLoop(
   })
 
   const agentTools = toolRuntime.toolManager.getAllToolDefinitions()
+    .filter(tool => context.chatMode !== 'dojo' || isDojoToolAllowed(tool.name))
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
   let requestMessages = llmMessages

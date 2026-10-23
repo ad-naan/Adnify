@@ -51,6 +51,7 @@ export class AssetToolProvider implements ToolProvider {
   private toolName(cap: AssetCapability): string { return `asset__${cap.id}__r${cap.revision}` }
   hasTool(name: string): boolean { return !!schemas[name] || this.versions.has(name) }
   getToolDefinitions(): ToolDefinition[] {
+    if (this.context.mode === 'dojo') return []
     const readOnly = this.context.isSubAgent || (this.context.mode === 'plan' && this.context.planPhase !== 'executing')
     const common = readOnly ? definitions.filter(d => ['asset_capabilities', 'asset_job_get'].includes(d.name)) : definitions
     return [...common, ...(readOnly ? [] : this.active.map(cap => ({
@@ -74,6 +75,7 @@ export class AssetToolProvider implements ToolProvider {
     return { valid: !!result?.success, error: result && !result.success ? result.error.message : undefined }
   }
   async execute(name: string, rawArgs: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> {
+    if (ctx.chatMode === 'dojo') throw new Error('Asset tools are unavailable to Dojo mentors')
     if (ctx.abortSignal?.aborted) throw new Error('Execution stopped before starting the asset operation')
     if ((ctx.isSubAgent || (ctx.chatMode === 'plan' && ctx.planPhase !== 'executing')) && !['asset_capabilities', 'asset_job_get'].includes(name)) throw new Error('This asset operation is unavailable in planning or hidden agents')
     const args = { ...rawArgs }; delete args._meta

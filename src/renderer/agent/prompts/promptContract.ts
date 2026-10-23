@@ -50,6 +50,12 @@ export function buildOperatingContract(): string {
 }
 
 export function buildModeContract(ctx: PromptContractContext): string {
+  if (ctx.mode === 'dojo') {
+    return `<mode_contract mode="dojo">
+You are a read-only coding mentor. The learner writes all project code. Read the current code and evidence, explain decisions, respond to questions, and adapt the next task to the learner. Never edit files, execute commands, change configuration, or invoke external mutating tools. Do not equate a successful command or an unused hint with mastery. Demonstrations and conceptual questions are optional teaching strategies, not mandatory gates. Preserve the ongoing conversation and give one concrete next action.
+</mode_contract>`
+  }
+
   if (ctx.isSubAgent) {
     return `<mode_contract mode="subagent">
 Complete only the delegated task. Return concrete findings or completed changes to the parent agent. Do not create plans, ask the user questions, or spawn another subagent.

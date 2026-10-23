@@ -1,170 +1,209 @@
-/**
- * Dojo 状态管理
- *
- * 训练会话与手艺图谱通过 electron-store (preferencesStore) 持久化，
- * 与 modeStore 同一套 IPC 存储后端。瞬时态（导师忙碌/验收结果）不持久化。
- */
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { api } from '@/renderer/services/electronAPI'
-import type { DojoSession, DojoSkill, DojoSkillMastery, DojoStep, DojoVerifyResult } from './types'
+import { resolvePathLexically, pathEquals } from '@shared/utils/pathUtils'
+import type { DojoSession, DojoSkill, DojoSkillMastery, DojoStep, DojoVerifyResult, DojoMessage } from './types'
 
-const STORE_KEY = 'dojoStore'
-
-interface DojoState {
-    session: DojoSession | null
-    skills: DojoSkill[]
+export function dojoWorkspaceKey(path: string): string {
+  const normalized = resolvePathLexically(path, null).replace(/\/$/, '')
+  return /^[a-z]:|^\/\//i.test(normalized) ? normalized.toLowerCase() : normalized
 }
 
-interface DojoTransientState {
-    /** 导师是否在思考（阻止重复派发） */
-    mentorBusy: boolean
-    /** 最近一次验收结果 */
-    verifyResult: DojoVerifyResult | null
-    /** 最近一次操作错误（展示在导师面板） */
-    error: string | null
+export function isFreshVerification(session: DojoSession, step: DojoStep): boolean {
+  const result = step.verification
+  return Boolean(result?.success && !result.stale && result.stepId === step.id &&
+    result.command === step.verifyCommand && pathEquals(result.workspacePath ?? '', session.workspacePath) &&
+    result.codeRevision === (session.codeRevision ?? 0))
 }
 
-interface DojoActions {
-    startSession: (session: DojoSession) => void
-    updateStep: (stepId: string, patch: Partial<DojoStep>) => void
-    revealHint: (stepId: string) => void
-    advanceStep: () => void
-    recordSkill: (name: string, mastery: DojoSkillMastery) => void
-    setMentorBusy: (busy: boolean) => void
-    setVerifyResult: (result: DojoVerifyResult | null) => void
-    setError: (error: string | null) => void
-    resetSession: () => void
+export function canCompleteDojoStep(session: DojoSession, step: DojoStep): boolean {
+  const criteria = step.acceptanceCriteria ?? []
+  return criteria.length > 0 && criteria.every(item => step.confirmedCriteria?.includes(item)) &&
+    (!step.verifyCommand.trim() || isFreshVerification(session, step))
 }
 
-type DojoStore = DojoState & DojoTransientState & DojoActions
-
-const electronStoreStorage = {
-    getItem: async (name: string): Promise<string | null> => {
-        try {
-            const value = await api.settings.get(`${STORE_KEY}.${name}`)
-            return value === undefined || value === null ? null : JSON.stringify(value)
-        } catch {
-            return null
-        }
-    },
-    setItem: async (name: string, value: string): Promise<void> => {
-        try {
-            await api.settings.set(`${STORE_KEY}.${name}`, JSON.parse(value))
-        } catch { /* ignore */ }
-    },
-    removeItem: async (name: string): Promise<void> => {
-        try {
-            await api.settings.set(`${STORE_KEY}.${name}`, undefined)
-        } catch { /* ignore */ }
-    },
+interface DojoStore {
+  session: DojoSession | null
+  sessions: Record<string, DojoSession>
+  /** Keep the old unbound session intact; never silently apply it to another project. */
+  legacySession: DojoSession | null
+  activeWorkspacePath: string
+  skills: DojoSkill[]
+  mentorBusy: boolean
+  activeMentorThreadId: string | null
+  verifyResult: DojoVerifyResult | null
+  error: string | null
+  selectWorkspace: (path: string) => void
+  startSession: (session: DojoSession) => void
+  adoptLegacySession: (workspacePath: string) => void
+  updateSession: (patch: Partial<Pick<DojoSession, 'blueprint' | 'status' | 'mentorThreadId'>>) => void
+  replacePlan: (steps: DojoStep[], blueprint: string) => void
+  updateStep: (stepId: string, patch: Partial<DojoStep>) => void
+  selectStep: (stepId: string) => void
+  revealHint: (stepId: string) => void
+  advanceStep: () => void
+  completeStep: (stepId: string) => boolean
+  invalidateVerification: () => void
+  appendMessage: (message: Omit<DojoMessage, 'id' | 'createdAt'>) => void
+  recordSkill: (name: string, mastery: DojoSkillMastery) => void
+  setMentorBusy: (busy: boolean) => void
+  setActiveMentorThread: (threadId: string | null) => void
+  setVerifyResult: (result: DojoVerifyResult | null) => void
+  setError: (error: string | null) => void
+  resetSession: () => void
 }
 
-function currentStepIndex(steps: DojoStep[], index: number): number {
-    return Math.min(Math.max(index, 0), Math.max(steps.length - 1, 0))
+const storage = {
+  getItem: async (name: string): Promise<string | null> => {
+    const value = await api.settings.get(`dojoStore.${name}`)
+    return value == null ? null : JSON.stringify(value)
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await api.settings.set(`dojoStore.${name}`, JSON.parse(value))
+  },
+  removeItem: async (name: string): Promise<void> => { await api.settings.set(`dojoStore.${name}`, undefined) },
 }
 
-export const useDojoStore = create<DojoStore>()(
-    persist(
-        (set, get) => ({
-            session: null,
-            skills: [],
-            mentorBusy: false,
-            verifyResult: null,
-            error: null,
+function sessionPatch(session: DojoSession, sessions: Record<string, DojoSession>) {
+  const updated = { ...session, updatedAt: Date.now() }
+  return { session: updated, sessions: { ...sessions, [dojoWorkspaceKey(session.workspacePath)]: updated } }
+}
 
-            startSession: (session) => set({
-                session,
-                verifyResult: null,
-                error: null,
-            }),
+function invalidateStep(step: DojoStep): DojoStep {
+  return {
+    ...step,
+    verification: step.verification ? { ...step.verification, stale: true } : undefined,
+    confirmedCriteria: [],
+    phase: step.phase === 'demo' ? 'demo' : 'handsOn',
+  }
+}
 
-            updateStep: (stepId, patch) => {
-                const { session } = get()
-                if (!session) return
-                set({
-                    session: {
-                        ...session,
-                        steps: session.steps.map(step => step.id === stepId ? { ...step, ...patch } : step),
-                    },
-                })
-            },
+export const useDojoStore = create<DojoStore>()(persist((set, get) => ({
+  session: null, sessions: {}, legacySession: null, activeWorkspacePath: '', skills: [],
+  mentorBusy: false, activeMentorThreadId: null, verifyResult: null, error: null,
 
-            revealHint: (stepId) => {
-                const { session } = get()
-                if (!session) return
-                const step = session.steps.find(item => item.id === stepId)
-                if (!step || step.hintsRevealed >= step.hints.length) return
-                set({
-                    session: {
-                        ...session,
-                        steps: session.steps.map(item =>
-                            item.id === stepId ? { ...item, hintsRevealed: item.hintsRevealed + 1 } : item,
-                        ),
-                    },
-                })
-            },
+  selectWorkspace: (path) => {
+    if (dojoWorkspaceKey(path) === dojoWorkspaceKey(get().activeWorkspacePath)) return
+    const session = get().sessions[dojoWorkspaceKey(path)] ?? null
+    set({ activeWorkspacePath: path, session, mentorBusy: false, activeMentorThreadId: null,
+      verifyResult: session?.steps[session.currentStepIndex]?.verification ?? null, error: null })
+  },
+  startSession: (session) => {
+    const normalized: DojoSession = { ...session, status: session.status ?? 'active', messages: session.messages ?? [], codeRevision: session.codeRevision ?? 0 }
+    set({ ...sessionPatch(normalized, get().sessions), activeWorkspacePath: session.workspacePath, verifyResult: null, error: null })
+  },
+  adoptLegacySession: (workspacePath) => {
+    const legacy = get().legacySession
+    if (!legacy || !workspacePath) return
+    get().startSession({ ...legacy, workspacePath, status: 'planning', mentorThreadId: undefined,
+      steps: legacy.steps.map(step => ({ ...invalidateStep(step), skill: step.skill || step.goal || step.title,
+        acceptanceCriteria: step.acceptanceCriteria?.length ? step.acceptanceCriteria : [step.goal || step.title] })) })
+    set({ legacySession: null })
+  },
+  updateSession: (patch) => {
+    const { session, sessions } = get()
+    if (session) set(sessionPatch({ ...session, ...patch }, sessions))
+  },
+  replacePlan: (steps, blueprint) => {
+    const { session, sessions } = get()
+    if (!session || !steps.length) return
+    set({ ...sessionPatch({ ...session, steps, blueprint, currentStepIndex: 0, status: 'planning' }, sessions), verifyResult: null })
+  },
+  updateStep: (stepId, patch) => {
+    const { session, sessions } = get()
+    if (!session) return
+    const changesContract = ['verifyCommand', 'files', 'acceptanceCriteria', 'goal'].some(key => key in patch)
+    const steps = session.steps.map(step => step.id === stepId
+      ? changesContract ? invalidateStep({ ...step, ...patch }) : { ...step, ...patch }
+      : step)
+    set({ ...sessionPatch({ ...session, steps, ...(changesContract && session.status === 'completed' ? { status: 'active' as const } : {}) }, sessions),
+      verifyResult: steps[session.currentStepIndex]?.verification ?? null })
+  },
+  selectStep: (stepId) => {
+    const { session, sessions } = get()
+    if (!session) return
+    const index = session.steps.findIndex(step => step.id === stepId)
+    if (index < 0) return
+    set({ ...sessionPatch({ ...session, currentStepIndex: index }, sessions), verifyResult: session.steps[index].verification ?? null, error: null })
+  },
+  revealHint: (stepId) => {
+    const step = get().session?.steps.find(item => item.id === stepId)
+    if (step && step.hintsRevealed < step.hints.length) get().updateStep(stepId, { hintsRevealed: step.hintsRevealed + 1 })
+  },
+  advanceStep: () => {
+    const { session } = get()
+    if (!session) return
+    const next = session.steps[Math.min(session.currentStepIndex + 1, session.steps.length - 1)]
+    if (next) get().selectStep(next.id)
+  },
+  completeStep: (stepId) => {
+    const { session, sessions } = get()
+    const step = session?.steps.find(item => item.id === stepId)
+    if (!session || !step || !canCompleteDojoStep(session, step)) return false
+    const steps = session.steps.map(item => item.id === stepId ? { ...item, phase: 'passed' as const } : item)
+    set(sessionPatch({ ...session, steps, status: steps.every(item => item.phase === 'passed') ? 'completed' : 'active' }, sessions))
+    // Completion is evidence of practice, not proof of mastery or absence of help.
+    get().recordSkill(step.skill || step.goal || step.title, 'passed')
+    return true
+  },
+  invalidateVerification: () => {
+    const { session, sessions } = get()
+    if (!session) return
+    const steps = session.steps.map((step, index) => index === session.currentStepIndex || step.phase !== 'passed'
+      ? invalidateStep(step)
+      : { ...step, verification: step.verification ? { ...step.verification, stale: true } : undefined })
+    set({ ...sessionPatch({ ...session, steps, codeRevision: (session.codeRevision ?? 0) + 1,
+      status: session.status === 'completed' ? 'active' : session.status }, sessions), verifyResult: steps[session.currentStepIndex]?.verification ?? null })
+  },
+  appendMessage: (message) => {
+    const { session, sessions } = get()
+    if (session) set(sessionPatch({ ...session, messages: [...(session.messages ?? []), { ...message, id: crypto.randomUUID(), createdAt: Date.now() }] }, sessions))
+  },
+  recordSkill: (name, mastery) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const id = trimmed.toLowerCase(), existing = get().skills.find(skill => skill.id === id)
+    const rank: Record<DojoSkillMastery, number> = { learning: 0, passed: 1, mastered: 2 }
+    const skill: DojoSkill = { id, name: trimmed, mastery: existing && rank[existing.mastery] >= rank[mastery] ? existing.mastery : mastery, lastSeenAt: Date.now() }
+    set({ skills: existing ? get().skills.map(item => item.id === id ? skill : item) : [...get().skills, skill] })
+  },
+  setMentorBusy: (mentorBusy) => set({ mentorBusy }),
+  setActiveMentorThread: (activeMentorThreadId) => set({ activeMentorThreadId }),
+  setVerifyResult: (result) => {
+    const { session, sessions } = get()
+    if (!result) { set({ verifyResult: null }); return }
+    if (!session || !result.stepId || !pathEquals(result.workspacePath ?? '', session.workspacePath)) return
+    const step = session.steps.find(item => item.id === result.stepId)
+    if (!step || step.verifyCommand !== result.command) return
+    const verification = { ...result, stale: Boolean(result.stale || result.codeRevision !== (session.codeRevision ?? 0)) }
+    const steps = session.steps.map(item => item.id === step.id ? { ...item, verification } : item)
+    set({ ...sessionPatch({ ...session, steps }, sessions), verifyResult: steps[session.currentStepIndex]?.verification ?? null })
+  },
+  setError: (error) => set({ error }),
+  resetSession: () => {
+    const sessions = { ...get().sessions }
+    delete sessions[dojoWorkspaceKey(get().activeWorkspacePath)]
+    set({ session: null, sessions, verifyResult: null, error: null })
+  },
+}), {
+  name: 'dojo-session', version: 2,
+  storage: createJSONStorage(() => storage),
+  partialize: state => ({ sessions: state.sessions, legacySession: state.legacySession, skills: state.skills }),
+  migrate: (persisted) => {
+    const old = persisted as Partial<DojoStore>
+    return { sessions: old.sessions ?? {}, legacySession: old.legacySession ?? old.session ?? null, skills: old.skills ?? [] }
+  },
+  merge: (persisted, current) => {
+    const saved = persisted as Partial<DojoStore> | undefined
+    const sessions = saved?.sessions ?? {}
+    const session = sessions[dojoWorkspaceKey(current.activeWorkspacePath)] ?? null
+    return { ...current, sessions, legacySession: saved?.legacySession ?? null, skills: saved?.skills ?? [], session,
+      verifyResult: session?.steps[session.currentStepIndex]?.verification ?? null }
+  },
+}))
 
-            advanceStep: () => {
-                const { session } = get()
-                if (!session) return
-                const next = session.currentStepIndex + 1
-                set({
-                    session: {
-                        ...session,
-                        currentStepIndex: next < session.steps.length ? next : session.steps.length - 1,
-                    },
-                    verifyResult: null,
-                })
-            },
-
-            recordSkill: (name, mastery) => {
-                const trimmed = name.trim()
-                if (!trimmed) return
-                const { skills } = get()
-                const id = trimmed.toLowerCase()
-                const existing = skills.find(skill => skill.id === id)
-                // 掌握度只升不降：mastered > passed > learning
-                const rank: Record<DojoSkillMastery, number> = { learning: 0, passed: 1, mastered: 2 }
-                const merged = existing && rank[existing.mastery] >= rank[mastery] ? existing.mastery : mastery
-                const updated: DojoSkill = {
-                    id,
-                    name: trimmed,
-                    mastery: merged,
-                    lastSeenAt: Date.now(),
-                }
-                set({
-                    skills: existing
-                        ? skills.map(skill => skill.id === id ? updated : skill)
-                        : [...skills, updated],
-                })
-            },
-
-            setMentorBusy: (mentorBusy) => set({ mentorBusy }),
-            setVerifyResult: (verifyResult) => set({ verifyResult }),
-            setError: (error) => set({ error }),
-
-            resetSession: () => set({
-                session: null,
-                verifyResult: null,
-                error: null,
-            }),
-        }),
-        {
-            name: 'dojo-session',
-            storage: createJSONStorage(() => electronStoreStorage),
-            version: 1,
-            partialize: (state) => ({
-                session: state.session,
-                skills: state.skills,
-            }),
-        },
-    ),
-)
-
-/** 持久化会话的步骤索引矫正（防止历史数据越界） */
 export function useNormalizedDojoSession(): DojoSession | null {
-    const session = useDojoStore(state => state.session)
-    if (!session) return null
-    return { ...session, currentStepIndex: currentStepIndex(session.steps, session.currentStepIndex) }
+  const session = useDojoStore(state => state.session)
+  if (!session) return null
+  return { ...session, currentStepIndex: Math.min(Math.max(session.currentStepIndex, 0), Math.max(session.steps.length - 1, 0)) }
 }

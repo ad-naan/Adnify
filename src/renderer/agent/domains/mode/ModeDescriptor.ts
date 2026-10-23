@@ -154,6 +154,14 @@ export const AGENT_MODE_DESCRIPTOR: ModeDescriptor = {
   },
 }
 
+export const DOJO_MODE_DESCRIPTOR: ModeDescriptor = {
+  ...AGENT_MODE_DESCRIPTOR,
+  id: 'dojo',
+  displayName: 'Dojo',
+  description: 'Read-only mentor for hands-on coding in the workspace',
+}
+
+
 export const PLAN_MODE_DESCRIPTOR: ModeDescriptor = {
   id: 'plan',
   displayName: 'Plan',

@@ -30,6 +30,7 @@ function seedSession(steps: DojoStep[], currentStepIndex = 0): void {
   useDojoStore.getState().startSession({
     id: 'session-1',
     requirement: 'test requirement',
+    workspacePath: '/test/workspace',
     steps,
     currentStepIndex,
     createdAt: Date.now(),

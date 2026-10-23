@@ -122,6 +122,31 @@ describe('Tools Core - Parallel Execution', () => {
     vi.clearAllMocks()
   })
 
+
+  it('rejects forbidden Dojo calls before approvals, snapshots, routing, or provider execution', async () => {
+    const approval = vi.spyOn(approvalService, 'waitForApproval')
+    const { api } = await import('@renderer/services/electronAPI')
+    const calls: ToolCall[] = ['write_file', 'run_command', 'mcp_server_tool', 'configuration_apply', 'asset_import', 'remember'].map((name, index) => ({ id: `dojo-denied-${index}`, name, arguments: { path: 'src/target.ts', command: 'pnpm install' }, status: 'pending' }))
+    const result = await executeTools(calls, { ...context, chatMode: 'dojo' }, getStore())
+    expect(result.results).toHaveLength(calls.length)
+    expect(result.results.every(item => item.result.status === 'error' && item.result.content.includes('read-only'))).toBe(true)
+    expect(approval).not.toHaveBeenCalled()
+    expect(toolManager.execute).not.toHaveBeenCalled()
+    expect(api.file.readFull).not.toHaveBeenCalled()
+    expect(mainStoreState.addToolCallLog).not.toHaveBeenCalled()
+  })
+
+  it('still executes allowed reads beside denied Dojo writes', async () => {
+    const result = await executeTools([
+      { id: 'dojo-read', name: 'read_file', arguments: { path: 'src/file.ts' }, status: 'pending' },
+      { id: 'dojo-write', name: 'write_file', arguments: { path: 'src/file.ts', content: 'overwrite' }, status: 'pending' },
+    ], { ...context, chatMode: 'dojo' }, getStore())
+    expect(result.results.find(item => item.toolCall.id === 'dojo-read')?.result.status).toBe('success')
+    expect(result.results.find(item => item.toolCall.id === 'dojo-write')?.result.status).toBe('error')
+    expect(toolManager.execute).toHaveBeenCalledTimes(1)
+    expect(toolManager.execute).toHaveBeenCalledWith('read_file', expect.anything(), expect.objectContaining({ chatMode: 'dojo' }))
+  })
+
   describe('Parallel Tool Execution Performance', () => {
     it('preserves failed command diagnostics alongside the error status', async () => {
       vi.mocked(toolManager.execute).mockResolvedValueOnce({

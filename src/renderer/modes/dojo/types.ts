@@ -1,73 +1,73 @@
-/**
- * Dojo（道场）模式类型定义
- *
- * 反转默认交互：AI 不动手，人动手。导师（AI）只负责拆解、示范、出题、评审。
- * 放行机制为双门禁：验收命令通过（第一门禁）+ 导师抽问通过（第二门禁）。
- */
-
-/** 每一步在教学环中的位置 */
-export type DojoStepPhase =
-    | 'demo'      // 待示范：导师演示思路，用户观摩
-    | 'handsOn'   // 动手：用户亲手实现，可申请分级提示
-    | 'quiz'      // 第一门禁已过，等待导师抽问
-    | 'review'    // 第二门禁已过，等待复盘
-    | 'passed'    // 双门禁通过，本步结业
+/** Hands-on project training. Teaching strategies are optional, completion is evidence-based. */
+export type DojoStepPhase = 'demo' | 'handsOn' | 'quiz' | 'review' | 'passed'
+export type DojoSessionStatus = 'planning' | 'active' | 'completed'
 
 export interface DojoStep {
-    id: string
-    title: string
-    /** 本步引入的知识点（i+1：每步只引入一个新概念） */
-    goal: string
-    /** 预计涉及的文件（相对工作区路径） */
-    files: string[]
-    /** 第一门禁：验收命令（在工作区根目录执行，退出码 0 = 通过） */
-    verifyCommand: string
-    /** 分级提示：方向 → 伪代码 → 关键 API */
-    hints: string[]
-    /** 已揭示的提示级数（0 = 零提示通过，记为掌握） */
-    hintsRevealed: number
-    /** 示范内容（markdown，导师产出，观摩用） */
-    demo?: string
-    /** 第二门禁：导师抽问 */
-    quiz?: {
-        question: string
-        lastAnswer?: string
-        attempts: number
-        passed: boolean
-        feedback?: string
-    }
-    /** 复盘点评（markdown） */
-    review?: string
-    phase: DojoStepPhase
+  id: string
+  title: string
+  goal: string
+  skill?: string
+  files: string[]
+  verifyCommand: string
+  /** Observable behavior, not just a successful build. Confirmed by the learner. */
+  acceptanceCriteria?: string[]
+  confirmedCriteria?: string[]
+  hints: string[]
+  hintsRevealed: number
+  demo?: string
+  quiz?: { question: string; lastAnswer?: string; attempts: number; passed: boolean; feedback?: string }
+  review?: string
+  diagnosis?: string
+  verification?: DojoVerifyResult
+  phase: DojoStepPhase
 }
 
 export type DojoSkillMastery = 'learning' | 'passed' | 'mastered'
-
 export interface DojoSkill {
-    id: string
-    name: string
-    mastery: DojoSkillMastery
-    lastSeenAt: number
+  id: string
+  name: string
+  mastery: DojoSkillMastery
+  lastSeenAt: number
+}
+
+export interface DojoMessage {
+  id: string
+  role: 'user' | 'mentor' | 'system'
+  content: string
+  createdAt: number
+  stepId?: string
+  codeRevision?: number
+  kind?: 'conversation' | 'demo' | 'hint' | 'verification' | 'review'
 }
 
 export interface DojoSession {
-    id: string
-    /** 用户输入的真实需求 —— 学完的产出直接进 repo */
-    requirement: string
-    /**
-     * 拆解蓝图：导师勘察项目后写下的简报（markdown）。
-     * 让"为什么拆成这几步"可回溯，而不是黑盒产出一张任务清单。
-     */
-    blueprint?: string
-    steps: DojoStep[]
-    currentStepIndex: number
-    createdAt: number
+  id: string
+  workspacePath: string
+  requirement: string
+  blueprint?: string
+  status?: DojoSessionStatus
+  mentorThreadId?: string
+  messages?: DojoMessage[]
+  steps: DojoStep[]
+  currentStepIndex: number
+  createdAt: number
+  updatedAt?: number
+  /** Changes when workspace source or an editor buffer changes. */
+  codeRevision?: number
 }
 
-/** 第一门禁的执行结果 */
 export interface DojoVerifyResult {
-    success: boolean
-    exitCode: number | null
-    output: string
-    ranAt: number
+  success: boolean
+  exitCode: number | null
+  /** Immutable raw command output. Mentor feedback lives in step.diagnosis. */
+  output: string
+  ranAt: number
+  stepId?: string
+  workspacePath?: string
+  command?: string
+  codeRevision?: number
+  /** Content fingerprints for the files observed when the command started. */
+  fileVersions?: Record<string, string>
+  stale?: boolean
+  cancelled?: boolean
 }

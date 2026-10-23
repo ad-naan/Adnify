@@ -14,6 +14,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
 import { getToolApprovalType, getToolMetadata as getBuiltinToolMetadata, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
+import { isDojoToolAllowed } from '@/shared/config/toolGroups'
 import { pathStartsWith, joinPath, isPathInWorkspace, isSensitivePath, toFullPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
@@ -756,6 +757,23 @@ export async function executeTools(
 
   if (toolCalls.length === 0) {
     return { results, hadRejectedTool }
+  }
+
+  // Reject forbidden calls before approvals, routing, snapshots, or provider side effects.
+  if (context.chatMode === 'dojo') {
+    const allowed: ToolCall[] = []
+    for (const toolCall of toolCalls) {
+      if (isDojoToolAllowed(toolCall.name)) {
+        allowed.push(toolCall)
+        continue
+      }
+      const error = `Dojo mentors are read-only: ${toolCall.name} is unavailable`
+      results.push({ toolCall, result: { content: `Error: ${error}`, status: 'error' } })
+      if (context.currentAssistantId) store.updateToolCall(context.currentAssistantId, toolCall.id, { status: 'error', result: error, streamingState: undefined })
+      emitToolEvent({ type: 'tool:error', id: toolCall.id, error, ...buildToolExecutionIdentity(toolCall, context) })
+    }
+    toolCalls = allowed
+    if (!toolCalls.length) return { results, hadRejectedTool }
   }
 
   // 分析依赖

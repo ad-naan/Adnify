@@ -116,6 +116,7 @@ export class ConfigurationToolProvider implements ToolProvider {
   }
 
   getToolDefinitions(): ToolDefinition[] {
+    if (this.context.mode === 'dojo') return []
     const readOnly = this.context.isSubAgent || (this.context.mode === 'plan' && this.context.planPhase !== 'executing')
     if (readOnly) return definitions.filter(definition => definition.name === DISCOVER_TOOL)
     return definitions
@@ -152,6 +153,7 @@ export class ConfigurationToolProvider implements ToolProvider {
   }
 
   async execute(name: string, rawArgs: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> {
+    if (ctx.chatMode === 'dojo') throw new Error('Configuration tools are unavailable to Dojo mentors')
     if (ctx.abortSignal?.aborted) throw new Error('Execution stopped before starting the configuration operation')
 
     const readOnly = ctx.isSubAgent || (ctx.chatMode === 'plan' && ctx.planPhase !== 'executing')

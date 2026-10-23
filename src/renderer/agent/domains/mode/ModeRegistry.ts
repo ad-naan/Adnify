@@ -12,6 +12,7 @@ import { normalizeMode } from '@/shared/types/workMode'
 import type { ModeDescriptor } from './ModeDescriptor'
 import {
   AGENT_MODE_DESCRIPTOR,
+  DOJO_MODE_DESCRIPTOR,
   PLAN_MODE_DESCRIPTOR,
   PLAN_TASK_WORKER_DESCRIPTOR,
 } from './ModeDescriptor'
@@ -23,8 +24,9 @@ export class ModeRegistry {
     // Register default descriptors
     this.register(AGENT_MODE_DESCRIPTOR)
     this.register(PLAN_MODE_DESCRIPTOR)
+    this.register(DOJO_MODE_DESCRIPTOR)
 
-    logger.agent.info('[ModeRegistry] Initialized with Agent and Plan modes')
+    logger.agent.info('[ModeRegistry] Initialized with Agent, Plan and Dojo modes')
   }
 
   /**
