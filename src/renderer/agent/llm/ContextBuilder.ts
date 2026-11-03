@@ -7,9 +7,10 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { useAgentStore } from '../store/AgentStore'
-import { toolRegistry } from '../tools'
+import { toolManager, initializeTools, initializeToolProviders } from '../tools'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { ContextItem, MessageContent, TextContent, ProblemsContext, ChatMessage, getMessageText, ShellServerContext } from '../types'
+import type { WorkMode } from '@shared/types/workMode'
 import { CacheService } from '@shared/utils/CacheService'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { normalizePath } from '@shared/utils/pathUtils'
@@ -33,6 +34,43 @@ const searchResultCache = new CacheService<unknown[]>('ContextSearchCache', {
 })
 
 /**
+ * 工具运行时单飞初始化（single-flight）。
+ *
+ * ContextBuilder 在 AgentExecutor.prepare 阶段执行，早于 runLoop 里的
+ * initializeTools：首轮对话时注册表尚未填充，直接执行会得到 Unknown tool。
+ * 这里保证首次执行前完成注册；runLoop 每轮的重复 registerAll（支持热重载）
+ * 与这里共用同一注册表，互不冲突。初始化失败不缓存，允许后续上下文项重试。
+ */
+let toolRuntimeReady: Promise<void> | null = null
+function ensureToolRuntime(): Promise<void> {
+  if (!toolRuntimeReady) {
+    toolRuntimeReady = (async () => {
+      await initializeTools()
+      initializeToolProviders()
+    })()
+    toolRuntimeReady.catch(() => { toolRuntimeReady = null })
+  }
+  return toolRuntimeReady
+}
+
+/**
+ * 统一经 ToolManager 执行上下文注入的工具调用。
+ *
+ * 以前这里直连 toolRegistry.execute，旁路了统一管线：dojo 只读限制、参数
+ * 语义校验与执行统计全部失效。注意刻意不做结果缓存——git 状态与终端输出
+ * 必须每次取新值；文件/搜索的缓存仍由上方两个 CacheService 负责。
+ */
+async function executeContextTool(
+  name: string,
+  args: Record<string, unknown>,
+  context: { workspacePath: string | null; chatMode?: WorkMode }
+) {
+  await ensureToolRuntime()
+  return toolManager.execute(name, args, context)
+}
+
+
+/**
  * 构建上下文内容
  * 从上下文项（文件、代码库搜索、Web 搜索等）构建文本内容
  */
@@ -40,7 +78,8 @@ export async function buildContextContent(
   contextItems: ContextItem[],
   userQuery?: string,
   assistantId?: string,
-  threadId?: string
+  threadId?: string,
+  chatMode?: WorkMode
 ): Promise<string> {
   // if (!contextItems || contextItems.length === 0) return ''
   const validContextItems = contextItems || []
@@ -66,7 +105,7 @@ export async function buildContextContent(
       fileCount++
     }
 
-    const result = await processContextItem(item, userQuery, workspacePath, config)
+    const result = await processContextItem(item, userQuery, workspacePath, config, chatMode)
     if (result) {
       parts.push(result)
       totalChars += result.length
@@ -95,7 +134,8 @@ async function processContextItem(
   item: ContextItem,
   userQuery: string | undefined,
   workspacePath: string | null,
-  config: ReturnType<typeof getAgentConfig>
+  config: ReturnType<typeof getAgentConfig>,
+  chatMode?: WorkMode
 ): Promise<string | null> {
   switch (item.type) {
     case 'File':
@@ -105,19 +145,19 @@ async function processContextItem(
       return processCodebaseContext(userQuery, workspacePath)
 
     case 'Web':
-      return processWebContext(userQuery, workspacePath)
+      return processWebContext(userQuery, workspacePath, chatMode)
 
     case 'Git':
-      return processGitContext(workspacePath)
+      return processGitContext(workspacePath, chatMode)
 
     case 'Terminal':
-      return processTerminalContext(workspacePath)
+      return processTerminalContext(workspacePath, chatMode)
 
     case 'ShellServer':
       return processShellServerContext(item as ShellServerContext)
 
     case 'Symbols':
-      return processSymbolsContext(workspacePath)
+      return processSymbolsContext(workspacePath, chatMode)
 
     case 'Problems':
       return processProblemsContext(item as ProblemsContext, workspacePath)
@@ -283,14 +323,14 @@ async function processImplicitContext(
  */
 async function processWebContext(
   userQuery: string | undefined,
-  workspacePath: string | null
+  workspacePath: string | null,
+  chatMode?: WorkMode
 ): Promise<string | null> {
   if (!userQuery) return '\n[Web search requires query]\n'
 
   try {
     const cleanQuery = userQuery.replace(/@web\s*/i, '').trim() || userQuery
-    const searchResult = await toolRegistry.execute('web_search', { query: cleanQuery }, { workspacePath })
-
+    const searchResult = await executeContextTool('web_search', { query: cleanQuery }, { workspacePath, chatMode })
     if (searchResult.success) {
       return `\n### Web Search Results for "${cleanQuery}":\n${searchResult.result}\n`
     }
@@ -304,16 +344,18 @@ async function processWebContext(
 /**
  * 处理 Git 上下文
  */
-async function processGitContext(workspacePath: string | null): Promise<string | null> {
+async function processGitContext(
+  workspacePath: string | null,
+  chatMode?: WorkMode
+): Promise<string | null> {
   if (!workspacePath) return '\n[Git info requires workspace]\n'
 
   try {
-    const gitStatus = await toolRegistry.execute('run_command', {
+    const gitStatus = await executeContextTool('run_command', {
       command: 'git status --short && git log --oneline -5',
       cwd: workspacePath,
       timeout: 10
-    }, { workspacePath })
-
+    }, { workspacePath, chatMode })
     if (gitStatus.success) {
       return `\n### Git Status:\n\`\`\`\n${gitStatus.result}\n\`\`\`\n`
     }
@@ -327,14 +369,16 @@ async function processGitContext(workspacePath: string | null): Promise<string |
 /**
  * 处理终端输出上下文
  */
-async function processTerminalContext(workspacePath: string | null): Promise<string | null> {
+async function processTerminalContext(
+  workspacePath: string | null,
+  chatMode?: WorkMode
+): Promise<string | null> {
   try {
     const config = getAgentConfig()
-    const terminalOutput = await toolRegistry.execute('read_terminal_output', {
+    const terminalOutput = await executeContextTool('read_terminal_output', {
       terminal_id: 'default',
       lines: 50
-    }, { workspacePath })
-
+    }, { workspacePath, chatMode })
     if (terminalOutput.success && terminalOutput.result) {
       // 使用 maxTerminalChars 限制终端输出长度
       let output = terminalOutput.result
@@ -353,16 +397,17 @@ async function processTerminalContext(workspacePath: string | null): Promise<str
 /**
  * 处理符号上下文
  */
-async function processSymbolsContext(workspacePath: string | null): Promise<string | null> {
-  if (!workspacePath) return '\n[Symbols require workspace]\n'
-
+async function processSymbolsContext(
+  workspacePath: string | null,
+  chatMode?: WorkMode
+): Promise<string | null> {
   try {
     const currentFile = useStore.getState().activeFilePath
 
     if (currentFile) {
-      const symbols = await toolRegistry.execute('get_document_symbols', {
+      const symbols = await executeContextTool('get_document_symbols', {
         relative_path: currentFile
-      }, { workspacePath })
+      }, { workspacePath, chatMode })
 
       if (symbols.success && symbols.result) {
         return `\n### Symbols in ${currentFile}:\n\`\`\`\n${symbols.result}\n\`\`\`\n`

@@ -218,12 +218,14 @@ export class ContextAssembler {
     // 1. 收集所有启用的贡献者的贡献
     const contributions = await this.collectContributions(config)
 
-    // 2. 构建基础上下文（使用现有逻辑）
+    // 2. 构建基础上下文（使用现有逻辑）；传入 mode 使 dojo 只读限制在
+    // 上下文注入工具调用中同样生效（见 ContextBuilder.executeContextTool）
     const baseContext = await legacyBuildContextContent(
       contextItems,
       userQuery,
       assistantId,
-      threadId
+      threadId,
+      config.mode
     )
 
     // 3. 如果有基础上下文，添加为贡献
