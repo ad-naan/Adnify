@@ -36,8 +36,8 @@ function seedStoredBaseline(sampleCount = CALIBRATED_SAMPLES): void {
 /** 重新 import 一整套，拿到干净的单例。panelSettings 要和 baseline 出自同一次 reset。 */
 async function freshModules() {
   vi.resetModules()
-  const panelSettings = await import('@renderer/agent/emotion/panelSettings')
-  const { emotionBaseline } = await import('@renderer/agent/emotion/emotionBaseline')
+  const panelSettings = await import('@renderer/features/emotion/panelSettings')
+  const { emotionBaseline } = await import('@renderer/features/emotion/emotionBaseline')
   return { ...panelSettings, emotionBaseline }
 }
 

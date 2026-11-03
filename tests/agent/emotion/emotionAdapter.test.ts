@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emotionAdapter } from '@renderer/agent/emotion/emotionAdapter'
+import { emotionAdapter } from '@renderer/features/emotion/emotionAdapter'
 
 describe('emotionAdapter companion controls', () => {
   it('snoozeCompanion sets snoozedUntil in the future', () => {

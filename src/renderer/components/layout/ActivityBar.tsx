@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { t } from '@shared/i18n'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_OTTER_ASSETS, otterAssetSrc } from '@/renderer/components/brand/otterAssets'
-import { EMOTION_COLORS, EMOTION_META } from '@/renderer/agent/emotion/constants'
+import { EMOTION_COLORS, EMOTION_META } from '@/renderer/features/emotion/constants'
 import type { EmotionState } from '@/renderer/agent/types/emotion'
 
 /** 情绪状态对应的水獭图片按钮 */

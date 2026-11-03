@@ -423,7 +423,10 @@ export async function runLoop(
     .filter(tool => context.chatMode !== 'dojo' || isDojoToolAllowed(tool.name))
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
-  let requestMessages = llmMessages
+  // 克隆一份：循环体会不断 push 迭代消息。当前 prepare() 每次新建数组，
+  // 原地复用碰巧安全，但这是脆弱契约——任何缓存/复用 messages 的调用方
+  // 都会被串改。从这一层起，requestMessages 归循环私有。
+  let requestMessages = [...llmMessages]
   let iteration = 0
   let shouldContinue = true
 

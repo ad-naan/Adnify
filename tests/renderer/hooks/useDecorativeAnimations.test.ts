@@ -18,7 +18,7 @@ vi.mock('react', async importOriginal => ({
     return state.value
   },
 }))
-vi.mock('@/renderer/agent/emotion/panelSettings', () => ({
+vi.mock('@/renderer/features/emotion/panelSettings', () => ({
   loadEmotionPanelSettings: () => ({ decorativeAnimations: state.enabled }),
   subscribeEmotionPanelSettings: (listener: () => void) => {
     state.preferenceListener = listener

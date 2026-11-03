@@ -19,7 +19,7 @@ import {
   type BaselineDeviation,
   type BehaviorScoringInput,
   type StateSmoothing,
-} from '@renderer/agent/emotion/behaviorScoring'
+} from '@renderer/features/emotion/behaviorScoring'
 import type { BehaviorMetrics, EmotionState } from '@renderer/agent/types/emotion'
 
 /** 未校准的基线：绝大多数用户在攒够 50 个样本之前都走这条路。 */

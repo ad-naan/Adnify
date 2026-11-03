@@ -63,4 +63,28 @@ describe('approvalService request targeting', () => {
 
     await expect(approvalService.waitForApproval('req-queue', 'tool-later')).resolves.toBe('approve')
   })
+
+  it('clearRequest settles leftover pending approvals as rejected', async () => {
+    const leftover = approvalService.waitForApproval('req-leak', 'tool-leak')
+    const unrelated = approvalService.waitForApproval('req-live-2', 'tool-live-2')
+
+    const cleared = approvalService.clearRequest('req-leak')
+    expect(cleared).toBe(1)
+    await expect(leftover).resolves.toBe('reject')
+
+    approvalService.approve('req-live-2', 'tool-live-2')
+    await expect(unrelated).resolves.toBe('approve')
+  })
+
+  it('clearRequest drops queued decisions nobody will consume', async () => {
+    approvalService.approve('req-orphan', 'tool-orphan')
+
+    const cleared = approvalService.clearRequest('req-orphan')
+    expect(cleared).toBe(1)
+
+    // 清理后同 key 的新等待不得消费到已丢弃的过期决策
+    const pending = approvalService.waitForApproval('req-orphan', 'tool-orphan')
+    approvalService.approve('req-orphan', 'tool-orphan')
+    await expect(pending).resolves.toBe('approve')
+  })
 })

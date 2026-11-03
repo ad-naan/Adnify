@@ -11,7 +11,7 @@
  * 这里只做算术。时间、设置、基线一律由调用方作为参数传进来。
  */
 
-import type { BehaviorMetrics, EmotionFactor, EmotionHistory, EmotionState } from '../types/emotion'
+import type { BehaviorMetrics, EmotionFactor, EmotionHistory, EmotionState } from '@renderer/agent/types/emotion'
 
 /**
  * 把一串采样快照合成一个窗口的指标。

@@ -5,7 +5,7 @@ import {
   loadEmotionPanelSettings,
   saveEmotionPanelSettings,
   updateEmotionPanelSettings,
-} from '@renderer/agent/emotion/panelSettings'
+} from '@renderer/features/emotion/panelSettings'
 
 describe('emotion panelSettings', () => {
   beforeEach(() => {

@@ -677,6 +677,10 @@ export class AgentClass {
       if (task.assistantId) {
         store.finalizeAssistant(task.assistantId, threadId)
       }
+      // 任务收尾是审批生命周期的兜底出口：循环异常退出时 waitForApproval
+      // 可能仍在挂起、排队决策可能永远无人消费，在这里统一结算，避免
+      // approvalService 内部映射随线程数泄漏。
+      approvalService.clearRequest(task.requestId)
       this.runningTasks.delete(threadId)
     }
 

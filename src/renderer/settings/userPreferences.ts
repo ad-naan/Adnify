@@ -1,4 +1,4 @@
-import { DEFAULT_EMOTION_PANEL_SETTINGS, normalizeEmotionPanelSettings, type EmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import { DEFAULT_EMOTION_PANEL_SETTINGS, normalizeEmotionPanelSettings, type EmotionPanelSettings } from '@/renderer/features/emotion/panelSettings'
 import { DEFAULT_PREVIEW_SETTINGS, normalizePreviewSettings, type PreviewSettings } from '@/renderer/preview/previewSettings'
 import { DEFAULT_BACKGROUND_TASK_SETTINGS, normalizeBackgroundTaskSettings, type BackgroundTaskSettings } from '@shared/types/backgroundTasks'
 import { EXECUTION_SETTINGS_DEFAULTS, normalizeExecutionSettings, type ExecutionSettings } from '@shared/config/executionSettings'
@@ -9,7 +9,7 @@ import { normalizeCustomThemes, normalizeThemeId, builtinThemes, type Theme } fr
 import { DEFAULT_SHELL_STATE, normalizeShellState, type ShellState } from '@/renderer/shell/types/index'
 import { USER_PREFERENCE_KEYS, type UserPreferenceName } from '@/renderer/settings/preferenceKeys'
 import { normalizeMode, type WorkMode } from '@/renderer/modes/types'
-import { normalizeEmotionWelcome, type EmotionWelcomePreference } from '@/renderer/agent/emotion/welcomePreference'
+import { normalizeEmotionWelcome, type EmotionWelcomePreference } from '@/renderer/features/emotion/welcomePreference'
 import { normalizeIndexPreference, type IndexPreference } from '@/renderer/settings/indexPreference'
 import { DEFAULT_ASSET_CONFIGURATION, normalizeAssetConfiguration, type AssetConfiguration } from '@shared/assets/configuration'
 

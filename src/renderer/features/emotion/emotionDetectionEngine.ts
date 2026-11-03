@@ -7,7 +7,7 @@
  */
 
 import { logger } from '@utils/Logger'
-import { EventBus } from '../core/EventBus'
+import { EventBus } from '@renderer/agent/core/EventBus'
 import { emotionContextAnalyzer } from './emotionContextAnalyzer'
 import { emotionBaseline } from './emotionBaseline'
 import { aggregateWindow, focusMinutes, scoreBehavior, smoothState, type StateSmoothing } from './behaviorScoring'
@@ -17,7 +17,7 @@ import type {
   EmotionFactor,
   BehaviorMetrics,
   EmotionHistory,
-} from '../types/emotion'
+} from '@renderer/agent/types/emotion'
 
 // 检测窗口配置
 const DETECTION_WINDOW = 12000   // 12秒分析窗口（比15s更快响应）

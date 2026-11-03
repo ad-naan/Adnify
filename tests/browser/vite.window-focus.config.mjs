@@ -14,7 +14,7 @@ const mockedImports = [
   '@/renderer/agent/services/composerService', '@/renderer/agent/store/slices/queueSlice',
   '@/renderer/hooks/useMessageQueue', '@/renderer/agent/services/shellServerRoutingService',
   '@/renderer/components/plan/workbench/PlanWorkbench', './ToolCallGroup',
-  '@/renderer/agent/emotion/panelSettings',
+  '@/renderer/features/emotion/panelSettings',
 ]
 export default {
   ...base,

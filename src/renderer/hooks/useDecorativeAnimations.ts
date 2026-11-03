@@ -6,7 +6,7 @@
  */
 
 import { createContext, useContext, useSyncExternalStore } from 'react'
-import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/features/emotion/panelSettings'
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 export const DecorativeAnimationContext = createContext(true)

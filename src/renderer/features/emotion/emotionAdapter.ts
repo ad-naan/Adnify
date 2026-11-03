@@ -6,7 +6,7 @@
  * 详见下面 `DEFAULT_ADAPTATIONS` 的注释。
  */
 
-import { EventBus } from '../core/EventBus'
+import { EventBus } from '@renderer/agent/core/EventBus'
 import { logger } from '@utils/Logger'
 import type {
   EmotionState,
@@ -15,7 +15,7 @@ import type {
   EmotionCompanionState,
   EmotionFeedbackPayload,
   EmotionFeedbackType,
-} from '../types/emotion'
+} from '@renderer/agent/types/emotion'
 import { getRecommendedActions } from './emotionActions'
 import { EMOTION_STATUS_MESSAGE_KEYS } from './constants'
 import type { TranslationKey } from '@shared/i18n'

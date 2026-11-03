@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { emotionAdapter } from '@renderer/agent/emotion/emotionAdapter'
-import { emotionDetectionEngine } from '@renderer/agent/emotion/emotionDetectionEngine'
+import { emotionAdapter } from '@renderer/features/emotion/emotionAdapter'
+import { emotionDetectionEngine } from '@renderer/features/emotion/emotionDetectionEngine'
 import { flushAgentSessionPersistence, flushStreamingBuffer } from '@renderer/agent/store/AgentStore'
 import { persistAllRuntimeState } from '@renderer/services/appShutdownService'
 import { api } from '@renderer/services/electronAPI'

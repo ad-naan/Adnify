@@ -6,7 +6,7 @@
  * 最终 confidence 毫无影响，而界面和后续逻辑都在读这个值。
  */
 import { describe, expect, it } from 'vitest'
-import { emotionContextAnalyzer } from '@renderer/agent/emotion/emotionContextAnalyzer'
+import { emotionContextAnalyzer } from '@renderer/features/emotion/emotionContextAnalyzer'
 import type { CodeContext } from '@renderer/agent/types/emotion'
 
 function context(overrides: Partial<CodeContext> = {}): CodeContext {

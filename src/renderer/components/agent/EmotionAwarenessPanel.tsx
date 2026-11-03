@@ -34,13 +34,13 @@ import {
   emotionFeedback,
   BASELINE_TARGET_SAMPLES,
   type InflectionPoint,
-} from '@/renderer/agent/emotion'
+} from '@/renderer/features/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EmotionVisualization } from './EmotionVisualization'
 import {
   loadEmotionWelcomePreference,
   dismissEmotionWelcome,
-} from '@/renderer/agent/emotion/welcomePreference'
+} from '@/renderer/features/emotion/welcomePreference'
 
 const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
 

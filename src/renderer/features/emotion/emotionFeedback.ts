@@ -10,7 +10,7 @@
  * 一起删掉 —— 只挡新写入的话，旧记录还留在磁盘上，和"不保存行为与学习数据"不符。
  */
 
-import type { EmotionState } from '../types/emotion'
+import type { EmotionState } from '@renderer/agent/types/emotion'
 import { isEmotionPrivacyMode, loadEmotionPanelSettings, subscribeEmotionPanelSettings } from './panelSettings'
 
 export interface FeedbackRecord {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeEmotionWelcome } from '@/renderer/agent/emotion/welcomePreference'
+import { normalizeEmotionWelcome } from '@/renderer/features/emotion/welcomePreference'
 
 describe('normalizeEmotionWelcome', () => {
   // The pre-refactor writer was localStorage.setItem(key, '1'), so the migration

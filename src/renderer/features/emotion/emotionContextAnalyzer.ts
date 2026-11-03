@@ -8,9 +8,9 @@
  *  - EventBus           → tool:error / tool:completed / llm:done 等实时事件
  */
 
-import type { CodeContext, EmotionState } from '../types/emotion'
+import type { CodeContext, EmotionState } from '@renderer/agent/types/emotion'
 import type { TranslationKey } from '@shared/i18n'
-import { EventBus } from '../core/EventBus'
+import { EventBus } from '@renderer/agent/core/EventBus'
 import { useStore } from '@/renderer/store'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { useAgentStore, selectMessages } from '@/renderer/agent/store/AgentStore'

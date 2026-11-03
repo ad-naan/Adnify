@@ -326,6 +326,9 @@ async function enrichToolArgumentsWithRoutingMeta(
 function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
   // Let execution reject unavailable asset operations without opening an approval in a hidden/planning thread.
   if (toolCall.name.startsWith('asset_') && (context.isSubAgent || (context.chatMode === 'plan' && context.planPhase !== 'executing'))) return false
+  // 审批类型的"两个来源"对内置工具实为同一份配置：registry.register 与
+  // getToolApprovalType 均读取 TOOL_CONFIGS，不存在漂移。provider 元数据
+  // 优先是为了覆盖不在 TOOL_CONFIGS 里的扩展工具（MCP / Asset）。
   const approvalType = toolManager.getMetadata?.(toolCall.name)?.approvalType ?? getToolApprovalType(toolCall.name)
   const mainStore = useStore.getState()
   const trustedWorkspaceOperation = isDangerousOperationWorkspaceTrusted(

@@ -1,4 +1,4 @@
-import type { EmotionState } from '../types/emotion'
+import type { EmotionState } from '@renderer/agent/types/emotion'
 import type { TranslationKey } from '@shared/i18n'
 import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 

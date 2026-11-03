@@ -6,7 +6,7 @@
 import React, { useId, useMemo } from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
-import { EMOTION_COLORS } from '@/renderer/agent/emotion'
+import { EMOTION_COLORS } from '@/renderer/features/emotion'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 interface EmotionVisualizationProps {

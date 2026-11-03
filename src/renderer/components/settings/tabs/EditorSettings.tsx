@@ -13,7 +13,7 @@ import { EditorSettingsProps } from '../types'
 import { CODE_FONT_PRESETS, DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
 import {
-    loadEmotionPanelSettings, subscribeEmotionPanelSettings, updateEmotionPanelSettings, } from '@/renderer/agent/emotion/panelSettings'
+    loadEmotionPanelSettings, subscribeEmotionPanelSettings, updateEmotionPanelSettings, } from '@/renderer/features/emotion/panelSettings'
 import { t } from '@shared/i18n'
 import { ExecutionManager } from '../../panels/ExecutionManager'
 

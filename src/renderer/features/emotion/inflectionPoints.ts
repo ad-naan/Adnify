@@ -2,7 +2,7 @@
  * 情绪趋势拐点：从 history 推断「连续长时间某状态」「Flow/专注被打断」等
  */
 
-import type { EmotionState, EmotionHistory } from '../types/emotion'
+import type { EmotionState, EmotionHistory } from '@renderer/agent/types/emotion'
 
 export type InflectionPoint =
   | { type: 'prolonged'; timestamp: number; state: EmotionState; durationMin: number }

@@ -3,7 +3,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { toast } from '@/renderer/components/common/InlineToast'
 import { t, type TranslationKey } from '@shared/i18n'
-import type { EmotionDetection } from '../types/emotion'
+import type { EmotionDetection } from '@renderer/agent/types/emotion'
 import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 
 export type EmotionActionType =
