@@ -31,7 +31,8 @@ import {
 } from '../store/agentStorage'
 import { fileCacheService } from '../services/fileCacheService'
 import { approvalService } from './approvalService'
-import { EventBus } from './EventBus'
+import { pathEquals } from '@shared/utils/pathUtils'
+import { EventBus, isSuccessfulLoopEnd, type LoopEndReason } from './EventBus'
 import { getActiveListenerCount } from './stream'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { MessageContent, TextContent, ImageContent } from '../types'
@@ -55,6 +56,8 @@ export class AgentClass {
   /** 运行中的任务（按线程追踪） */
   private runningTasks: Map<string, {
     abortController: AbortController
+    writeWorkspace: string | null
+    finished: Promise<void>
     assistantId: string
     requestId?: string
     planTaskId?: string
@@ -112,6 +115,7 @@ export class AgentClass {
 
     let persistSuspended = false
     let taskRegistered = false
+    let finishTask: (() => void) | undefined
     let assistantId = ''
     let laneAssignment: ExecutionLaneAssignment | undefined
     let executionWorkspacePath = workspacePath
@@ -148,7 +152,15 @@ export class AgentClass {
       threadStore.setStreamState({ requestId, assistantId, phase: 'streaming', laneNotice: undefined })
 
       // 2. 记录任务并绑定助手消息 ID
+      const isTopLevelAgent = chatMode === 'agent' && !executionOptions?.isSubAgent && !executionOptions?.planTaskId
+      const writeWorkspace = chatMode === 'agent' || promptOptions?.planPhase === 'executing' ? workspacePath : null
+      // Snapshot older writers before yielding, so simultaneous sends have a stable order.
+      const olderWriters = isTopLevelAgent && workspacePath
+        ? [...this.runningTasks.values()].filter(task => task.writeWorkspace && pathEquals(task.writeWorkspace, workspacePath))
+        : []
       this.runningTasks.set(threadId, {
+        writeWorkspace,
+        finished: new Promise<void>(resolve => { finishTask = resolve }),
         abortController,
         assistantId,
         requestId,
@@ -162,10 +174,9 @@ export class AgentClass {
       // A second top-level Agent execution may write concurrently with the
       // already-running task. Isolate it at the execution-node boundary. Plan
       // and sub-agent callers own their lanes through the same shared service.
-      const isTopLevelAgent = chatMode === 'agent' && !executionOptions?.isSubAgent && !executionOptions?.planTaskId
       laneAssignment = await ExecutionLaneCoordinator.acquire({
         kind: 'agent-session', workspacePath, label: preparedThread?.title || `agent-${threadId.slice(0, 8)}`,
-        mayWrite: isTopLevelAgent, concurrent: isTopLevelAgent && this.runningTasks.size > 1,
+        mayWrite: isTopLevelAgent, concurrent: olderWriters.length > 0,
         // 用户连发两条消息不等于申明了并行写任务：拿不到隔离就退回共享工作区并提示，
         // 而不是把一次正常对话变成报错。
         allowSharedFallback: true,
@@ -180,6 +191,27 @@ export class AgentClass {
             code: laneAssignment.fallbackNotice.code,
           },
         })
+      }
+
+      if (olderWriters.length && !laneAssignment.isolated) {
+        const signal = abortController.signal
+        let stopWaiting!: () => void
+        const stopped = new Promise<void>(resolve => { stopWaiting = resolve })
+        signal.addEventListener('abort', stopWaiting, { once: true })
+        try {
+          if (!signal.aborted) await Promise.race([Promise.all(olderWriters.map(task => task.finished)), stopped])
+        } finally {
+          signal.removeEventListener('abort', stopWaiting)
+        }
+      }
+      if (abortController.signal.aborted) {
+        const released = await ExecutionLaneCoordinator.release(laneAssignment, 'cancelled before execution')
+        if (released && !released.success) {
+          this.showLaneNotice('warning', translateAgentText('worktreeLane.retainedTitle'), laneOutcomeText(released, getAgentLanguage()),
+            assistantId, threadId, { projection: projectLane(released), workspacePath })
+        }
+        EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: executionOptions?.planTaskId })
+        return { threadId, assistantId, requestId }
       }
 
       // Local validation happens after the optimistic commit. OAuth resolution
@@ -255,14 +287,22 @@ export class AgentClass {
         checkpointId,
         isSubAgent: executionOptions?.isSubAgent,
       }
-      await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
+      let laneEnd: LoopEndReason | undefined
+      const unsubscribe = laneAssignment.isolated ? EventBus.on('loop:end', event => {
+        if (event.requestId === requestId && event.threadId === threadId) laneEnd = event.reason
+      }) : undefined
+      try {
+        await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
+      } finally {
+        unsubscribe?.()
+      }
 
       if (laneAssignment.isolated) {
         // 被中止的运行不该自动合并：用户按下停止时车道里往往是半完成的编辑。
         // 归还车道会把已有改动提交到车道分支上再归档，之后仍然可以手工合并。
-        if (abortController.signal.aborted) {
-          const released = await ExecutionLaneCoordinator.release(laneAssignment, 'aborted by user')
-          if (released?.outcome === 'retained') {
+        if (abortController.signal.aborted || !laneEnd || !isSuccessfulLoopEnd(laneEnd)) {
+          const released = await ExecutionLaneCoordinator.release(laneAssignment, laneEnd ?? 'execution interrupted')
+          if (released && !released.success) {
             this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), laneOutcomeText(released, getAgentLanguage()), assistantId, threadId,
               { projection: projectLane(released), workspacePath })
           }
@@ -315,6 +355,7 @@ export class AgentClass {
       }
       throw error
     } finally {
+      finishTask?.()
       if (persistSuspended) {
         resumeAgentStorageWrites()
         void persistCriticalAgentSessionState(
@@ -370,7 +411,7 @@ export class AgentClass {
         store.finalizeAssistant(task.assistantId, targetThreadId)
       }
 
-      this.runningTasks.delete(targetThreadId)
+      // Keep the writer registered until send() finishes releasing its lane.
     }
 
     const thread = targetThreadId ? store.threads[targetThreadId] : store.getCurrentThread()

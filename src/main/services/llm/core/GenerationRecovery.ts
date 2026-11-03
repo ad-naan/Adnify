@@ -19,6 +19,7 @@ export interface GenerationRecoveryOptions<T> {
   requestId?: string
   abortSignal?: AbortSignal
   execute: (useCache: boolean, attempt: number) => Promise<T>
+  canRetry?: () => boolean
   maxCacheRetries?: number
   maxTransientRetries?: number
 }
@@ -79,6 +80,8 @@ export async function executeWithGenerationRecovery<T>(
       if (abortSignal?.aborted) {
         throw new LLMError('Request was cancelled', ErrorCode.ABORTED, false)
       }
+
+      if (options.canRetry && !options.canRetry()) throw error
 
       if (useCache && state.cacheRetryCount < maxCacheRetries) {
         cacheFallbackError = error

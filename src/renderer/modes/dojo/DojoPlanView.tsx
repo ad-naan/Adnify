@@ -10,8 +10,8 @@ interface StepDraft { title: string; goal: string; files: string; verifyCommand:
 const draftFor = (step: DojoStep): StepDraft => ({ title: step.title, goal: step.goal, files: step.files.join('\n'), verifyCommand: step.verifyCommand, criteria: (step.acceptanceCriteria ?? []).join('\n') })
 const lines = (value: string) => [...new Set(value.split('\n').map(item => item.trim()).filter(Boolean))]
 
-export default function DojoPlanView({ session, language, disabled, onOpenFile, onStart }: {
-  session: DojoSession; language: string; disabled: boolean; onOpenFile: (path: string) => void; onStart: () => void
+export default function DojoPlanView({ session, language, disabled, onOpenFile, onStart, onPractice }: {
+  session: DojoSession; language: string; disabled: boolean; onOpenFile: (path: string) => void; onStart: () => void; onPractice: (step: DojoStep) => void
 }) {
   const lang = asLanguage(language)
   const [expandedId, setExpandedId] = useState<string | undefined>(session.steps[session.currentStepIndex]?.id)
@@ -55,7 +55,7 @@ export default function DojoPlanView({ session, language, disabled, onOpenFile, 
               <div className="dojo-file-links">{step.files.map(path => <button type="button" key={path} onClick={() => onOpenFile(path)} title={path}><FileText size={12} /><span>{path}</span></button>)}</div>
               {step.verifyCommand && <code className="dojo-command-text">{step.verifyCommand}</code>}
               <ul className="dojo-criteria-list">{(step.acceptanceCriteria ?? []).map(item => <li key={item}>{item}</li>)}</ul>
-              {session.status !== 'planning' && <button type="button" className="dojo-secondary" disabled={disabled} onClick={() => useDojoStore.getState().selectStep(step.id)}>{t('dojo.workOnStep', lang)}</button>}
+              {session.status !== 'planning' && <button type="button" className="dojo-secondary" disabled={disabled} onClick={() => onPractice(step)}>{t('dojo.workOnStep', lang)}</button>}
             </>}
           </div>}
         </li>

@@ -409,7 +409,9 @@ export async function runLoop(
   const toolRuntime = await importToolRuntime()
   await toolRuntime.initializeTools()
   toolRuntime.initializeToolProviders()
-  await toolRuntime.assetToolProvider?.refresh().catch(error => logger.agent.warn('[Assets] Cannot refresh asset tools', error))
+  if (context.chatMode !== 'dojo') {
+    await toolRuntime.assetToolProvider?.refresh().catch(error => logger.agent.warn('[Assets] Cannot refresh asset tools', error))
+  }
   toolRuntime.setToolLoadingContext({
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
@@ -918,6 +920,9 @@ export async function runLoop(
   // pressed stop. `shouldContinue` is the discriminator: only the "run another
   // iteration" path at the end of the loop body leaves it true, while every
   // break path leaves it false.
+  if (shouldContinue && context.abortSignal?.aborted) {
+    EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+  }
   const exhaustedIterations = shouldContinue && iteration >= maxIterations && !context.abortSignal?.aborted
 
   if (exhaustedIterations) {

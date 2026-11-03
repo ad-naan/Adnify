@@ -254,14 +254,15 @@ class WorktreeLaneServiceClass {
       return { ...handle, success: true, outcome: 'merged', commit, merged: true, archived }
     }
 
-    if (!await gitService.isWorkingTreeClean(handle.workspacePath)) {
-      return await retain(notice('dirtyBaseMerge'))
-    }
-
     // 基准分支被切走以后合并会把车道提交落到别的分支上，宁可保留。
     const currentBranch = await gitService.getCurrentBranch(handle.workspacePath) || undefined
-    if (handle.baseBranch && currentBranch !== handle.baseBranch) {
-      return await retain(notice('baseBranchChanged', { current: currentBranch || 'detached HEAD', base: handle.baseBranch }))
+    if (currentBranch !== handle.baseBranch) {
+      return await retain(notice('baseBranchChanged', { current: currentBranch || 'detached HEAD', base: handle.baseBranch || 'detached HEAD' }))
+    }
+
+    if (!await gitService.isWorkingTreeClean(handle.workspacePath)) {
+      const result = await gitService.fastForwardLane(handle.branch, handle.workspacePath)
+      return result.success ? await finalizeMerged() : await retain(notice('dirtyBaseMerge'), { error: result.error })
     }
 
     const merged = await gitService.mergeWorktreeBranch(handle.branch, handle.workspacePath)
@@ -415,11 +416,12 @@ class WorktreeLaneServiceClass {
 
     return await new Promise(resolve => {
       this.mergeQueue = this.mergeQueue.then(async () => {
-        if (!await gitService.isWorkingTreeClean(workspacePath)) {
-          resolve({ success: false, notice: notice('dirtyBaseMerge') })
+        const clean = await gitService.isWorkingTreeClean(workspacePath)
+        const merged = clean ? await gitService.mergeWorktreeBranch(branch, workspacePath) : await gitService.fastForwardLane(branch, workspacePath)
+        if (!clean && !merged.success) {
+          resolve({ success: false, notice: notice('dirtyBaseMerge'), error: merged.error })
           return
         }
-        const merged = await gitService.mergeWorktreeBranch(branch, workspacePath)
         if (!merged.success) {
           const conflicts = merged.conflicts?.length ? merged.conflicts : undefined
           // 与 mergeNow 同一条路：冲突先 AI 消解，失败才回「冲突未合并」。

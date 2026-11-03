@@ -147,7 +147,11 @@ export const useDojoStore = create<DojoStore>()(persist((set, get) => ({
     const step = session?.steps.find(item => item.id === stepId)
     if (!session || !step || !canCompleteDojoStep(session, step)) return false
     const steps = session.steps.map(item => item.id === stepId ? { ...item, phase: 'passed' as const } : item)
-    set(sessionPatch({ ...session, steps, status: steps.every(item => item.phase === 'passed') ? 'completed' : 'active' }, sessions))
+    const later = steps.findIndex((item, index) => index > session.currentStepIndex && item.phase !== 'passed')
+    const next = later >= 0 ? later : steps.findIndex(item => item.phase !== 'passed')
+    const currentStepIndex = next >= 0 ? next : session.currentStepIndex
+    set({ ...sessionPatch({ ...session, steps, currentStepIndex, status: next < 0 ? 'completed' : 'active' }, sessions),
+      verifyResult: steps[currentStepIndex]?.verification ?? null })
     // Completion is evidence of practice, not proof of mastery or absence of help.
     get().recordSkill(step.skill || step.goal || step.title, 'passed')
     return true

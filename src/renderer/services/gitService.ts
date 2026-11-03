@@ -1036,14 +1036,26 @@ class GitService {
         return { success: true, commit: head.stdout.trim(), committed: true }
     }
 
+    async fastForwardLane(branch: string, rootPath: string): Promise<GitWorktreeLaneResult> {
+        // Git may carry unrelated edits through a fast-forward. It refuses overlapping
+        // tracked/untracked edits and ignored files, without stashing or creating a commit.
+        const result = await this.exec(['merge', '--ff-only', '--no-squash', '--no-autostash', '--no-overwrite-ignore', branch], rootPath)
+        return { success: result.exitCode === 0, error: result.exitCode ? result.stderr : undefined }
+    }
+
     async mergeWorktreeBranch(branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
-        const result = await this.exec(['merge', '--no-ff', branch, '-m', `Merge Adnify lane ${branch}`], rootPath)
+        // An in-progress user merge can have a clean status (e.g. resolving to HEAD).
+        // Its MERGE_HEAD belongs to the user and must never be aborted by the harness.
+        const pending = await this.exec(['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], rootPath)
+        if (pending.exitCode !== 1) return { success: false, error: pending.stderr || 'Cannot start a lane merge while another merge is pending' }
+        const result = await this.exec(['merge', '--no-ff', '--no-autostash', '--no-overwrite-ignore', branch, '-m', `Merge Adnify lane ${branch}`], rootPath)
         if (result.exitCode === 0) return { success: true, branch }
-        const status = await this.exec(['status', '--porcelain'], rootPath)
-        const conflicts = status.stdout.split('\n')
-            .filter(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
-            .map(line => line.slice(3).trim())
-        await this.exec(['merge', '--abort'], rootPath)
+        const conflicts = await this.unmergedFiles(rootPath)
+        const started = await this.exec(['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], rootPath)
+        if (started.exitCode === 0) {
+            const aborted = await this.exec(['merge', '--abort'], rootPath)
+            if (aborted.exitCode !== 0) return { success: false, error: aborted.stderr || 'Could not restore the failed merge' }
+        }
         return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
     }
 
@@ -1057,17 +1069,29 @@ class GitService {
     async mergeKeepConflicts(branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
         const result = await this.exec(['merge', '--no-ff', branch, '-m', `Merge Adnify lane ${branch}`], rootPath)
         if (result.exitCode === 0) return { success: true, branch }
-        const status = await this.exec(['status', '--porcelain'], rootPath)
-        const conflicts = status.stdout.split('\n')
-            .filter(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
-            .map(line => line.slice(3).trim())
+        const conflicts = await this.unmergedFiles(rootPath)
         return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
     }
 
-    /** 索引里是否还有未合并（冲突）路径 */
-    async hasUnmergedPaths(rootPath?: string): Promise<boolean> {
-        const status = await this.exec(['status', '--porcelain'], rootPath)
-        return status.stdout.split('\n').some(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
+    private async unmergedFiles(rootPath?: string): Promise<string[]> {
+        const result = await this.exec(['diff', '--name-only', '--diff-filter=U', '-z'], rootPath)
+        return result.exitCode === 0 ? result.stdout.split('\0').filter(Boolean) : []
+    }
+
+    /** Stage only resolver-owned paths, verify staged blobs, then finish MERGE_HEAD. */
+    async commitResolvedMerge(files: string[], message: string, rootPath: string): Promise<GitWorktreeLaneResult> {
+        const mergeHead = await this.resolveCommit('MERGE_HEAD', rootPath)
+        if (!mergeHead || !files.length) return { success: false, error: 'No pending merge to resolve' }
+        const added = await this.exec(['add', '--', ...files.map(file => `:(literal)${file}`)], rootPath)
+        if (added.exitCode !== 0) return { success: false, error: added.stderr }
+        for (const file of files) {
+            const blob = await this.exec(['show', `:${file}`], rootPath)
+            if (blob.exitCode !== 0 || blob.stdout.includes('\0') || /^(?:<{7,}|={7,}|>{7,}|\|{7,})(?:[ \t\r]|$)/m.test(blob.stdout)) {
+                return { success: false, error: `Unresolved or unsupported conflict in ${file}` }
+            }
+        }
+        const result = await this.exec(['commit', '-m', message], rootPath)
+        return { success: result.exitCode === 0, error: result.exitCode ? result.stderr : undefined }
     }
 
     /**

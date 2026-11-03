@@ -103,6 +103,16 @@ describe('Dojo evidence and workspace boundaries', () => {
     expect(useDojoStore.getState().session?.status).toBe('completed')
     expect(useDojoStore.getState().skills).toEqual([expect.objectContaining({ id: 'event handlers', mastery: 'passed' })])
   })
+  it('selects the next unfinished task and wraps around after out-of-order practice', () => {
+    const manual = { verifyCommand: '', confirmedCriteria: ['Click exports current config'] }
+    useDojoStore.getState().startSession(training('/project/a', [step('first', manual), step('second', manual)]))
+    useDojoStore.getState().selectStep('second')
+    expect(useDojoStore.getState().completeStep('second')).toBe(true)
+    expect(useDojoStore.getState().session?.currentStepIndex).toBe(0)
+    expect(useDojoStore.getState().completeStep('first')).toBe(true)
+    expect(useDojoStore.getState().session?.status).toBe('completed')
+  })
+
   it('does not award mastery merely because no hints were revealed', () => {
     useDojoStore.getState().startSession(training('/project/a', [step('s1', { verifyCommand: '', confirmedCriteria: ['Click exports current config'] })]))
     expect(useDojoStore.getState().completeStep('s1')).toBe(true)

@@ -131,13 +131,23 @@ export function parseDojoPlan(reply: string): { briefing: string; steps: DojoSte
 
 const planSchema = `First inspect the repository and existing build/test scripts. Propose a small, adjustable plan for the learner, not a canned course. Use only as many steps as the work needs (maximum 12). Each step must have observable acceptanceCriteria that prove its behavior, not just typechecking. verifyCommand uses an existing non-destructive project check; use an empty string for manual-only verification. Never invent scripts or use installs, commits, deployment, code generation, shell operators or file-writing commands. No implementation code in the plan. Reply with a brief markdown explanation followed by ONE final fenced json block: {"steps":[{"title":"...","goal":"...","skill":"...","files":["relative/path.ts"],"verifyCommand":"...","acceptanceCriteria":["observable behavior"],"hints":["direction","pseudocode","key API"]}]}`
 
+async function requestPlan(prompt: string, workspacePath: string, operation: string, onThreadCreated?: (id: string) => void) {
+  const sessionId = useDojoStore.getState().session?.id
+  const reply = await runMentor(prompt, workspacePath, operation, onThreadCreated)
+  try { return parseDojoPlan(reply) } catch (error) {
+    if (useDojoStore.getState().session?.id !== sessionId) throw new Error(message('dojo.workspaceChanged'))
+    const repair = `Your plan could not be read: ${error instanceof Error ? error.message : String(error)}. Reformat your preceding plan.\n${planSchema}`
+    return parseDojoPlan(await runMentor(repair, workspacePath, operation))
+  }
+}
+
 export async function decomposeRequirement(requirement: string, workspacePath: string, onThreadCreated?: (id: string) => void) {
-  return parseDojoPlan(await runMentor(`Requirement:\n${requirement}\n\n${planSchema}`, workspacePath, 'Plan', onThreadCreated))
+  return requestPlan(`Requirement:\n${requirement}\n\n${planSchema}`, workspacePath, 'Plan', onThreadCreated)
 }
 
 export async function reviseDojoPlan(instruction: string, workspacePath: string) {
   const session = useDojoStore.getState().session
-  return parseDojoPlan(await runMentor(`Current plan:\n${JSON.stringify(session?.steps)}\nLearner's requested revision:\n${instruction}\nPreserve parts of the plan that remain relevant.\n${planSchema}`, workspacePath, 'Revise plan'))
+  return requestPlan(`Current plan:\n${JSON.stringify(session?.steps)}\nLearner's requested revision:\n${instruction}\nPreserve parts of the plan that remain relevant.\n${planSchema}`, workspacePath, 'Revise plan')
 }
 
 function stepContext(step: DojoStep): string {
@@ -165,8 +175,8 @@ export async function gradeAnswer(step: DojoStep, question: string, answer: stri
   const feedback = await runMentor(`${stepContext(step)}\nQuestion: ${question}\nLearner answer: ${answer}\nExplain what is accurate, clarify misconceptions, and suggest one follow-up. This is practice, not a gate.`, workspacePath, 'Feedback')
   return { passed: false, feedback }
 }
-export async function reviewStep(step: DojoStep, requirement: string, workspacePath: string) {
-  return runMentor(`${stepContext(step)}\nRequirement: ${requirement}\nInspect the actual implementation. Summarize one specific strength, any remaining gap in the acceptance criteria, and one concept worth remembering. Do not assume a passing build proves the requirement.`, workspacePath, 'Review')
+export async function reviewStep(step: DojoStep, requirement: string, workspacePath: string, evidence?: DojoVerifyResult) {
+  return runMentor(`${stepContext(step)}\nRequirement: ${requirement}\nCommand evidence: ${evidence ? evidence.command + '\n' + evidence.output.slice(-10000) : 'none supplied'}.\nInspect the actual implementation. Summarize one specific strength, any remaining gap in the acceptance criteria, and one concept worth remembering. Do not assume a passing build proves the requirement.`, workspacePath, 'Review')
 }
 
 let verifyTerminalId: string | null = null
@@ -285,7 +295,7 @@ export function observeDojoWorkspace(workspacePath: string): () => void {
   const unsubscribeFiles = api.file.onChanged(event => {
     if (!pathStartsWith(event.path, workspacePath)) return
     const relative = toRelativePath(event.path, workspacePath).replace(/\\/g, '/')
-    if (/(^|\/)(?:node_modules|\.git|dist|build|coverage|\.next|\.cache)(\/|$)/.test(relative)) return
+    if (/(^|\/)(?:node_modules|\.git|\.adnify|dist|build|coverage|\.next|\.cache)(\/|$)/.test(relative)) return
     revision()
   })
   return () => { unsubscribeStore(); unsubscribeFiles() }

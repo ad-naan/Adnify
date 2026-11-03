@@ -21,6 +21,7 @@ import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { EventBus, isSuccessfulLoopEnd } from '../core/EventBus'
 import { Agent } from '../core/Agent'
+import { api } from '@/renderer/services/electronAPI'
 import { gitService } from '@/renderer/services/gitService'
 import { logger } from '@utils/Logger'
 import { normalizePath } from '@shared/utils/pathUtils'
@@ -69,46 +70,60 @@ export async function attemptAiLaneMerge(params: {
     }
   }
 
+  let ownsTemp = false
   try {
+    const baseBranch = await gitService.getCurrentBranch(workspacePath)
+    const baseCommit = await gitService.resolveCommit('HEAD', workspacePath)
+    if (baseBranch === null || !baseCommit) return { success: false, error: 'Unable to identify merge target' }
     // 1. 临时 worktree：从基准分支当前提交检出。
-    const created = await gitService.createWorktree(tempPath, tempBranch, workspacePath)
+    const created = await gitService.createWorktree(tempPath, tempBranch, workspacePath, baseCommit)
     if (!created.success) return { success: false, error: created.error }
+
+    ownsTemp = true
 
     // 2. 重放合并，这次留下冲突状态（mergeWorktreeBranch 会 abort，不能用）。
     const merge = await gitService.mergeKeepConflicts(branch, tempPath)
     if (!merge.success && !merge.conflicts?.length) {
-      await cleanupTemp()
       return { success: false, error: merge.error }
     }
 
-    // 3. 消解代理修冲突，然后以合并提交收尾（add -A + commit 完成这次 merge）。
+    // 3. 消解代理修冲突，然后以合并提交收尾（只暂存消解的路径）。
     if (merge.conflicts?.length) {
+      // A binary or delete/modify conflict could otherwise silently take Git's default side.
+      for (const file of merge.conflicts) {
+        const text = await api.file.readFull(`${tempPath}/${file}`)
+        if (!text || text.includes('\0') || !/^<{7,} /m.test(text)) {
+          return { success: false, error: `Conflict needs a manual decision: ${file}` }
+        }
+      }
       const resolved = await runResolverAgent({ tempPath, branch, conflicts: merge.conflicts, llmConfig })
       if (!resolved.success) {
-        await cleanupTemp()
         return resolved
       }
-      const commit = await gitService.commitWorktree(`Merge Adnify lane ${branch} (AI-resolved conflicts)`, tempPath)
+      const commit = await gitService.commitResolvedMerge(merge.conflicts, `Merge Adnify lane ${branch} (AI-resolved conflicts)`, tempPath)
       if (!commit.success) {
-        await cleanupTemp()
         return { success: false, error: commit.error }
       }
     }
 
     // 4. 临时分支合回基准工作区。基准自上次合并尝试后没动（mergeQueue 串行 +
     //    洁净检查），这次合并在构造上不会再冲突；真失败了也按失败回退，不硬来。
-    const finalMerge = await gitService.mergeWorktreeBranch(tempBranch, workspacePath)
+    if (await gitService.getCurrentBranch(workspacePath) !== baseBranch ||
+        await gitService.resolveCommit('HEAD', workspacePath) !== baseCommit ||
+        !await gitService.isWorkingTreeClean(workspacePath)) {
+      return { success: false, error: 'Merge target changed during conflict resolution' }
+    }
+    const finalMerge = await gitService.fastForwardLane(tempBranch, workspacePath)
     if (!finalMerge.success) {
-      await cleanupTemp()
       return { success: false, error: finalMerge.error }
     }
 
-    await cleanupTemp()
     logger.agent.info(`[LaneMerge] AI-resolved lane ${branch} conflicts: ${merge.conflicts?.join(', ') || 'none'}`)
     return { success: true }
   } catch (error) {
-    await cleanupTemp()
     return { success: false, error: errorMessage(error) }
+  } finally {
+    if (ownsTemp) await cleanupTemp().catch(error => logger.agent.warn(`[LaneMerge] Cleanup failed: ${errorMessage(error)}`))
   }
 }
 
@@ -140,23 +155,11 @@ async function runResolverAgent(params: {
   const requestId = crypto.randomUUID()
   store.renameThread(threadId, `↧ 解决合并冲突: ${conflicts.slice(0, 2).join(', ')}${conflicts.length > 2 ? ' …' : ''}`)
 
-  const completion = new Promise<boolean>((resolve) => {
-    let settled = false
-    const unsubscribe = EventBus.on('loop:end', (event) => {
-      if (event.threadId !== threadId || event.requestId !== requestId || settled) return
-      settled = true
-      clearTimeout(timer)
-      unsubscribe()
-      resolve(isSuccessfulLoopEnd(event.reason))
-    })
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      unsubscribe()
-      Agent.abort(threadId)
-      resolve(false)
-    }, RESOLVER_TIMEOUT_MS)
+  let succeeded = false
+  const unsubscribe = EventBus.on('loop:end', event => {
+    if (event.threadId === threadId && event.requestId === requestId) succeeded = isSuccessfulLoopEnd(event.reason)
   })
+  const timer = setTimeout(() => Agent.abort(threadId), RESOLVER_TIMEOUT_MS)
 
   logger.agent.info(`[LaneMerge] Spawning conflict resolver on thread ${threadId} for ${branch}`)
   try {
@@ -170,17 +173,14 @@ async function runResolverAgent(params: {
     )
   } catch (error) {
     logger.agent.error(`[LaneMerge] Failed to dispatch conflict resolver: ${errorMessage(error)}`)
-    Agent.abort(threadId)
     return { success: false, error: `Failed to start conflict resolver: ${errorMessage(error)}` }
+  } finally {
+    clearTimeout(timer)
+    unsubscribe()
   }
 
-  const ok = await completion
-  if (!ok) return { success: false, error: 'Conflict resolver did not finish successfully' }
+  if (!succeeded) return { success: false, error: 'Conflict resolver did not finish successfully' }
 
-  // 校验：索引里不允许再有任何未合并路径 —— 代理说修完了不算，git 说了才算。
-  if (await gitService.hasUnmergedPaths(tempPath)) {
-    return { success: false, error: 'Conflicts were not fully resolved (unmerged paths remain in the index)' }
-  }
   return { success: true }
 }
 

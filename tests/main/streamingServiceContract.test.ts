@@ -8,13 +8,9 @@
  *   1. AI SDK 的 part 名字。SDK 升级改了 part 命名，这里立刻炸，而 golden 不会——
  *      golden 里的 part 是我们自己写的字面量。
  *   2. generate() 外层的错误与重试编排（processStream 自己从不发 error 事件：
- *      流里的 error part 只是暂存后重抛，error 只由 generate 的 catch 和
- *      generateOnce 的 abort 分支发出）。
+ *      流里的 error part 只是暂存后重抛，error 由 generate 的 catch 发出）。
  *
  * 因此断言刻意粗：只看 `channel:type` 序列，不看载荷字面量。载荷是 golden 的活。
- *
- * ── 这里钉住了两个既有 bug，不要在这一步修 ──
- * 见下面两个 it 的注释。
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -249,7 +245,7 @@ describe('StreamingService.generate 与 AI SDK 的契约', () => {
     ])
   })
 
-  it('【记录当前的 bug】流中报错会重放：渲染端收到两遍文字，没有 reset 事件把第一遍清掉', async () => {
+  it('reports a partial stream error without replaying delivered text', async () => {
     let attempts = 0
     modelState.model = new MockLanguageModelV3({
       doStream: async () => {
@@ -269,14 +265,11 @@ describe('StreamingService.generate 与 AI SDK 的契约', () => {
       h.service.generate({ config: CONFIG, messages: MESSAGES, requestId: REQUEST_ID }),
     ).rejects.toThrow()
 
-    // GenerationRecovery.ts:81 的缓存回退无条件重试第一次失败，与错误码无关，
-    // 所以同一段流跑了两遍。线协议上没有「清空已发内容」的事件，渲染端只会
-    // 把第二遍追加在第一遍后面。先钉住，修它是另一件事。
-    expect(attempts).toBe(2)
-    expect(h.shape()).toEqual(['stream:text', 'stream:text', 'error:-'])
+    expect(attempts).toBe(1)
+    expect(h.shape()).toEqual(['stream:text', 'error:-'])
   })
 
-  it('【记录当前的 bug】abort 会发两条 llm:error（generateOnce 一条，generate 的 catch 再一条）', async () => {
+  it('emits one terminal error on cancellation', async () => {
     const controller = new AbortController()
 
     modelState.model = new MockLanguageModelV3({
@@ -296,7 +289,6 @@ describe('StreamingService.generate 与 AI SDK 的契约', () => {
       }),
     ).rejects.toThrow()
 
-    // 两条。今天渲染端只靠 stream.ts:300 的 isResolved 兜住第二条。
-    expect(h.shape()).toEqual(['error:-', 'error:-'])
+    expect(h.shape()).toEqual(['error:-'])
   })
 })

@@ -10,6 +10,7 @@ const git = vi.hoisted(() => ({
   createWorktree: vi.fn(),
   commitWorktree: vi.fn(),
   mergeWorktreeBranch: vi.fn(),
+  fastForwardLane: vi.fn(),
   removeWorktree: vi.fn(),
   pruneWorktrees: vi.fn(),
   listWorktrees: vi.fn(),
@@ -40,6 +41,7 @@ describe('WorktreeLaneService', () => {
     git.countCommitsBetween.mockResolvedValue(1)
     git.createWorktree.mockResolvedValue({ success: true })
     git.commitWorktree.mockResolvedValue({ success: true, commit: 'abc', committed: true })
+    git.fastForwardLane.mockResolvedValue({ success: false, error: 'overlapping edits' })
     git.mergeWorktreeBranch.mockResolvedValue({ success: true })
     git.removeWorktree.mockResolvedValue({ success: true })
     git.pruneWorktrees.mockResolvedValue({ success: true })
@@ -70,6 +72,15 @@ describe('WorktreeLaneService', () => {
     expect(result).toMatchObject({ outcome: 'retained', archived: true, notice: { code: 'dirtyBaseMerge' } })
     expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
     expect(git.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  it('integrates a fast-forward lane without requiring unrelated base edits to be committed', async () => {
+    const lane = await service.create('D:/repo', 'parallel change')
+    git.isWorkingTreeClean.mockResolvedValue(false)
+    git.fastForwardLane.mockResolvedValue({ success: true })
+    expect(await service.complete(lane, 'done')).toMatchObject({ outcome: 'merged' })
+    expect(git.fastForwardLane).toHaveBeenCalledWith(lane.branch, lane.workspacePath)
+    expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
   })
 
   it('does not create a lane without a resolved base commit', async () => {

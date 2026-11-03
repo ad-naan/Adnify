@@ -74,6 +74,13 @@ describe('Dojo mentor lifecycle', () => {
     expect(env.send.mock.calls[1][3]).toBe('dojo')
     expect(useDojoStore.getState().activeMentorThreadId).toBeNull()
   })
+  it('repairs an invalid plan on the same thread without asking the learner to retry', async () => {
+    env.send.mockImplementationOnce(async (_p, _c, _w, _m, _o, options) => reply('no structured plan', options))
+    expect((await decomposeRequirement('Export settings', '/project')).steps).toHaveLength(1)
+    expect(env.send).toHaveBeenCalledTimes(2)
+    expect(env.agent.createThread).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects an unsuccessful loop instead of returning an earlier response', async () => {
     const threadId = env.agent.createThread()
     env.agent.threads[threadId].messages = [{ role: 'assistant', id: 'previous', content: 'old response', parts: [], timestamp: 1 }]
@@ -200,6 +207,7 @@ describe('Dojo plan and verification evidence', () => {
   it('observes code and editor changes but ignores generated directories and cleans up', () => {
     const stop = observeDojoWorkspace('/project')
     env.fileChanged!({ path: '/project/dist/bundle.js' })
+    env.fileChanged!({ path: '/project/.adnify/worktrees/other/src/a.ts' })
     env.fileChanged!({ path: '/other-project/src/app.ts' })
     expect(useDojoStore.getState().session!.codeRevision).toBe(0)
     env.fileChanged!({ path: '/project/src/settings.ts' })

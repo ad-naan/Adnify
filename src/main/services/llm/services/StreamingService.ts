@@ -93,15 +93,17 @@ export class StreamingService {
    */
   async generate(params: StreamingParams): Promise<StreamingResult> {
     const { config, requestId, abortSignal } = params
+    let emittedOutput = false
     try {
       return await executeWithGenerationRecovery({
         config,
         operation: 'stream-text',
         requestId,
         abortSignal,
-        execute: async (useCache) => {
-          return this.generateOnce(params, useCache)
-        },
+        // This transport appends events. A retry after visible output would replay
+        // text or tool cards into the same assistant message.
+        canRetry: () => !emittedOutput,
+        execute: useCache => this.generateOnce(params, useCache, () => { emittedOutput = true }),
       })
     } catch (error) {
       const llmError = error instanceof LLMError ? error : LLMError.fromError(error)
@@ -110,7 +112,7 @@ export class StreamingService {
     }
   }
 
-  private async generateOnce(params: StreamingParams, useCache: boolean): Promise<StreamingResult> {
+  private async generateOnce(params: StreamingParams, useCache: boolean, onOutput: () => void): Promise<StreamingResult> {
     const { config, messages, tools, systemPrompt, abortSignal, activeTools, requestId } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
@@ -198,6 +200,7 @@ export class StreamingService {
         resolveStreamIdleTimeoutMs(preparedRequest.callOptions.timeout),
         resolvePseudoToolAdapterEnabled(resolvedConfig, tools),
         preparedRequest.cacheWriteTokens,
+        onOutput,
       )
     } catch (error) {
       if (abortSignal?.aborted) {
@@ -206,7 +209,6 @@ export class StreamingService {
           ErrorCode.ABORTED,
           false,
         )
-        this.sendEvent(requestId, { type: 'error', error: abortedError })
         throw abortedError
       }
 
@@ -227,6 +229,7 @@ export class StreamingService {
     streamIdleTimeoutMs: number,
     enablePseudoToolAdapter: boolean,
     cacheWriteTokens?: number,
+    onOutput?: () => void,
   ): Promise<StreamingResult> {
     let reasoning = ''
     let reasoningSignature = ''
@@ -254,6 +257,7 @@ export class StreamingService {
           requestId,
         })
 
+        if (outcome.events.length) onOutput?.()
         for (const event of outcome.events) {
           this.sendEvent(requestId, event)
         }
@@ -276,6 +280,7 @@ export class StreamingService {
 
     const finalAdapterState = pseudoToolAdapter.finalize()
     if (finalAdapterState.visibleText) {
+      onOutput?.()
       streamedText += finalAdapterState.visibleText
       this.sendEvent(requestId, { type: 'text', content: finalAdapterState.visibleText })
     }
