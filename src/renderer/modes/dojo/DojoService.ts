@@ -5,7 +5,7 @@ import { Agent } from '@/renderer/agent/core/Agent'
 import { api } from '@/renderer/services/electronAPI'
 import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { getEditorBufferContent, flushEditorBufferSnapshots } from '@/renderer/services/editorBufferService'
-import { validatePath, pathEquals, pathStartsWith, toRelativePath } from '@shared/utils/pathUtils'
+import { validatePath, normalizePath, pathEquals, pathStartsWith, toRelativePath } from '@shared/utils/pathUtils'
 import { asLanguage, t } from '@shared/i18n'
 import type { AssistantMessage } from '@/renderer/agent/types'
 import { useDojoStore, dojoWorkspaceKey, dojoStepContract } from './DojoStore'
@@ -13,7 +13,7 @@ import type { DojoSession, DojoStep, DojoVerifyResult } from './types'
 
 const MENTOR_TIMEOUT_MS = 5 * 60 * 1000
 const VERIFY_TIMEOUT_MS = 10 * 60 * 1000
-const mentorRules = `You are a read-only coding mentor. The human writes ALL project code. Read relevant files before giving advice. Never write files or run commands. Teach through the learner's real project; adapt scope and explanations to their questions. Give a concrete next action, without rigid lesson phases. Demonstrations are optional and not evidence of mastery. Distinguish observed verification from your interpretation.`
+const mentorRules = `You are a read-only coding mentor. The human writes ALL project code. Read relevant files before giving advice. Never write files or run commands. Teach through the learner's real project; adapt scope and explanations to their questions. Give a concrete next action, without rigid lesson phases. Demonstrations are optional and not evidence of mastery. Distinguish observed verification from your interpretation. In conversational feedback, link to lines you actually inspected using workspace-relative Markdown links such as [file.ts · L12](src/file.ts#L12). Never guess line numbers.`
 const message = (key: Parameters<typeof t>[0]) => t(key, asLanguage(useStore.getState().language))
 let mentorRequest: { id: string; threadId: string; controller: AbortController } | null = null
 
@@ -288,9 +288,13 @@ export function observeDojoWorkspace(workspacePath: string): () => void {
     if (state.session && dojoWorkspaceKey(state.session.workspacePath) === dojoWorkspaceKey(workspacePath)) state.invalidateVerification()
   }
   const unsubscribeStore = useStore.subscribe((current, previous) => {
-    if (current.openFiles === previous.openFiles) return
-    if (current.openFiles.some(file => !file.remote && pathStartsWith(file.path, workspacePath) &&
-      previous.openFiles.some(before => pathEquals(before.path, file.path) && (before.content !== file.content || (!before.isDirty && file.isDirty))))) revision()
+    if (current.openFiles === previous.openFiles || !useDojoStore.getState().session) return
+    const beforeByPath = new Map(previous.openFiles.filter(file => !file.remote).map(file => [normalizePath(file.path).toLowerCase(), file]))
+    if (current.openFiles.some(file => {
+      if (file.remote) return false
+      const before = beforeByPath.get(normalizePath(file.path).toLowerCase())
+      return before && (before.content !== file.content || (!before.isDirty && file.isDirty)) && pathStartsWith(file.path, workspacePath)
+    })) revision()
   })
   const unsubscribeFiles = api.file.onChanged(event => {
     if (!pathStartsWith(event.path, workspacePath)) return

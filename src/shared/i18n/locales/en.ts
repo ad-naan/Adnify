@@ -1710,6 +1710,7 @@ export const en = {
   'worktreeLane.dropConfirmTitle': 'Discard worktree lane',
   'worktreeLane.dropConfirm': 'Discard lane {branch}? Its commits cannot be recovered.',
   'worktreeLane.mergedToast': 'Merged lane {branch}',
+  'worktreeLane.autoMerged': 'Automatically merged into {branch}',
   'worktreeLane.droppedToast': 'Discarded lane {branch}',
   'worktreeLane.dropFailed': 'Unable to discard the lane',
   'worktreeLane.status.active': 'running',

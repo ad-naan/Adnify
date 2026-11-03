@@ -312,7 +312,13 @@ export class AgentClass {
         const laneResult = await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify agent task: ${preparedThread?.title || threadId}`)
         // 车道没能合并不代表这次运行失败了：工作已经安全地留在车道分支上。抛错会把
         // 整条助手消息标成错误、还会触发上层重试，所以这里降级成一条可见的提示。
-        if (laneResult && !laneResult.success) {
+        if (laneResult?.success && laneResult.outcome === 'merged') {
+          store.addSystemAlertPart(assistantId, {
+            alertType: 'success',
+            compact: true,
+            message: translateAgentText('worktreeLane.autoMerged', { branch: laneResult.baseBranch || 'HEAD' }),
+          }, threadId)
+        } else if (laneResult && !laneResult.success) {
           this.showLaneNotice(
             laneResult.outcome === 'retained' ? 'warning' : 'error',
             translateAgentText('worktreeLane.retainedTitle'),

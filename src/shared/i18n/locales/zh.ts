@@ -1711,6 +1711,7 @@ export const zh = {
   'worktreeLane.dropConfirmTitle': '丢弃 worktree 车道',
   'worktreeLane.dropConfirm': '确定丢弃车道 {branch}？其提交将无法恢复。',
   'worktreeLane.mergedToast': '已合并车道 {branch}',
+  'worktreeLane.autoMerged': '已自动合入 {branch}',
   'worktreeLane.droppedToast': '已丢弃车道 {branch}',
   'worktreeLane.dropFailed': '无法丢弃该车道',
   'worktreeLane.status.active': '执行中',

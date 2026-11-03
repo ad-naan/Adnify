@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowUp, Check, CheckCheck, ChevronRight, FileText, GraduationCap, Lightbulb, ListTodo, LockKeyhole, MessageSquare, Play, Plus, RotateCcw, Square, Terminal, X } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import DojoMessageBody from './DojoMessageBody'
+import { setPendingNavigation } from '@/renderer/services/editorNavigation'
 import { useStore } from '@/renderer/store'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { api } from '@/renderer/services/electronAPI'
@@ -38,6 +38,7 @@ export default function DojoWorkbench() {
   const [includeSelection, setIncludeSelection] = useState(false)
   const [retry, setRetry] = useState<((isCurrent: () => boolean) => Promise<void>) | null>(null)
   const operationRef = useRef(false)
+  const navigationSeq = useRef(0)
   const seqRef = useRef(0)
   const timelineRef = useRef<HTMLDivElement>(null)
   const followsTail = useRef(true)
@@ -47,7 +48,7 @@ export default function DojoWorkbench() {
     useDojoStore.getState().selectWorkspace(workspacePath)
     if (!workspacePath || currentMode !== 'dojo') return
     const unsubscribe = observeDojoWorkspace(workspacePath)
-    return () => { seqRef.current += 1; cancelDojoOperation(); unsubscribe(); operationRef.current = false; useDojoStore.getState().setMentorBusy(false) }
+    return () => { seqRef.current += 1; navigationSeq.current++; cancelDojoOperation(); unsubscribe(); operationRef.current = false; useDojoStore.getState().setMentorBusy(false) }
   }, [workspacePath, currentMode])
 
   useEffect(() => { setInput(''); setRetry(null); setView(session?.status === 'planning' && session.steps.length ? 'plan' : 'conversation'); followsTail.current = true }, [session?.id])
@@ -102,20 +103,29 @@ export default function DojoWorkbench() {
   }
   const exit = () => { stop(); useModeStore.getState().restorePreviousMode(); if (useModeStore.getState().currentMode === 'dojo') useModeStore.getState().setMode('agent') }
 
-  const openFile = async (path: string) => {
+  const openFile = useCallback(async (path: string, line?: number) => {
+    const seq = ++navigationSeq.current
+    if (!workspacePath) return
     const checked = validatePath(path, workspacePath)
     if (!checked.valid || !checked.sanitizedPath) { useDojoStore.getState().setError(checked.error || t('dojo.invalidFile', language)); return }
     const fullPath = checked.sanitizedPath
     const state = useStore.getState()
-    const existing = state.openFiles.find(file => pathEquals(file.path, fullPath))
-    if (existing) { state.setActiveFile(existing.path); state.setEditorVisible(true); return }
+    const findFile = () => useStore.getState().openFiles.find(file => !file.remote && pathEquals(file.path, fullPath))
     try {
-      const content = await api.file.readFull(fullPath)
-      if (!pathEquals(workspacePath, useStore.getState().workspacePath ?? '')) return
-      state.openFile(fullPath, content ?? '')
+      const content = findFile() ? null : await api.file.readFull(fullPath)
+      if (seq !== navigationSeq.current || !pathEquals(workspacePath, useStore.getState().workspacePath ?? '')) return
+      const existing = findFile()
+      if (line && !existing && content == null) { useDojoStore.getState().setError(t('dojo.invalidFile', language)); return }
       state.setEditorVisible(true)
-    } catch (err) { useDojoStore.getState().setError(String(err)) }
-  }
+      if (line && existing && useStore.getState().activeFilePath === existing.path) {
+        window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line, column: 1 } }))
+        return
+      }
+      if (line) setPendingNavigation({ filePath: existing?.path ?? fullPath, line, col: 1 })
+      if (existing) state.setActiveFile(existing.path)
+      else state.openFile(fullPath, content ?? '')
+    } catch (err) { if (seq === navigationSeq.current) useDojoStore.getState().setError(String(err)) }
+  }, [workspacePath, language])
 
   const applyPlan = (result: { briefing: string; steps: DojoStep[] }) => {
     useDojoStore.getState().replacePlan(result.steps, result.briefing)
@@ -279,9 +289,9 @@ export default function DojoWorkbench() {
             {!messages.length && <p className="dojo-helper">{t('dojo.mentorWaiting', language)}</p>}
             {messages.map(item => <article key={item.id} className={`dojo-message dojo-message-${item.role}`}>
               <div className="dojo-message-meta">{t(item.role === 'mentor' ? 'dojo.mentorLabel' : item.role === 'user' ? 'dojo.you' : 'dojo.evidence', language)}{item.codeRevision !== undefined && item.codeRevision !== (session.codeRevision ?? 0) && <span>{t('dojo.earlierCode', language)}</span>}</div>
-              <div className="dojo-markdown"><MessageBody content={item.content} /></div>
+              <div className="dojo-markdown"><DojoMessageBody content={item.content} onOpenLocation={item.role === 'mentor' ? openFile : undefined} /></div>
             </article>)}
-            {busy && threadId && <DojoMentorFeed threadId={threadId} language={language} />}
+            {busy && threadId && <DojoMentorFeed threadId={threadId} language={language} onOpenLocation={openFile} />}
             {busy && !threadId && <p className="dojo-helper dojo-working">{t('dojo.working', language)}</p>}
             {session.status === 'completed' && <div className="dojo-summary"><CheckCheck size={20} /><h2>{t('dojo.trainingComplete', language)}</h2><p>{t('dojo.summaryHelp', language)}</p><div>{skills.filter(skill => session.steps.some(item => (item.skill || item.goal || item.title).toLowerCase() === skill.id)).map(skill => <span key={skill.id}>{skill.name}</span>)}</div></div>}
           </div>
@@ -296,10 +306,6 @@ export default function DojoWorkbench() {
   </section>
 }
 
-const MessageBody = memo(function MessageBody({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-})
-
 function TaskCard({ session, step, language, busy, fresh, ready, onOpenFile, onVerify, onComplete, onConfirmCriterion, onHint, onDemo, onReview, onQuiz, onDiagnose }: {
   session: DojoSession; step: DojoStep; language: ReturnType<typeof asLanguage>; busy: boolean; fresh: boolean; ready: boolean | null;
   onOpenFile: (path: string) => void; onVerify: () => void; onComplete: () => void; onConfirmCriterion: (criterion: string, checked: boolean) => void; onHint: () => void; onDemo: () => void; onReview: () => void; onQuiz: () => void; onDiagnose: () => void
@@ -308,7 +314,7 @@ function TaskCard({ session, step, language, busy, fresh, ready, onOpenFile, onV
   const verificationState = result?.cancelled ? 'cancelled' : result && (!fresh && result.success || result.stale) ? 'stale' : result?.success ? 'success' : 'failed'
   const verificationLabel = verificationState === 'cancelled' ? 'dojo.verifyInterrupted' : verificationState === 'stale' ? 'dojo.verifyStale' : verificationState === 'success' ? 'dojo.verifyPassed' : 'dojo.verifyFailed'
   return <div className="dojo-task">
-    <div className="dojo-task-heading"><span>{t('dojo.stepN', language, { index: session.currentStepIndex + 1, total: session.steps.length })}</span><select aria-label={t('dojo.selectTask', language)} value={step.id} disabled={busy} onChange={event => useDojoStore.getState().selectStep(event.target.value)}>{session.steps.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.title}{item.phase === 'passed' ? ' ✓' : ''}</option>)}</select></div>
+    <div className="dojo-task-heading"><span>{t('dojo.stepN', language, { index: session.currentStepIndex + 1, total: session.steps.length })}</span>{session.steps.length > 1 && <select aria-label={t('dojo.selectTask', language)} value={step.id} disabled={busy} onChange={event => useDojoStore.getState().selectStep(event.target.value)}>{session.steps.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.title}{item.phase === 'passed' ? ' ✓' : ''}</option>)}</select>}</div>
     <h2>{step.title}</h2><p>{step.goal}</p><div className="dojo-file-links">{step.files.map(path => <button type="button" key={path} onClick={() => onOpenFile(path)} title={path}><FileText size={12} /><span>{path.split(/[\\/]/).pop()}</span></button>)}</div>
       {step.verifyCommand ? <div className="dojo-command"><Terminal size={12} /><code>{step.verifyCommand}</code></div> : <p className="dojo-helper">{t('dojo.manualOnly', language)}</p>}
     <details className="dojo-task-details" open={fresh || !step.verifyCommand || undefined}><summary>{t('dojo.acceptance', language)}<span>{step.confirmedCriteria?.length ?? 0}/{step.acceptanceCriteria?.length ?? 0}</span></summary><p className="dojo-helper">{t('dojo.manualEvidence', language)}</p>{(step.acceptanceCriteria ?? []).map(item => <label key={item} className="dojo-criterion"><input type="checkbox" disabled={busy || step.phase === 'passed'} checked={step.confirmedCriteria?.includes(item) ?? false} onChange={event => onConfirmCriterion(item, event.target.checked)} /><span>{item}</span></label>)}
