@@ -46,8 +46,12 @@ export function SearchView() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   /** 流式搜索 ID，用于匹配异步事件 */
   const searchIdRef = useRef<string | null>(null)
+  /** 本次搜索使用的根目录，用于将相对路径的搜索结果解析为绝对路径 */
+  const searchRootsRef = useRef<string[]>([])
+
 
   const { workspacePath, workspace, language, openFiles, setActiveSidePanel } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, workspace: s.workspace, language: s.language, openFiles: s.openFiles, setActiveSidePanel: s.setActiveSidePanel })))
+
 
   // 监听流式搜索结果事件
   useEffect(() => {
@@ -138,6 +142,7 @@ export function SearchView() {
         const roots = (workspace?.roots || [workspacePath].filter(Boolean)) as string[]
         if (roots.length > 0) {
           // 使用流式搜索 — 结果通过 IPC 事件增量推送
+          searchRootsRef.current = roots
           const searchId = crypto.randomUUID()
           searchIdRef.current = searchId
           api.file.searchStream(query, roots, {
@@ -150,9 +155,29 @@ export function SearchView() {
           return
         }
       }
+
     } finally {
       setIsSearching(false)
     }
+  }
+  /**
+   * 将搜索结果中的相对路径解析为绝对路径
+   * 主进程搜索（ripgrep）返回相对 root 的路径，替换/打开操作必须使用绝对路径
+   */
+  const resolveResultPath = async (resultPath: string): Promise<string> => {
+    // 已经是绝对路径（Unix / Windows 盘符 / UNC）
+    if (/^([a-zA-Z]:[\\/]|\\\\|\/)/.test(resultPath)) return resultPath
+    const roots = searchRootsRef.current
+    if (roots.length === 0) return resultPath
+    if (roots.length === 1) return joinPath(roots[0], resultPath)
+    // 多根目录：通过存在性检查消歧
+    for (const root of roots) {
+      const candidate = joinPath(root, resultPath)
+      try {
+        if (await api.file.exists(candidate)) return candidate
+      } catch { /* 忽略检查失败 */ }
+    }
+    return joinPath(roots[0], resultPath)
   }
 
   const toggleFileCollapse = (path: string) => {
@@ -162,13 +187,9 @@ export function SearchView() {
     setCollapsedFiles(newSet)
   }
 
+
   const handleResultClick = async (result: { path: string; line: number }) => {
-    // 如果是相对路径，转换为绝对路径
-    let filePath = result.path
-    const isAbsolute = /^[a-zA-Z]:[\\/]|^\//.test(filePath)
-    if (!isAbsolute && workspacePath) {
-      filePath = joinPath(workspacePath, filePath)
-    }
+    const filePath = await resolveResultPath(result.path)
 
     const opened = await safeOpenFile(filePath, { language, confirmLargeFile: false })
     if (opened.success && !opened.isLargeFile) {
@@ -205,8 +226,11 @@ export function SearchView() {
 
     if (searchResults.length === 0) return
 
-    const content = await api.file.readFull(filePath)
+    // 解析为绝对路径：搜索结果是相对 workspace root 的相对路径
+    const absolutePath = await resolveResultPath(filePath)
+    const content = await api.file.readFull(absolutePath)
     if (content === null) return
+
 
     let newContent = content
     if (isRegex) {
@@ -224,14 +248,15 @@ export function SearchView() {
     }
 
     if (newContent !== content) {
-      await api.file.write(filePath, newContent)
+      await api.file.write(absolutePath, newContent)
       // 同步已打开的编辑器内容
       const { openFiles } = useStore.getState()
-      if (openFiles.some(f => f.path === filePath)) {
-        applySavedEditorBufferContent(filePath, newContent)
+      if (openFiles.some(f => f.path === absolutePath)) {
+        applySavedEditorBufferContent(absolutePath, newContent)
       }
       handleSearch()
     }
+
   }
 
   const handleReplaceAll = async () => {
@@ -264,8 +289,11 @@ export function SearchView() {
 
     let replacedCount = 0
     for (const filePath of filePaths) {
-      const content = await api.file.readFull(filePath)
+      // 解析为绝对路径：搜索结果是相对 workspace root 的相对路径
+      const absolutePath = await resolveResultPath(filePath)
+      const content = await api.file.readFull(absolutePath)
       if (content === null) continue
+
 
       let newContent = content
       if (isRegex) {
@@ -283,14 +311,15 @@ export function SearchView() {
       }
 
       if (newContent !== content) {
-        await api.file.write(filePath, newContent)
+        await api.file.write(absolutePath, newContent)
         // 同步已打开的编辑器内容
         const { openFiles: currentOpenFiles } = useStore.getState()
-        if (currentOpenFiles.some(f => f.path === filePath)) {
-          applySavedEditorBufferContent(filePath, newContent)
+        if (currentOpenFiles.some(f => f.path === absolutePath)) {
+          applySavedEditorBufferContent(absolutePath, newContent)
         }
         replacedCount++
       }
+
     }
 
     // 显示替换结果
