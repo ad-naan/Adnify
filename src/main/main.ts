@@ -24,7 +24,7 @@ import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
 import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
 import { registerWebviewGuards } from './security/webviewGuard'
-import { cleanupFileWatcher } from './security/fileWatcher'
+import { cleanupWindowFileWatchers } from './security/windowFileWatcher'
 import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
 import { ProviderCredentialStore } from './services/credentials/ProviderCredentialStore'
@@ -660,7 +660,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
   win.on('closed', () => {
     if (cachedWebContentsId) {
-      void cleanupFileWatcher(`window-${cachedWebContentsId}`)
+      void cleanupWindowFileWatchers(cachedWebContentsId)
     }
     // 清理该窗口关联的 LLM 服务（中止活跃流、释放 AbortController）
     if (cachedWebContentsId && ipcModule) {

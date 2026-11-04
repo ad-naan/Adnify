@@ -4,8 +4,8 @@ import {
   getModelTokenRatio,
   recordObservedTokenUsage,
   resetObservedTokenUsage,
-  setActiveTokenModel,
-  getActiveTokenModel,
+  countContentTokens,
+  countMessagesTokens,
   ensureTokenEncoder,
 } from '@shared/utils/tokenCounter'
 
@@ -26,7 +26,6 @@ describe('token counting', () => {
 
   beforeEach(() => {
     resetObservedTokenUsage()
-    setActiveTokenModel(null)
   })
 
   it('returns the raw cl100k count for an uncalibrated model', () => {
@@ -95,7 +94,7 @@ describe('token counting', () => {
     expect(getModelTokenRatio('m')).toBe(1)
   })
 
-  it('applies the active model to call sites that pass no model', () => {
+  it('applies calibration only to the explicitly supplied model', () => {
     const model = 'claude-sonnet-4-6'
     const text = 'some representative body of prose for counting'
     const raw = countTokens(text, null)
@@ -104,13 +103,12 @@ describe('token counting', () => {
       recordObservedTokenUsage(model, countTokens(text, model), Math.round(raw * 1.3))
     }
 
-    setActiveTokenModel(model)
-    expect(getActiveTokenModel()).toBe(model)
-    // Call sites deep in context/message assembly pass no model argument.
-    expect(countTokens(text)).toBeGreaterThan(raw)
-
-    setActiveTokenModel(null)
+    expect(countTokens(text, model)).toBeGreaterThan(raw)
     expect(countTokens(text)).toBe(raw)
+    expect(countContentTokens([{ type: 'text', text }], model)).toBe(countTokens(text, model))
+    expect(countMessagesTokens([{ role: 'user', content: text }], model)).toBeGreaterThan(
+      countMessagesTokens([{ role: 'user', content: text }])
+    )
   })
 
   it('counts CJK text at a higher token density than latin text', () => {

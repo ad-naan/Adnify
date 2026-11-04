@@ -7,14 +7,17 @@ export { useChatScrollController } from '../../src/renderer/hooks/useChatScrollC
 
 const noop = () => {}
 const empty: never[] = []
-const thread = { id: 'focus', mode: 'agent', origin: 'user', messagesHydrated: true, streamState: { phase: 'idle' }, handoff: { status: 'idle' } }
+const thread = { id: 'focus', mode: 'agent', origin: 'user', messages: empty, messagesHydrated: true, streamState: { phase: 'idle' }, handoff: { status: 'idle' } }
 export const useAgentStore = create(() => ({
   currentThreadId: 'focus', threads: { focus: thread }, inputPrompt: '', setInputPrompt: noop,
+  plans: empty, activePlanId: null,
 }))
 export const selectTodos = () => empty
 export const useStore = create(() => ({
   language: 'en', llmConfig: { provider: 'openai', apiKey: 'fixture' },
   workspacePath: null, activeFilePath: null, selectedCode: null, openFile: noop, setActiveFile: noop,
+  editorVisible: true, chatVisible: true, activeSidePanel: null, focusedPanel: null,
+  terminalVisible: false, debugVisible: false, workbenchLayout: { terminalPosition: 'bottom' },
 }))
 export const useModeStore = create(() => ({ currentMode: 'agent', setMode: noop }))
 export const useAgentViewState = create(() => ({

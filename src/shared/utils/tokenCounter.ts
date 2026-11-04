@@ -114,25 +114,6 @@ export function resetObservedTokenUsage(model?: string): void {
 }
 
 /**
- * Model used to correct counts when a call site does not pass one explicitly.
- *
- * Token counting happens across many layers (context assembly, message assembly,
- * compression estimates) that would each need the model threaded through their
- * signatures. Setting it once per turn keeps those call sites unchanged while
- * still correcting the estimate. `null` means "raw cl100k count", which is the
- * historical behaviour and what tests expect by default.
- */
-let activeModel: string | null = null
-
-export function setActiveTokenModel(model: string | null | undefined): void {
-  activeModel = model || null
-}
-
-export function getActiveTokenModel(): string | null {
-  return activeModel
-}
-
-/**
  * 释放编码器资源（可选，通常不需要手动调用）
  */
 export function freeEncoder(): void {
@@ -154,8 +135,7 @@ export function countTokens(text: string, model?: string | null): number {
   if (!text) return 0
 
   const raw = countRawTokens(text)
-  const effectiveModel = model !== undefined ? model : activeModel
-  const ratio = getModelTokenRatio(effectiveModel)
+  const ratio = getModelTokenRatio(model)
   return ratio === 1 ? raw : Math.ceil(raw * ratio)
 }
 
@@ -184,10 +164,11 @@ function countRawTokens(text: string): number {
  * @returns token 数量
  */
 export function countContentTokens(
-  content: string | Array<{ type: string; text?: string; source?: unknown }>
+  content: string | Array<{ type: string; text?: string; source?: unknown }>,
+  model?: string | null
 ): number {
   if (typeof content === 'string') {
-    return countTokens(content)
+    return countTokens(content, model)
   }
   
   let total = 0
@@ -195,7 +176,7 @@ export function countContentTokens(
     switch (part.type) {
       case 'text':
         if (part.text) {
-          total += countTokens(part.text)
+          total += countTokens(part.text, model)
         }
         break
       
@@ -209,11 +190,11 @@ export function countContentTokens(
       
       case 'tool_use':
       case 'tool_result':
-        total += countTokens(JSON.stringify(part))
+        total += countTokens(JSON.stringify(part), model)
         break
       
       default:
-        total += countTokens(JSON.stringify(part))
+        total += countTokens(JSON.stringify(part), model)
     }
   }
   
@@ -238,7 +219,8 @@ export function countMessagesTokens(
     name?: string
     tool_calls?: Array<{ id: string; name: string; arguments: unknown }>
     tool_call_id?: string
-  }>
+  }>,
+  model?: string | null
 ): number {
   let total = 3 // 对话开始/结束的固定开销
   
@@ -246,30 +228,30 @@ export function countMessagesTokens(
     total += 4 // 每条消息的固定开销
     
     // role
-    total += countTokens(msg.role)
+    total += countTokens(msg.role, model)
     
     // content
     if (msg.content) {
-      total += countContentTokens(msg.content)
+      total += countContentTokens(msg.content, model)
     }
     
     // name
     if (msg.name) {
-      total += countTokens(msg.name)
+      total += countTokens(msg.name, model)
     }
     
     // tool_calls
     if (msg.tool_calls) {
       for (const tc of msg.tool_calls) {
-        total += countTokens(tc.name)
-        total += countTokens(JSON.stringify(tc.arguments))
+        total += countTokens(tc.name, model)
+        total += countTokens(JSON.stringify(tc.arguments), model)
         total += 3 // 工具调用结构开销
       }
     }
     
     // tool_call_id
     if (msg.tool_call_id) {
-      total += countTokens(msg.tool_call_id)
+      total += countTokens(msg.tool_call_id, model)
     }
   }
   

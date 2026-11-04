@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: { alias: [
     { find: '@renderer/agent/store/AgentStore', replacement: path.resolve('tests/browser/motion-store.ts') },
     { find: '@renderer', replacement: path.resolve('src/renderer') },
+    { find: '@utils', replacement: path.resolve('src/renderer/utils') },
     { find: '@shared', replacement: path.resolve('src/shared') },
     { find: '@', replacement: path.resolve('src') },
   ] },

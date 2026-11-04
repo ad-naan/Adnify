@@ -16,7 +16,7 @@ describe('resolveWorkspaceFromEvent', () => {
     expect(result).toEqual({ roots: ['/window/root'] })
   })
 
-  it('falls back to last workspace session when window has no roots', () => {
+  it('keeps an explicitly empty window isolated from the last workspace session', () => {
     const result = resolveWorkspaceFromEvent(
       { sender: { id: 7 } } as any,
       {
@@ -27,7 +27,14 @@ describe('resolveWorkspaceFromEvent', () => {
       },
     )
 
-    expect(result).toEqual({ roots: ['/global/root'] })
+    expect(result).toEqual({ roots: [] })
+  })
+
+  it('falls back to the last session only for an unknown window', () => {
+    expect(resolveWorkspaceFromEvent({ sender: { id: 8 } } as any, {
+      getWindowWorkspace: () => null,
+      workspaceMetaStore: { get: () => ({ roots: ['/global/root'] }) } as any,
+    })).toEqual({ roots: ['/global/root'] })
   })
 
   it('returns null when no workspace is available', () => {

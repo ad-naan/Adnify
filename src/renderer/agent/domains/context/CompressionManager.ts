@@ -9,7 +9,7 @@
 
 import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../../utils/AgentConfig'
-import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
+import { countTokens, countContentTokens, getModelTokenRatio } from '@shared/utils/tokenCounter'
 import type { WorkingMemoryHealth } from './WorkingMemory'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../../types'
 import { type CompressionLevel } from './compressionShared'
@@ -389,43 +389,44 @@ export function updateStats(
   }
 }
 
-const messageTokenCache = new WeakMap<ChatMessage, number>()
+const messageTokenCache = new WeakMap<ChatMessage, { model: string | null; ratio: number; tokens: number }>()
 
-function estimateSingleMessageTokens(msg: ChatMessage): number {
+function estimateSingleMessageTokens(msg: ChatMessage, model: string | null): number {
+  const ratio = getModelTokenRatio(model)
   const cached = messageTokenCache.get(msg)
-  if (cached !== undefined) return cached
+  if (cached?.model === model && cached.ratio === ratio) return cached.tokens
 
   let msgTokens = 4 // 每条消息的固定开销
 
   if (msg.role === 'user') {
     const userMsg = msg as UserMessage
-    msgTokens += countContentTokens(userMsg.content)
+    msgTokens += countContentTokens(userMsg.content, model)
   } else if (msg.role === 'assistant') {
     const assistantMsg = msg as AssistantMessage
-    msgTokens += countTokens(assistantMsg.content || '')
+    msgTokens += countTokens(assistantMsg.content || '', model)
     for (const tc of assistantMsg.toolCalls || []) {
-      msgTokens += countTokens(tc.name)
-      msgTokens += countTokens(JSON.stringify(tc.arguments || {}))
+      msgTokens += countTokens(tc.name, model)
+      msgTokens += countTokens(JSON.stringify(tc.arguments || {}), model)
       msgTokens += 3 // 工具调用结构开销
     }
   } else if (msg.role === 'tool') {
     const toolMsg = msg as ToolResultMessage
     const content = typeof toolMsg.content === 'string' ? toolMsg.content : ''
-    msgTokens += countTokens(content)
+    msgTokens += countTokens(content, model)
   }
 
-  messageTokenCache.set(msg, msgTokens)
+  messageTokenCache.set(msg, { model, ratio, tokens: msgTokens })
   return msgTokens
 }
 
 /**
  * 估算消息列表的 token 数
  */
-export function estimateMessagesTokens(messages: ChatMessage[]): number {
+export function estimateMessagesTokens(messages: ChatMessage[], model?: string | null): number {
   let total = 3 // 对话开始/结束的固定开销
 
   for (const msg of messages) {
-    total += estimateSingleMessageTokens(msg)
+    total += estimateSingleMessageTokens(msg, model ?? null)
   }
 
   return total

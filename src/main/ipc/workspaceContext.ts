@@ -22,7 +22,8 @@ export function resolveWorkspaceFromEvent(
 
   if (event && getWindowWorkspace) {
     const windowRoots = getWindowWorkspace(event.sender.id)
-    if (windowRoots && windowRoots.length > 0) {
+    // An explicitly empty window must not inherit another window's saved roots.
+    if (windowRoots) {
       return { roots: windowRoots }
     }
   }

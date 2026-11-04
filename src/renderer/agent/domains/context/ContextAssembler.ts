@@ -55,6 +55,8 @@ export interface ContextAssemblyResult {
  * 上下文组装配置（值对象）
  */
 export interface ContextAssemblyConfig {
+  /** Request-scoped model used for token estimates. */
+  model?: string
   /** 模式 */
   mode: WorkMode
   /** 模式描述符 */
@@ -140,7 +142,7 @@ export class PlanContextContributor implements ContextContributor {
       priority: 100, // 最高优先级
       content,
       protected: true, // 受保护
-      estimatedTokens: countTokens(content),
+      estimatedTokens: countTokens(content, config.model),
     }
   }
 }
@@ -176,7 +178,7 @@ export class DependencySummaryContributor implements ContextContributor {
       priority: 90, // 高优先级
       content,
       protected: true, // 受保护
-      estimatedTokens: countTokens(content),
+      estimatedTokens: countTokens(content, config.model),
     }
   }
 }
@@ -235,7 +237,7 @@ export class ContextAssembler {
         priority: 50, // 中等优先级
         content: baseContext,
         protected: false,
-        estimatedTokens: countTokens(baseContext),
+        estimatedTokens: countTokens(baseContext, config.model),
       })
     }
 

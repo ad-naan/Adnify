@@ -24,10 +24,10 @@ import { isSystemPermissionError } from '@shared/utils/permissionError'
 import { mutationFailure, mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
 import type { FileMutationResult } from '@shared/types/fileMutation'
 import {
-  setupFileWatcher,
   cleanupFileWatcher,
   FileWatcherEvent,
 } from './fileWatcher'
+import { cleanupWindowFileWatchers, setWindowFileWatchers } from './windowFileWatcher'
 import {
   registerWorkspaceHandlers,
   WindowManagerContext,
@@ -901,58 +901,12 @@ export function registerSecureFileHandlers(
   })
 
   // 文件监听（使用拆分的 fileWatcher）
-  ipcMain.handle('file:watch', (_, action: string) => {
+  ipcMain.handle('file:watch', async (event, action: string) => {
     if (action === 'start') {
-      const win = getMainWindowFn()
-      const workspace = getWorkspaceSessionFn()
-      if (win && workspace?.roots?.[0]) {
-        // 批量转发：git checkout / 依赖安装会一次产生上千个事件，
-        // 逐个 send 会让渲染进程被 IPC 淹没。这里按 ~30fps 聚合，
-        // 同一路径只保留最后一次事件（Map 保序，先到先发），
-        // 因为下游 handler 关心的是文件的最终状态。
-        const pending = new Map<string, FileWatcherEvent>()
-        let flushTimer: NodeJS.Timeout | null = null
-        let draining = false
-        const maxEventsPerTurn = 128
-
-        const drain = () => {
-          if (win.isDestroyed()) {
-            pending.clear()
-            draining = false
-            return
-          }
-
-          const batch: FileWatcherEvent[] = []
-          for (const [filePath, item] of pending) {
-            pending.delete(filePath)
-            batch.push(item)
-            if (batch.length >= maxEventsPerTurn) break
-          }
-          for (const item of batch) {
-            win.webContents.send('file:changed', item)
-          }
-
-          if (pending.size > 0) setImmediate(drain)
-          else draining = false
-        }
-
-        const flush = () => {
-          flushTimer = null
-          if (pending.size === 0 || draining) return
-          draining = true
-          drain()
-        }
-
-        void setupFileWatcher(`window-${win.webContents.id}`, workspace.roots[0], (data: FileWatcherEvent) => {
-          pending.set(data.path, data)
-          if (!draining && flushTimer === null) {
-            flushTimer = setTimeout(flush, 33)
-          }
-        })
-      }
+      const workspace = getWorkspaceSessionFn(event)
+      await setWindowFileWatchers(event.sender, workspace?.roots || [])
     } else if (action === 'stop') {
-      const win = getMainWindowFn()
-      void cleanupFileWatcher(win ? `window-${win.webContents.id}` : undefined)
+      await cleanupWindowFileWatchers(event.sender.id)
     }
   })
 
@@ -988,8 +942,9 @@ export function registerSecureFileHandlers(
  * 清理安全文件监听器
  * 导出以便外部调用
  */
-export function cleanupSecureFileWatcher() {
-  cleanupFileWatcher()
+export async function cleanupSecureFileWatcher() {
+  await cleanupWindowFileWatchers()
+  await cleanupFileWatcher()
 }
 
 // 导出安全管理器

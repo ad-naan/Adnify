@@ -12,8 +12,12 @@ permissions:
 
 jobs:
   validate:
-    name: Typecheck · Test · Build
-    runs-on: ubuntu-latest
+    name: Validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -34,10 +38,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: TypeScript Type Check
-        run: pnpm exec tsc --noEmit
+        run: pnpm typecheck
 
       - name: Unit Tests
         run: pnpm test
+
+      - name: Install browser for regression tests
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser regression tests
+        run: pnpm test:browser
+        env:
+          MOTION_BROWSER_CHANNEL: chromium
 
       - name: Production Build
         run: pnpm build

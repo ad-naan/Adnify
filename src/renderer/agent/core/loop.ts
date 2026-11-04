@@ -653,7 +653,7 @@ export async function runLoop(
       // converge per model after a single turn, with no hardcoded model table.
       recordObservedTokenUsage(
         config.model,
-        estimateMessagesTokens(requestMessages as ChatMessage[]),
+        estimateMessagesTokens(requestMessages as ChatMessage[], config.model),
         usage.input
       )
 
@@ -677,7 +677,7 @@ export async function runLoop(
     } else {
       logger.agent.warn('[Loop] No valid usage data from LLM, using estimated tokens')
 
-      const estimatedTokens = estimateMessagesTokens(requestMessages as ChatMessage[])
+      const estimatedTokens = estimateMessagesTokens(requestMessages as ChatMessage[], config.model)
       const usage = {
         input: Math.floor(estimatedTokens * 0.9),
         output: Math.floor(estimatedTokens * 0.1),

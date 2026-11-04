@@ -120,3 +120,24 @@ pnpm test:watch
 # 覆盖率报告
 pnpm test:coverage
 ```
+
+## 类型检查与浏览器回归
+
+`pnpm typecheck` 分别检查 renderer/tests 与 Electron main 两套 TypeScript 配置。
+
+```bash
+# 首次安装测试浏览器
+pnpm exec playwright install chromium
+
+# 自动启动测试页面，执行后关闭服务和浏览器
+pnpm test:browser
+
+# 单独验证 5000 文件的 Git 列表
+pnpm test:browser git
+```
+
+浏览器用例覆盖聊天首条消息、线程切换、工具结果折叠、窗口焦点与 Git 虚拟列表。
+Git 用例验证可见行数量、滚动到最后一项、分组折叠、暂存、键盘操作和小列表切换。
+这些是组件级浏览器回归，Electron 和模型服务使用测试替身，不代表打包应用端到端验证。
+可用 `MOTION_BROWSER_CHANNEL=msedge` 选择已安装的 Edge；默认使用 Playwright Chromium。
+设置 `BROWSER_TEST_ARTIFACTS` 可保存 Git 列表截图。

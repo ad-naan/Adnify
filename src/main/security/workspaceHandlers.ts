@@ -3,9 +3,8 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { promises as fsPromises } from 'fs'
 import * as path from 'path'
 import { getWorkspaceConfigFilePath } from '../services/configPath'
-import { cleanupFileWatcher, setupFileWatcher, type FileWatcherEvent } from './fileWatcher'
+import { setWindowFileWatchers } from './windowFileWatcher'
 import { securityManager } from './securityModule'
-import { resolveGitMetadataDirectory } from '../services/gitMetadata'
 import { systemPrivilegeService } from '../services/systemPrivilegeService'
 import { isSystemPermissionError } from '@shared/utils/permissionError'
 
@@ -58,63 +57,6 @@ function parseWorkspaceDescriptor(content: string, descriptorPath: string): stri
     .map(folder => folder.path?.trim())
     .filter((value): value is string => Boolean(value))
     .map(root => path.isAbsolute(root) ? root : path.resolve(path.dirname(descriptorPath), root))
-}
-
-function getWatcherId(webContentsId: number): string {
-  return `window-${webContentsId}`
-}
-
-function getGitWatcherId(webContentsId: number): string {
-  return `window-${webContentsId}-git`
-}
-
-async function restartWindowFileWatcher(sender: Electron.WebContents, roots: string[]): Promise<void> {
-  const watcherId = getWatcherId(sender.id)
-  const gitWatcherId = getGitWatcherId(sender.id)
-  await cleanupFileWatcher(gitWatcherId)
-  if (!roots.length) {
-    await cleanupFileWatcher(watcherId)
-    return
-  }
-
-  try {
-    await setupFileWatcher(watcherId, roots[0], (data: FileWatcherEvent) => {
-      try {
-        sender.send('file:changed', data)
-      } catch {
-        void cleanupFileWatcher(watcherId)
-        void cleanupFileWatcher(gitWatcherId)
-      }
-    })
-  } catch (error) {
-    logger.security.warn('[Workspace] File watching is unavailable; workspace remains open', {
-      root: roots[0],
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-
-  const gitDirectory = await resolveGitMetadataDirectory(roots[0])
-  const workspaceRoot = path.resolve(roots[0])
-  const gitRelativePath = gitDirectory ? path.relative(workspaceRoot, gitDirectory) : ''
-  const gitDirectoryIsInsideWorkspace = Boolean(gitDirectory) && (
-    gitRelativePath === '' || (!gitRelativePath.startsWith('..') && !path.isAbsolute(gitRelativePath))
-  )
-  if (gitDirectory && !gitDirectoryIsInsideWorkspace) {
-    try {
-      await setupFileWatcher(gitWatcherId, gitDirectory, (data: FileWatcherEvent) => {
-        try {
-          sender.send('file:changed', { ...data, source: 'git-metadata' satisfies FileWatcherEvent['source'] })
-        } catch {
-          void cleanupFileWatcher(gitWatcherId)
-        }
-      }, { forwardOnly: true })
-    } catch (error) {
-      logger.security.warn('[Git] Metadata watching is unavailable; focus refresh remains active', {
-        gitDirectory,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
 }
 
 /**
@@ -311,7 +253,7 @@ export function registerWorkspaceHandlers(
 
     windowManager?.setWindowWorkspace?.(event.sender.id, session.roots)
     securityManager.setWorkspacePath(session.roots[0] || null)
-    await restartWindowFileWatcher(event.sender, session.roots)
+    await setWindowFileWatchers(event.sender, session.roots)
     return session
   })
 
@@ -320,7 +262,12 @@ export function registerWorkspaceHandlers(
     roots: string[],
     options?: { retainRootsDuringTransition?: string[] },
   ) => {
-    if (!roots.length) return false
+    if (!roots.length) {
+      workspaceTransitionTokens.delete(event.sender.id)
+      windowManager?.setWindowWorkspace?.(event.sender.id, [])
+      await setWindowFileWatchers(event.sender, [])
+      return true
+    }
 
     const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindowFn()
     if (windowManager?.findWindowByWorkspace) {
@@ -355,7 +302,7 @@ export function registerWorkspaceHandlers(
     securityManager.setWorkspacePath(roots[0] || null)
     persistWorkspaceSession({ configPath: null, roots, workspaceId: workspaceId || undefined })
     roots.forEach(addRecentWorkspace)
-    await restartWindowFileWatcher(event.sender, roots)
+    await setWindowFileWatchers(event.sender, roots)
     return true
   })
 

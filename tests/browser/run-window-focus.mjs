@@ -7,12 +7,29 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
 const browser = await chromium.launch({ channel: process.env.MOTION_BROWSER_CHANNEL || 'msedge', headless: true })
 const page = await browser.newPage({ viewport: { width: 1000, height: 900 } })
 page.setDefaultTimeout(8000)
+page.setDefaultNavigationTimeout(60000)
 const errors = []
 page.on('pageerror', error => { errors.push(error.message); console.error(error.message) })
 const geometry = () => page.locator('[data-virtuoso-scroller]').evaluate(node => ({
   top: node.scrollTop, bottom: node.scrollHeight - node.clientHeight,
 }))
 const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+const settleInitialLayout = () => page.evaluate(async () => {
+  await document.fonts.ready
+  await new Promise((resolve, reject) => {
+    let previous = '', stable = 0, frames = 0
+    const sample = () => {
+      const node = document.querySelector('[data-virtuoso-scroller]')
+      const next = node ? `${node.scrollTop}:${node.scrollHeight}:${node.clientHeight}` : ''
+      stable = next && next === previous ? stable + 1 : 0
+      previous = next
+      if (stable >= 6) resolve()
+      else if (++frames > 180) reject(new Error('Initial chat geometry did not settle'))
+      else requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+})
 try {
   await page.goto(process.env.WINDOW_FOCUS_URL || 'http://127.0.0.1:5214/tests/browser/window-focus.html')
   await page.waitForFunction(() => {
@@ -30,10 +47,12 @@ try {
     await settle()
   }
   await focus(true)
+  await settleInitialLayout()
   const original = await page.locator('[data-virtuoso-scroller]').elementHandle()
   const assertUnchanged = async expected => {
     assert(await original.evaluate(node => node.isConnected && node === document.querySelector('[data-virtuoso-scroller]')), 'window focus must not remount the chat scroller')
-    assert(Math.abs((await geometry()).top - expected) <= 2, 'window focus must preserve the reading position')
+    const actual = (await geometry()).top
+    assert(Math.abs(actual - expected) <= 2, `window focus must preserve the reading position: expected ${expected}, got ${actual}`)
   }
   const bottom = (await geometry()).top
   for (let cycle = 0; cycle < 3; cycle++) {

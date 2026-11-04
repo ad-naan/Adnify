@@ -31,6 +31,11 @@ export function getEditorBufferContent(filePath: string, fallback: string): stri
   return monaco.editor.getModel(monaco.Uri.file(filePath))?.getValue() ?? fallback
 }
 
+/** Detect edits before the debounced store snapshot has caught up. */
+export function getEditorBufferVersion(filePath: string): number | undefined {
+  return monaco.editor.getModel(monaco.Uri.file(filePath))?.getVersionId()
+}
+
 /** Persist a low-frequency React/store snapshot of Monaco's live buffer. */
 export function scheduleEditorBufferSnapshot(filePath: string, content: string): void {
   cancelPendingSnapshot(filePath)

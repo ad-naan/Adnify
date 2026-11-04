@@ -144,6 +144,7 @@ class WorkspaceManager {
   async closeWorkspace(): Promise<void> {
     await this.saveCurrentWorkspace()
     await runCacheCleanupPhase('workspace-switch')
+    await api.workspace.setActive([])
     this.resetRuntimeState()
 
     const { setWorkspace, setFiles } = useStore.getState()
@@ -172,9 +173,7 @@ class WorkspaceManager {
 
     // 同步更新后的 roots 到主进程
     const updatedWorkspace = useStore.getState().workspace
-    if (updatedWorkspace?.roots.length) {
-      void api.workspace.setActive(updatedWorkspace.roots)
-    }
+    void api.workspace.setActive(updatedWorkspace?.roots || [])
   }
 
   private async handleWorkspaceRedirection(workspace: WorkspaceConfig, previousRoots: string[] = []): Promise<boolean> {

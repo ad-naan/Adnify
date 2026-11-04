@@ -6,7 +6,7 @@ const browser = await chromium.launch({ channel: process.env.MOTION_BROWSER_CHAN
 const page = await browser.newPage({ viewport: { width: 1000, height: 900 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
-const base = 'http://127.0.0.1:5199/tests/browser/'
+const base = process.env.MOTION_TEST_URL || 'http://127.0.0.1:5199/tests/browser/'
 try {
   await page.goto(`${base}thread-switch.html`)
   await page.getByRole('button', { name: 'Start live reply' }).click()
@@ -24,6 +24,14 @@ try {
   assert.equal(await page.getByText('Already received answer. Final answer.', { exact: true }).count(), 1)
   for (const variant of ['', '?dock']) {
   await page.goto(`${base}scroll-tail.html${variant}`)
+  // The button mounts before Virtuoso has measured and positioned the last row.
+  // Start sampling the collapse only after that initial layout is visible.
+  await page.waitForFunction(() => {
+    const scroller = document.querySelector('[data-virtuoso-scroller]')
+    const final = document.querySelector('[data-final]')
+    return scroller && final && scroller.scrollTop > 0
+      && Math.abs(scroller.getBoundingClientRect().bottom - final.getBoundingClientRect().bottom) <= 2
+  })
   await page.getByRole('button', { name: 'Finish with a short reply' }).click()
   await page.waitForFunction(() => document.querySelector('output')?.textContent.includes('tailVisible'))
   const geometry = JSON.parse(await page.locator('output').textContent())

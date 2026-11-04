@@ -25,7 +25,6 @@ import type { CompressionLevel } from '../domains/context/compressionShared'
 import {
   countTokens,
   ensureTokenEncoder,
-  setActiveTokenModel,
 } from '@shared/utils/tokenCounter'
 import { useAgentStore } from '../store/AgentStore'
 
@@ -105,11 +104,9 @@ export interface ExecutionPreparation {
  */
 export class AgentExecutor {
   private contextAssembler: ContextAssembler
-  private messageAssembler: MessageAssembler
 
   constructor() {
     this.contextAssembler = new ContextAssembler()
-    this.messageAssembler = new MessageAssembler()
   }
 
   /**
@@ -145,14 +142,13 @@ export class AgentExecutor {
     const contextLimit = config.contextLimit || 128_000
     const budgetController = createBudgetController(config.mode, modeDescriptor, contextLimit)
 
-    // Correct token estimates for this turn's model. Only OpenAI models use the
-    // bundled cl100k_base tokenizer; without this, counts for Claude/Gemini/etc.
-    // are too low and compression escalates later than the real context window
-    // requires. Set once here rather than threaded through every counting layer.
-    setActiveTokenModel(config.model)
+    // Parallel tasks may use different models while context assembly is awaiting
+    // tools. Keep the model on this request, never on a shared mutable singleton.
+    const messageAssembler = new MessageAssembler(config.model)
 
     // 3. 组装上下文
     const contextConfig: ContextAssemblyConfig = {
+      model: config.model,
       mode: config.mode,
       modeDescriptor,
       contextItems,
@@ -166,7 +162,7 @@ export class AgentExecutor {
     const contextResult = await this.contextAssembler.assemble(contextConfig)
 
     // 4. 组装用户消息
-    const userMessageContent = this.messageAssembler.assembleUserMessage(
+    const userMessageContent = messageAssembler.assembleUserMessage(
       userMessage,
       contextResult.content
     )
@@ -194,13 +190,13 @@ export class AgentExecutor {
     }
 
     // 6. 计算各部分的 token
-    const systemPromptTokens = countTokens(systemPrompt)
+    const systemPromptTokens = countTokens(systemPrompt, config.model)
     const contextTokens = contextResult.totalTokens
     const userMessageTokens = userMessageContent.estimatedTokens
 
     // 7. 动态压缩：根据预算控制器决定压缩等级
     let compressionLevel: CompressionLevel = modeDescriptor.budgetProfile.initialCompressionLevel
-    let messageResult = this.messageAssembler.assemble(
+    let messageResult = messageAssembler.assemble(
       messageHistory,
       userMessageContent,
       systemPrompt,
@@ -237,7 +233,7 @@ export class AgentExecutor {
       )
 
       // 重新组装消息
-      messageResult = this.messageAssembler.assemble(
+      messageResult = messageAssembler.assemble(
         messageHistory,
         userMessageContent,
         systemPrompt,

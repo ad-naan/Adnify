@@ -22,11 +22,13 @@ import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Modal, Select, ContextMenu, useContextMenu, type ContextMenuItem } from '@components/ui'
 import { getFileName, joinPath, normalizePath, toFullPath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
+import { GitFileList } from '@components/git/GitFileList'
+import { GitFileItem as FileItem } from '@components/git/GitFileItem'
+import { loadGitPanelDetails, type GitTab } from '@components/git/gitPanelData'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 // ==================== 类型定义 ====================
-type GitTab = 'changes' | 'branches' | 'stash' | 'history'
 type OperationState = 'normal' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'
 type RepoChangesSections = { staged: boolean; changes: boolean }
 
@@ -50,86 +52,6 @@ const DEFAULT_REPO_CHANGES_SECTIONS: RepoChangesSections = {
 }
 
 // ==================== 子组件 ====================
-
-// 文件状态图标
-const FileStatusBadge = memo(function FileStatusBadge({ status }: { status: string }) {
-    const config: Record<string, { color: string; label: string }> = {
-        added: { color: 'text-green-400', label: 'A' },
-        modified: { color: 'text-yellow-400', label: 'M' },
-        deleted: { color: 'text-red-400', label: 'D' },
-        renamed: { color: 'text-blue-400', label: 'R' },
-        copied: { color: 'text-purple-400', label: 'C' },
-        unmerged: { color: 'text-orange-400', label: 'U' },
-        untracked: { color: 'text-green-400', label: 'U' },
-    }
-    const c = config[status] || { color: 'text-text-muted', label: '?' }
-    return <span className={`text-[10px] font-mono ${c.color} w-4 text-center flex-shrink-0`}>{c.label}</span>
-})
-
-// 文件项组件
-const FileItem = memo(function FileItem({
-    path,
-    status,
-    staged,
-    onStage,
-    onUnstage,
-    onDiscard,
-    onClick,
-}: {
-    path: string
-    status: string
-    staged: boolean
-    onStage?: () => void
-    onUnstage?: () => void
-    onDiscard?: () => void
-    onClick: () => void
-}) {
-    const fileName = getFileName(path)
-    const dirPath = path.replace(fileName, '').replace(/[/\\]$/, '')
-    const language = useStore(s => s.language)
-    const tt = useCallback((key: TranslationKey) => t(key, language), [language])
-
-    return (
-        <div
-            className="group flex items-center px-2 py-1.5 mx-2 my-0.5 rounded-md hover:bg-surface-hover cursor-pointer transition-colors border border-transparent hover:border-border-subtle"
-            onClick={onClick}
-        >
-            <FileStatusBadge status={status} />
-            <div className="flex-1 min-w-0 ml-2">
-                <span className="text-xs text-text-primary truncate block">{fileName}</span>
-                {dirPath && <span className="text-[10px] text-text-muted truncate block opacity-60">{dirPath}</span>}
-            </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {staged ? (
-                    onUnstage && <button
-                        onClick={(e) => { e.stopPropagation(); onUnstage() }}
-                        className="p-1 hover:bg-surface-active rounded"
-                        title={tt('git.unstage')}
-                    >
-                        <Minus className="w-3 h-3 text-text-muted" />
-                    </button>
-                ) : (
-                    <>
-                        {onDiscard && <button
-                            onClick={(e) => { e.stopPropagation(); onDiscard() }}
-                            className="p-1 hover:bg-surface-active rounded"
-                            title={tt('git.discard')}
-                        >
-                            <Undo2 className="w-3 h-3 text-text-muted hover:text-red-400" />
-                        </button>}
-                        {onStage && <button
-                            onClick={(e) => { e.stopPropagation(); onStage() }}
-                            className="p-1 hover:bg-surface-active rounded"
-                            title={tt('git.stage')}
-                        >
-                            <Plus className="w-3 h-3 text-text-muted" />
-                        </button>}
-                    </>
-                )}
-            </div>
-        </div>
-    )
-})
 
 // 从远程 URL 提取主机名（支持 https 与 git@host:path 两种形式）
 const hostOfRemoteUrl = (url: string): string => {
@@ -577,6 +499,7 @@ export function GitView() {
     const discoveryRunRef = useRef(0)
     const refreshRunRef = useRef(0)
     const selectedRepoRootRef = useRef<string | null>(null)
+    const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null)
 
     // 状态
     const [activeTab, setActiveTab] = useState<GitTab>('changes')
@@ -832,13 +755,10 @@ export function GitView() {
                 logger.ui.warn('AI attribution reconcile failed during Git refresh:', { root: targetRepoRoot, error })
             })
 
-            const [s, c, b, st, op, rm] = await Promise.all([
+            const [s, op, details] = await Promise.all([
                 gitService.getStatus(targetRepoRoot),
-                gitService.getRecentCommits(30, targetRepoRoot),
-                gitService.getBranches(targetRepoRoot),
-                gitService.getStashList(targetRepoRoot),
                 gitService.getOperationState(targetRepoRoot),
-                gitService.getRemotes(targetRepoRoot),
+                loadGitPanelDetails(targetRepoRoot, activeTab),
             ])
 
             if (runId !== refreshRunRef.current) {
@@ -846,12 +766,12 @@ export function GitView() {
             }
 
             setStatus(s)
-            setCommits(c)
-            setBranches(b)
-            setStashList(st)
+            if (details.commits) setCommits(details.commits)
+            if (details.branches) setBranches(details.branches)
+            if (details.stash) setStashList(details.stash)
             setOperationState(op)
             // 仅保留 fetch 行，避免 fetch/push 两条重复
-            setRemotes(rm.filter(r => r.type === 'fetch').map(r => ({ name: r.name, url: r.url })))
+            if (details.remotes) setRemotes(details.remotes.filter(r => r.type === 'fetch').map(r => ({ name: r.name, url: r.url })))
         } catch (e: unknown) {
             logger.ui.error('Git status error:', e)
             if (runId === refreshRunRef.current) {
@@ -863,7 +783,16 @@ export function GitView() {
                 setIsRefreshing(false)
             }
         }
-    }, [selectedRepoRoot, workspacePath, tt])
+    }, [selectedRepoRoot, workspacePath, tt, activeTab])
+
+    useEffect(() => {
+        // Optional tab data belongs to one repository; never show another root's
+        // branches, stash entries or commit actions while the next query loads.
+        setCommits([])
+        setBranches([])
+        setStashList([])
+        setRemotes([])
+    }, [selectedRepoRoot, workspacePath])
 
     useEffect(() => {
         setHasResolvedRepositories(false)
@@ -1926,7 +1855,7 @@ Commit message:`
                                     <AlertTriangle className="w-3 h-3" />
                                     {tt('git.conflicts')} ({repoStatus.conflictFiles.length})
                                 </div>
-                                {repoStatus.conflictFiles.map(path => (
+                                <GitFileList items={repoStatus.conflictFiles || []} scrollParent={scrollParent} getKey={item => item} renderItem={path => (
                                     <FileItem
                                         key={`${repo.root}:${path}`}
                                         path={path}
@@ -1936,7 +1865,7 @@ Commit message:`
                                         onDiscard={() => handleDiscard(path, repo.root)}
                                         onClick={() => setConflictFile(normalizePath(`${repo.root}/${path}`))}
                                     />
-                                ))}
+                                )} />
                             </div>
                         )}
 
@@ -1957,7 +1886,7 @@ Commit message:`
                                         <Minus className="w-3 h-3" />
                                     </button>
                                 </div>
-                                {expanded.staged && repoStatus?.staged.map(file => (
+                                {expanded.staged && (<GitFileList items={repoStatus?.staged || []} scrollParent={scrollParent} getKey={item => item.path} renderItem={file => (
                                     <FileItem
                                         key={`${repo.root}:staged:${file.path}`}
                                         path={file.path}
@@ -1966,7 +1895,7 @@ Commit message:`
                                         onUnstage={() => handleUnstage(file.path, repo.root)}
                                         onClick={() => handleFileClick(file.path, file.status, true, repo.root)}
                                     />
-                                ))}
+                                )} />)}
                             </div>
                         )}
 
@@ -1996,7 +1925,7 @@ Commit message:`
                                 </div>
                                 {expanded.changes && (
                                     <>
-                                        {repoStatus?.unstaged.map(file => (
+                                        <GitFileList items={repoStatus?.unstaged || []} scrollParent={scrollParent} getKey={item => item.path} renderItem={file => (
                                             <FileItem
                                                 key={`${repo.root}:unstaged:${file.path}`}
                                                 path={file.path}
@@ -2006,8 +1935,8 @@ Commit message:`
                                                 onDiscard={() => handleDiscard(file.path, repo.root)}
                                                 onClick={() => handleFileClick(file.path, file.status, false, repo.root)}
                                             />
-                                        ))}
-                                        {repoStatus?.untracked.map(path => (
+                                        )} />
+                                        <GitFileList items={repoStatus?.untracked || []} scrollParent={scrollParent} getKey={item => item} renderItem={path => (
                                             <FileItem
                                                 key={`${repo.root}:untracked:${path}`}
                                                 path={path}
@@ -2017,7 +1946,7 @@ Commit message:`
                                                 onDiscard={() => handleDiscard(path, repo.root, true)}
                                                 onClick={() => handleFileClick(path, 'added', false, repo.root)}
                                             />
-                                        ))}
+                                        )} />
                                     </>
                                 )}
                             </div>
@@ -2033,7 +1962,7 @@ Commit message:`
                 )}
             </div>
         )
-    }, [getRepoExpandedSections, handleCommit, handleDiscard, handleDiscardAll, handleFetch, handleFileClick, handleGenerateCommitMessage, handlePull, handlePush, handleStage, handleStageAll, handleUnstage, handleUnstageAll, refreshRepoSnapshot, repoCommitMessages, repoIsCommitting, repoIsGeneratingMessages, selectedRepoRoot, tt, toggleRepoSection, updateRepoCommitMessage])
+    }, [scrollParent, getRepoExpandedSections, handleCommit, handleDiscard, handleDiscardAll, handleFetch, handleFileClick, handleGenerateCommitMessage, handlePull, handlePush, handleStage, handleStageAll, handleUnstage, handleUnstageAll, refreshRepoSnapshot, repoCommitMessages, repoIsCommitting, repoIsGeneratingMessages, selectedRepoRoot, tt, toggleRepoSection, updateRepoCommitMessage])
 
     // ==================== 渲染 ====================
 
@@ -2273,7 +2202,7 @@ Commit message:`
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div ref={setScrollParent} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                 {/* Changes Tab */}
                 {activeTab === 'changes' && isRepoListMode && (
                     <div className="py-2">
@@ -2383,7 +2312,7 @@ Commit message:`
                                     <AlertTriangle className="w-3 h-3" />
                                     {tt('git.conflicts')} ({status.conflictFiles.length})
                                 </div>
-                                {status.conflictFiles.map(path => (
+                                <GitFileList items={status.conflictFiles} scrollParent={scrollParent} getKey={item => item} renderItem={path => (
                                     <FileItem
                                         key={path}
                                         path={path}
@@ -2393,7 +2322,7 @@ Commit message:`
                                         onDiscard={() => handleDiscard(path)}
                                         onClick={() => setConflictFile(normalizePath(`${workspacePath}/${path}`))}
                                     />
-                                ))}
+                                )} />
                             </div>
                         )}
 
@@ -2415,7 +2344,7 @@ Commit message:`
                                         <Minus className="w-3 h-3" />
                                     </button>
                                 </div>
-                                {expandedSections.staged && status.staged.map(file => (
+                                {expandedSections.staged && (<GitFileList items={status.staged} scrollParent={scrollParent} getKey={item => item.path} renderItem={file => (
                                     <FileItem
                                         key={file.path}
                                         path={file.path}
@@ -2424,7 +2353,7 @@ Commit message:`
                                         onUnstage={() => handleUnstage(file.path)}
                                         onClick={() => handleFileClick(file.path, file.status, true)}
                                     />
-                                ))}
+                                )} />)}
                             </div>
                         )}
 
@@ -2455,7 +2384,7 @@ Commit message:`
                                 </div>
                                 {expandedSections.changes && (
                                     <>
-                                        {status.unstaged.map(file => (
+                                        <GitFileList items={status.unstaged} scrollParent={scrollParent} getKey={item => item.path} renderItem={file => (
                                             <FileItem
                                                 key={file.path}
                                                 path={file.path}
@@ -2465,8 +2394,8 @@ Commit message:`
                                                 onDiscard={() => handleDiscard(file.path)}
                                                 onClick={() => handleFileClick(file.path, file.status, false)}
                                             />
-                                        ))}
-                                        {status.untracked.map(path => (
+                                        )} />
+                                        <GitFileList items={status.untracked} scrollParent={scrollParent} getKey={item => item} renderItem={path => (
                                             <FileItem
                                                 key={path}
                                                 path={path}
@@ -2476,7 +2405,7 @@ Commit message:`
                                                 onDiscard={() => handleDiscard(path, undefined, true)}
                                                 onClick={() => handleFileClick(path, 'added', false)}
                                             />
-                                        ))}
+                                        )} />
                                     </>
                                 )}
                             </div>
