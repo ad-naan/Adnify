@@ -1,0 +1,13 @@
+diff --git a/lib/asar.js b/lib/asar.js
+index fd94e84b62e474470f1dee1f7e5e96d66e3723e7..7e4439f68d5d60f82319e49f2ddefc4c1275c936 100644
+--- a/lib/asar.js
++++ b/lib/asar.js
+@@ -38,7 +38,7 @@ exports.extractAll = extractAll;
+ exports.uncache = uncache;
+ exports.uncacheAll = uncacheAll;
+ const path = __importStar(require("path"));
+-const minimatch_1 = __importDefault(require("minimatch"));
++const minimatch_1 = __importDefault(require("minimatch").minimatch);
+ const wrapped_fs_1 = __importDefault(require("./wrapped-fs"));
+ const filesystem_1 = require("./filesystem");
+ const disk = __importStar(require("./disk"));

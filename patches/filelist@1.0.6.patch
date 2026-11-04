@@ -1,0 +1,13 @@
+diff --git a/index.js b/index.js
+index 34ca389745f6b1548d2f4a8102aa6bf0fc843eab..b4a39c14128cd9d023680c6eed643d21e1ed5e70 100644
+--- a/index.js
++++ b/index.js
+@@ -197,7 +197,7 @@ globSync = function (pat, opts) {
+   }
+ 
+   if (files) {
+-    pat = path.normalize(pat);
++    pat = path.normalize(pat).replace(/\\/g, '/');
+     matches = minimatch.match(files, pat, opts || {});
+   }
+   return matches || [];

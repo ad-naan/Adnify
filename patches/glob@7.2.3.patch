@@ -1,0 +1,50 @@
+diff --git a/glob.js b/glob.js
+index 37a4d7e60775a381e843d26bebe568270e9c4388..205a3f2be11c977aae034ba21f718734bf8ea479 100644
+--- a/glob.js
++++ b/glob.js
+@@ -382,7 +382,7 @@ Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, in
+   // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
+   var pn = remain[0]
+   var negate = !!this.minimatch.negate
+-  var rawGlob = pn._glob
++  var rawGlob = pn.pattern
+   var dotOk = this.dot || rawGlob.charAt(0) === '.'
+ 
+   var matchedEntries = []
+@@ -391,9 +391,9 @@ Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, in
+     if (e.charAt(0) !== '.' || dotOk) {
+       var m
+       if (negate && !prefix) {
+-        m = !e.match(pn)
++        m = !pn.test(e)
+       } else {
+-        m = e.match(pn)
++        m = pn.test(e)
+       }
+       if (m)
+         matchedEntries.push(e)
+diff --git a/sync.js b/sync.js
+index 2c4f480192d28d3aabc2a7697b6352131ff3c339..fe7820e9f85119a1811f39e76ed7d480a61b8e58 100644
+--- a/sync.js
++++ b/sync.js
+@@ -144,7 +144,7 @@ GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index,
+   // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
+   var pn = remain[0]
+   var negate = !!this.minimatch.negate
+-  var rawGlob = pn._glob
++  var rawGlob = pn.pattern
+   var dotOk = this.dot || rawGlob.charAt(0) === '.'
+ 
+   var matchedEntries = []
+@@ -153,9 +153,9 @@ GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index,
+     if (e.charAt(0) !== '.' || dotOk) {
+       var m
+       if (negate && !prefix) {
+-        m = !e.match(pn)
++        m = !pn.test(e)
+       } else {
+-        m = e.match(pn)
++        m = pn.test(e)
+       }
+       if (m)
+         matchedEntries.push(e)
