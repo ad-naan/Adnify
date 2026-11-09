@@ -3639,7 +3639,7 @@ export const zh = {
   'systemSettings.storageCache': '存储与缓存',
   'systemSettings.storageLocationForAll': '所有配置文件（config.json、mcp.json 等）的存储位置',
   'systemSettings.theTokenIsStored': 'Token 会保存在本地设置中，不会自动导出；只有在手动勾选“包含 API 密钥”时才会进入导出文件。',
-  'systemSettings.usedForGithubReleases': '用于 GitHub Releases 请求，减少速率限制，供 LSP 安装和更新检查复用',
+  'systemSettings.usedForGithubReleases': '下载语言服务器时减少 GitHub API 的速率限制',
   'systemSettings.versionHistory': '版本记录',
 
   // taskBoard
@@ -3795,7 +3795,6 @@ export const zh = {
   'updateIndicator.checkingForUpdates': '正在检查新版本...',
   'updateIndicator.current': '当前版本',
   'updateIndicator.downloadingUpdate': '正在下载更新',
-  'updateIndicator.githubDownloadAccelerationIs': '已启用 GitHub 下载加速，可显著改善国内网络下的更新速度。',
   'updateIndicator.newVersionAvailable': '发现新版本',
   'updateIndicator.openDownloadPage': '前往下载页',
   'updateIndicator.restartToApply': '重启生效',

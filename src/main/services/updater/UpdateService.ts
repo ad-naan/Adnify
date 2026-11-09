@@ -1,33 +1,11 @@
-/**
- * Automatic update service.
- *
- * Release strategy:
- * - Windows: NSIS installer
- * - macOS: DMG / ZIP
- * - Linux: AppImage
- *
- * Some local package layouts still cannot auto-update reliably. In that case
- * we fall back to GitHub release checks and expose a manual download link.
- */
-
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import { logger } from '@shared/utils/Logger'
-import { ErrorCode, toAppError } from '@shared/utils/errorHandler'
+import { toAppError } from '@shared/utils/errorHandler'
 import * as fs from 'fs'
 import * as path from 'path'
-import { fetchLatestRelease } from '../githubApiService'
 import { mainEditorEvents } from '../notifications/events'
-import {
-  GITHUB_DOWNLOAD_MIRRORS,
-  applyGithubDownloadMirror,
-  buildMirroredGithubLatestFeedUrl,
-  resolveUpdateDownloadSource,
-  type UpdateDownloadSource,
-} from '@shared/utils/githubDownloadMirror'
-
-const UPDATE_OWNER = 'ad-naan'
-const UPDATE_REPO = 'adnify'
+import { CNB_RELEASES_URL, cnbReleaseFeed, fetchLatestCnbRelease } from './cnbRelease'
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -44,8 +22,6 @@ export interface UpdateStatus {
   error?: string
   requiresManualDownload: boolean
   isPortable: boolean
-  /** Whether downloads are routed through a GitHub mirror. */
-  usingDownloadMirror?: boolean
 }
 
 class UpdateService {
@@ -53,38 +29,22 @@ class UpdateService {
     status: 'idle',
     requiresManualDownload: false,
     isPortable: false,
-    usingDownloadMirror: false,
   }
 
   private mainWindow: BrowserWindow | null = null
   private updateCheckInterval: NodeJS.Timeout | null = null
-  private downloadSource: UpdateDownloadSource = 'github'
-  private activeMirrorIndex = 0
+  private startupCheck: NodeJS.Timeout | null = null
+  private checkInProgress: Promise<UpdateStatus> | null = null
 
   initialize(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
-
-    const requiresManualDownload = this.detectManualDownloadMode()
+    const requiresManualDownload = !app.isPackaged || this.detectManualDownloadMode()
     this.status.requiresManualDownload = requiresManualDownload
-    // Backward-compatible alias for existing consumers.
     this.status.isPortable = requiresManualDownload
 
-    this.downloadSource = resolveUpdateDownloadSource({
-      locale: app.getLocale(),
-      envForce: process.env.ADNIFY_UPDATE_MIRROR,
-    })
-    this.status.usingDownloadMirror = this.downloadSource === 'mirror'
-
-    logger.system.info(
-      `[Updater] Initialized, requiresManualDownload: ${requiresManualDownload}, platform: ${process.platform}, downloadSource: ${this.downloadSource}`
-    )
-
-    if (requiresManualDownload) {
-      this.setupManualDownloadUpdater()
-      return
-    }
-
-    this.setupAutoUpdater()
+    if (!requiresManualDownload) this.setupAutoUpdater()
+    this.startupCheck = setTimeout(() => void this.checkForUpdates(), 30_000)
+    this.updateCheckInterval = setInterval(() => void this.checkForUpdates(), 4 * 60 * 60 * 1000)
   }
 
   /**
@@ -117,252 +77,102 @@ class UpdateService {
   private setupAutoUpdater(): void {
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.allowPrerelease = false
+    autoUpdater.channel = process.arch === 'arm64' && process.platform !== 'linux' ? 'latest-arm64' : 'latest'
+    // Setting the channel enables downgrades in electron-updater.
     autoUpdater.allowDowngrade = false
 
-    const channel = this.getUpdateChannel()
-    autoUpdater.channel = channel
-    this.applyUpdateFeed(this.downloadSource, this.activeMirrorIndex)
-
-    logger.system.info(`[Updater] Using update channel: ${channel}`)
-
-    autoUpdater.on('checking-for-update', () => {
-      this.updateStatus({ status: 'checking' })
-    })
-
-    autoUpdater.on('update-available', (info: UpdateInfo) => {
-      this.updateStatus({
-        status: 'available',
-        version: info.version,
-        releaseNotes: this.formatReleaseNotes(info.releaseNotes),
-        releaseDate: info.releaseDate,
-      })
-    })
-
-    autoUpdater.on('update-not-available', () => {
-      this.updateStatus({ status: 'not-available' })
-    })
-
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
-      this.updateStatus({
-        status: 'downloading',
-        progress: Math.round(progress.percent),
-      })
+      this.updateStatus({ status: 'downloading', progress: Math.round(progress.percent) })
     })
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-      logger.system.info(`[Updater] Update downloaded: ${info.version}, files:`, info.files)
-      this.updateStatus({
-        status: 'downloaded',
-        version: info.version,
-      })
+      this.updateStatus({ status: 'downloaded', version: info.version })
     })
 
     autoUpdater.on('error', (err: Error) => {
-      logger.system.error('[Updater] Error:', err)
-      this.updateStatus({
-        status: 'error',
-        error: toAppError(err).message,
-      })
+      logger.system.error('[Updater] Electron updater error:', err)
+      // Squirrel can reject the app after the ZIP has already been downloaded.
+      if (process.platform === 'darwin' && this.status.status === 'downloaded') {
+        this.updateStatus({ status: 'available', requiresManualDownload: true, progress: undefined })
+      }
+    })
+  }
+
+  checkForUpdates(): Promise<UpdateStatus> {
+    if (this.status.status === 'downloading' || this.status.status === 'downloaded') {
+      return Promise.resolve(this.getStatus())
+    }
+    this.checkInProgress ??= this.checkCnbRelease().finally(() => { this.checkInProgress = null })
+    return this.checkInProgress
+  }
+
+  private async checkCnbRelease(): Promise<UpdateStatus> {
+    this.updateStatus({
+      status: 'checking',
+      error: undefined,
+      version: undefined,
+      releaseNotes: undefined,
+      releaseDate: undefined,
+      downloadUrl: undefined,
+      requiresManualDownload: this.status.isPortable,
     })
 
-    setTimeout(() => {
-      void this.checkForUpdates()
-    }, 30 * 1000)
-
-    this.updateCheckInterval = setInterval(() => {
-      void this.checkForUpdates()
-    }, 4 * 60 * 60 * 1000)
-  }
-
-  private setupManualDownloadUpdater(): void {
-    setTimeout(() => {
-      void this.checkForUpdatesViaGitHub()
-    }, 30 * 1000)
-
-    this.updateCheckInterval = setInterval(() => {
-      void this.checkForUpdatesViaGitHub()
-    }, 4 * 60 * 60 * 1000)
-  }
-
-  async checkForUpdates(): Promise<UpdateStatus> {
-    if (this.status.requiresManualDownload) {
-      return this.checkForUpdatesViaGitHub()
-    }
-
     try {
-      this.updateStatus({ status: 'checking' })
-      logger.system.info('[Updater] Starting update check...')
+      const release = await fetchLatestCnbRelease()
+      const version = release?.tag_name.slice(1)
+      if (!release || !version || !this.isNewerVersion(version, app.getVersion())) {
+        this.updateStatus({ status: 'not-available' })
+        return this.getStatus()
+      }
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Update check timed out'))
-        }, 30 * 1000)
-      })
-
-      const checkPromise = autoUpdater
-        .checkForUpdates()
-        .then(async result => {
-          logger.system.info(
-            '[Updater] checkForUpdates() resolved, result:',
-            result
-              ? JSON.stringify({
-                updateInfo: result.updateInfo ? { version: result.updateInfo.version } : null,
-                cancellationToken: result.cancellationToken ? 'present' : null,
-              })
-              : 'null'
-          )
-
-          if (result?.updateInfo) {
-            if (this.status.status === 'checking') {
-              this.updateStatus({
-                status: 'available',
-                version: result.updateInfo.version,
-                releaseNotes: this.formatReleaseNotes(result.updateInfo.releaseNotes),
-                releaseDate: result.updateInfo.releaseDate as string | undefined,
-              })
-            }
-            return
+      const feed = cnbReleaseFeed(release.tag_name)
+      const downloadUrl = this.findDownloadUrl(release.assets ?? [], feed)
+      let requiresManualDownload = this.status.isPortable
+      if (!requiresManualDownload) {
+        try {
+          autoUpdater.setFeedURL({ provider: 'generic', url: feed, useMultipleRangeRequest: false })
+          const result = await autoUpdater.checkForUpdates()
+          if (result?.updateInfo.version === version && !result.isUpdateAvailable) {
+            this.updateStatus({ status: 'not-available' })
+            return this.getStatus()
           }
-
-          if (!result) {
-            logger.system.warn('[Updater] checkForUpdates() returned null, falling back to GitHub API check')
-            await this.sleep(2000)
-            if (this.status.status === 'checking') {
-              return this.checkForUpdatesViaGitHub(false)
-            }
-            return
-          }
-
-          await this.waitForUpdaterEventOrFallback()
-        })
-        .catch(async err => {
-          logger.system.error('[Updater] checkForUpdates() rejected:', err)
-          if (this.status.status === 'checking') {
-            return this.checkForUpdatesViaGitHub(false).catch(() => {
-              throw err
-            })
-          }
-          throw err
-        })
-
-      await Promise.race([checkPromise, timeoutPromise])
-    } catch (err) {
-      const error = toAppError(err)
-      if (error.code === ErrorCode.NETWORK || error.code === ErrorCode.TIMEOUT) {
-        logger.system.warn(`[Updater] Check failed due to network: ${error.code} (${error.message})`)
-      } else {
-        logger.system.error(`[Updater] Check failed: ${error.code}`, error)
-      }
-
-      if (this.status.status === 'checking') {
-        this.updateStatus({
-          status: 'error',
-          error: error.message || 'Update check failed',
-        })
-      }
-    }
-
-    return this.status
-  }
-
-  async checkForUpdatesViaGitHub(setCheckingStatus = true): Promise<UpdateStatus> {
-    try {
-      if (setCheckingStatus) {
-        this.updateStatus({ status: 'checking' })
-      }
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30 * 1000)
-
-      try {
-        const latestRelease = await fetchLatestRelease('ad-naan', 'adnify', {
-          userAgent: 'Adnify-Updater',
-          signal: controller.signal,
-        }) as {
-          tag_name: string
-          body: string
-          published_at: string
-          assets: Array<{ name: string; browser_download_url: string }>
+          requiresManualDownload = result?.updateInfo.version !== version
+        } catch (err) {
+          logger.system.warn('[Updater] CNB update metadata unavailable:', err)
+          requiresManualDownload = true
         }
-        clearTimeout(timeoutId)
-
-        const release = latestRelease
-        const latestVersion = release.tag_name.replace(/^v/, '')
-        const currentVersion = app.getVersion()
-
-        if (this.isNewerVersion(latestVersion, currentVersion)) {
-          this.updateStatus({
-            status: 'available',
-            version: latestVersion,
-            releaseNotes: release.body,
-            releaseDate: release.published_at,
-            downloadUrl: this.findDownloadUrl(release.assets),
-          })
-        } else {
-          this.updateStatus({ status: 'not-available' })
-        }
-      } catch (err) {
-        clearTimeout(timeoutId)
-        if (toAppError(err).name === 'AbortError') {
-          throw new Error('Update check timed out')
-        }
-        throw err
-      }
-    } catch (err) {
-      const error = toAppError(err)
-      if (error.code === ErrorCode.NETWORK || error.code === ErrorCode.TIMEOUT) {
-        logger.system.warn(`[Updater] GitHub release check failed due to network: ${error.code} (${error.message})`)
-      } else {
-        logger.system.error(`[Updater] GitHub release check failed: ${error.code}`, error)
       }
 
       this.updateStatus({
-        status: 'error',
-        error: error.message || 'Update check failed',
+        status: 'available',
+        version,
+        releaseNotes: release.body,
+        releaseDate: release.published_at,
+        downloadUrl,
+        requiresManualDownload,
       })
+    } catch (err) {
+      const error = toAppError(err)
+      logger.system.warn('[Updater] CNB release check failed:', error.message)
+      this.updateStatus({ status: 'error', error: error.message || 'Update check failed' })
     }
 
-    return this.status
+    return this.getStatus()
   }
 
   async downloadUpdate(): Promise<void> {
     if (this.status.requiresManualDownload) {
       throw new Error('In-app download is not supported by this installation; use the download page instead')
     }
+    if (this.status.status !== 'available') throw new Error('No update available')
 
-    if (this.status.status !== 'available' && !(this.status.status === 'error' && this.status.version)) {
-      throw new Error('No update available')
-    }
-
-    this.updateStatus({ status: 'downloading', progress: 0, error: undefined })
-
+    this.updateStatus({ status: 'downloading', progress: 0 })
     try {
       await autoUpdater.downloadUpdate()
-      return
-    } catch (primaryError) {
-      logger.system.warn('[Updater] Primary download failed, trying mirror fallback:', primaryError)
-
-      if (this.downloadSource === 'github') {
-        this.downloadSource = 'mirror'
-        this.activeMirrorIndex = 0
-        this.applyUpdateFeed('mirror', 0)
-        this.updateStatus({ usingDownloadMirror: true })
-        await autoUpdater.checkForUpdates()
-        await autoUpdater.downloadUpdate()
-        return
-      }
-
-      // Already on mirror: rotate to the next mirror prefix once.
-      const nextIndex = this.activeMirrorIndex + 1
-      if (nextIndex < GITHUB_DOWNLOAD_MIRRORS.length) {
-        this.activeMirrorIndex = nextIndex
-        this.applyUpdateFeed('mirror', nextIndex)
-        await autoUpdater.checkForUpdates()
-        await autoUpdater.downloadUpdate()
-        return
-      }
-
-      throw primaryError
+    } catch (error) {
+      logger.system.warn('[Updater] CNB update download failed:', error)
+      this.updateStatus({ status: 'available', requiresManualDownload: true, progress: undefined })
     }
   }
 
@@ -389,6 +199,10 @@ class UpdateService {
   }
 
   destroy(): void {
+    if (this.startupCheck) {
+      clearTimeout(this.startupCheck)
+      this.startupCheck = null
+    }
     if (this.updateCheckInterval) {
       clearInterval(this.updateCheckInterval)
       this.updateCheckInterval = null
@@ -401,16 +215,7 @@ class UpdateService {
       level: partial.status === 'error' ? 'error' : partial.status === 'downloaded' || partial.status === 'available' ? 'success' : 'info',
       attention: ['error', 'downloaded', 'available'].includes(partial.status), correlationId: partial.version,
     })
-    this.status = {
-      ...this.status,
-      ...partial,
-      isPortable: partial.requiresManualDownload ?? this.status.requiresManualDownload,
-    }
-
-    if (partial.requiresManualDownload !== undefined) {
-      this.status.isPortable = partial.requiresManualDownload
-    }
-
+    this.status = { ...this.status, ...partial }
     this.notifyRenderer()
   }
 
@@ -420,18 +225,9 @@ class UpdateService {
     }
   }
 
-  private formatReleaseNotes(notes: string | Array<{ version: string; note: string | null }> | null | undefined): string {
-    if (!notes) return ''
-    if (typeof notes === 'string') return notes
-    return notes
-      .map(note => note.note || '')
-      .filter(Boolean)
-      .join('\n\n')
-  }
-
   private isNewerVersion(latest: string, current: string): boolean {
     const latestParts = latest.split('.').map(Number)
-    const currentParts = current.split('.').map(Number)
+    const currentParts = current.split(/[+-]/, 1)[0].split('.').map(Number)
 
     for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i += 1) {
       const left = latestParts[i] || 0
@@ -440,10 +236,10 @@ class UpdateService {
       if (left < right) return false
     }
 
-    return false
+    return current.split('+', 1)[0].includes('-')
   }
 
-  private findDownloadUrl(assets: Array<{ name: string; browser_download_url: string }>): string {
+  private findDownloadUrl(assets: Array<{ name: string }>, feed: string): string {
     const key = `${process.platform}-${process.arch}`
     const patterns: Record<string, RegExp[]> = {
       'win32-x64': [/Adnify-Setup-.*-x64\.exe$/i],
@@ -454,91 +250,11 @@ class UpdateService {
       'linux-arm64': [/Adnify-.*-arm64-linux\.AppImage$/i],
     }
 
-    const regexes = patterns[key] || []
-    let directUrl = `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`
-    for (const asset of assets) {
-      if (regexes.some(regex => regex.test(asset.name))) {
-        directUrl = asset.browser_download_url
-        break
-      }
+    for (const pattern of patterns[key] ?? []) {
+      const asset = assets.find(({ name }) => pattern.test(name))
+      if (asset) return new URL(encodeURIComponent(asset.name), feed).href
     }
-
-    if (this.downloadSource === 'mirror') {
-      return applyGithubDownloadMirror(directUrl, GITHUB_DOWNLOAD_MIRRORS[this.activeMirrorIndex] || GITHUB_DOWNLOAD_MIRRORS[0])
-    }
-    return directUrl
-  }
-
-  private applyUpdateFeed(source: UpdateDownloadSource, mirrorIndex = 0): void {
-    if (source === 'mirror') {
-      const mirror = GITHUB_DOWNLOAD_MIRRORS[mirrorIndex] || GITHUB_DOWNLOAD_MIRRORS[0]
-      const feedUrl = buildMirroredGithubLatestFeedUrl(UPDATE_OWNER, UPDATE_REPO, mirror)
-      autoUpdater.setFeedURL({
-        provider: 'generic',
-        url: feedUrl,
-      })
-      logger.system.info(`[Updater] Feed set to mirrored generic URL: ${feedUrl}`)
-      this.updateStatus({ usingDownloadMirror: true })
-      return
-    }
-
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: UPDATE_OWNER,
-      repo: UPDATE_REPO,
-    })
-    logger.system.info('[Updater] Feed set to GitHub provider')
-    this.updateStatus({ usingDownloadMirror: false })
-  }
-
-  private getUpdateChannel(): string {
-    if (process.platform === 'win32') {
-      return process.arch === 'arm64' ? 'latest-arm64' : 'latest'
-    }
-
-    if (process.platform === 'darwin') {
-      return process.arch === 'arm64' ? 'latest-arm64-mac' : 'latest-mac'
-    }
-
-    if (process.platform === 'linux') {
-      return process.arch === 'arm64' ? 'latest-linux-arm64' : 'latest-linux'
-    }
-
-    return 'latest'
-  }
-
-  private async waitForUpdaterEventOrFallback(): Promise<void> {
-    const startTime = Date.now()
-
-    await new Promise<void>(resolve => {
-      const interval = setInterval(() => {
-        if (this.status.status !== 'checking') {
-          clearInterval(interval)
-          logger.system.info(`[Updater] Status changed to: ${this.status.status}`)
-          resolve()
-          return
-        }
-
-        if (Date.now() - startTime > 5000) {
-          clearInterval(interval)
-          if (this.status.status === 'checking') {
-            logger.system.warn('[Updater] No event triggered after checkForUpdates() resolved, falling back to GitHub API')
-            this.checkForUpdatesViaGitHub(false)
-              .then(() => resolve())
-              .catch(() => {
-                this.updateStatus({ status: 'not-available' })
-                resolve()
-              })
-          } else {
-            resolve()
-          }
-        }
-      }, 200)
-    })
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return CNB_RELEASES_URL
   }
 }
 

@@ -3638,7 +3638,7 @@ export const en = {
   'systemSettings.storageCache': 'Storage & Cache',
   'systemSettings.storageLocationForAll': 'Storage location for all config files (config.json, mcp.json, etc.)',
   'systemSettings.theTokenIsStored': 'The token is stored locally and is excluded from exports unless you explicitly include API keys.',
-  'systemSettings.usedForGithubReleases': 'Used for GitHub Releases requests to reduce rate limiting across LSP installs and update checks',
+  'systemSettings.usedForGithubReleases': 'Reduces GitHub API rate limits when downloading language servers',
   'systemSettings.versionHistory': 'Version History',
 
   // taskBoard
@@ -3794,7 +3794,6 @@ export const en = {
   'updateIndicator.checkingForUpdates': 'Checking for updates...',
   'updateIndicator.current': 'Current',
   'updateIndicator.downloadingUpdate': 'Downloading Update',
-  'updateIndicator.githubDownloadAccelerationIs': 'GitHub download acceleration is enabled to improve update speed on restricted networks.',
   'updateIndicator.newVersionAvailable': 'New Version Available',
   'updateIndicator.openDownloadPage': 'Open Download Page',
   'updateIndicator.restartToApply': 'Restart to Apply',

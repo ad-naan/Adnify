@@ -20,6 +20,7 @@
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
     <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
+  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">下载 Adnify</a></strong></p>
 </div>
 
 Adnify 将代码编辑、AI 执行、素材生成和浏览器验证放进同一个桌面工作区。使用 **Agent Mode** 直接分析和实现，或使用 **Plan Mode** 澄清需求、审查任务图、按依赖执行并验收结果；跨窗口管理命令和后台服务，通过系统通知或自己的 Webhook 接收工具获取任务结果。

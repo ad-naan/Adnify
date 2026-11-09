@@ -51,22 +51,13 @@ console.log(`✅ Committed version bump`)
 execSync(`git tag -a v${newVersion} -m "Release v${newVersion}"`, { stdio: 'inherit' })
 console.log(`✅ Created tag v${newVersion}`)
 
-// 4. 推送到远程（包括 tag）
-execSync('git push', { stdio: 'inherit' })
-// 只推送当前版本的 tag，避免旧 tag 冲突
-execSync(`git push origin v${newVersion}`, { stdio: 'inherit' })
-console.log(`✅ Pushed to remote`)
+// 4. 推送 CNB 主分支，再单独推送当前版本的 tag。
+execSync('git push cnb HEAD:refs/heads/master', { stdio: 'inherit' })
+execSync(`git push cnb refs/tags/v${newVersion}`, { stdio: 'inherit' })
+console.log(`✅ Pushed to CNB`)
 
 console.log(`
-🎉 Release v${newVersion} complete!
-
-GitHub Actions will automatically:
-1. Build installers for Windows, macOS, Linux
-2. Create GitHub Release with all artifacts
-3. Sync code and tags to Gitee
-
-⚠️  Gitee Release 需要手动创建:
-   https://gitee.com/adnaan/adnify/releases/new
-   - 选择 tag: v${newVersion}
-   - 从 GitHub Release 下载安装包后上传到 Gitee
+CNB is building v${newVersion} for Windows, macOS and Linux.
+When all artifacts are ready, the release will appear at:
+https://cnb.cool/aadnaan/Adnify/-/releases
 `)

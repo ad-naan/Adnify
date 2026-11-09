@@ -21,6 +21,7 @@
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
     <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
+  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">Download Adnify</a></strong></p>
 </div>
 
 Adnify brings code editing, AI execution, asset generation, and browser verification into one desktop workspace. Use **Agent Mode** for direct implementation or **Plan Mode** for requirement clarification, reviewed task graphs, dependency-aware execution, and result validation. Manage commands and background services across windows, and receive task results through system notifications or your own webhook receiver.

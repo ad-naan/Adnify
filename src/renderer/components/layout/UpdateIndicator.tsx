@@ -73,8 +73,6 @@ export default function UpdateIndicator() {
     checkNow: t('updateIndicator.checkForUpdates', language),
     manualHint:
       t('updateIndicator.thisIsAPortable', language),
-    mirrorHint:
-      t('updateIndicator.githubDownloadAccelerationIs', language),
     current: t('updateIndicator.current', language),
   }
 
@@ -191,15 +189,8 @@ export default function UpdateIndicator() {
                 </div>
               )}
 
-              {/* 加速镜像提示 */}
-              {status?.usingDownloadMirror && (
-                <div className="w-full mb-4 px-3 py-2 rounded-xl bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.5)] text-[11px] text-[rgb(var(--text-secondary))] leading-relaxed text-left">
-                  {labels.mirrorHint}
-                </div>
-              )}
-
               {/* 便携版提示 */}
-              {hasUpdate && status?.requiresManualDownload && (
+              {hasUpdate && status?.isPortable && (
                 <div className="w-full mb-4 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed text-left">
                   {labels.manualHint}
                 </div>

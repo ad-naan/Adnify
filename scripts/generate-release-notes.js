@@ -1,5 +1,5 @@
 /**
- * Generate formatted release notes for GitHub & Gitee Releases
+ * Generate formatted release notes for Adnify
  * Usage: node scripts/generate-release-notes.js [version]
  */
 
@@ -84,8 +84,6 @@ function generateReleaseNotes() {
 
 > 💡 **架构选择建议**：Windows 大多数电脑选 \`x64\`；M1/M2/M3/M4 系列 Mac 选 \`arm64\`，Intel Mac 选 \`x64\`。
 
----
-📦 [Gitee 镜像发布](https://gitee.com/adnaan/adnify/releases/tag/v${version})
 `
 
   fs.writeFileSync(OUTPUT_MD_PATH, notes, 'utf8')

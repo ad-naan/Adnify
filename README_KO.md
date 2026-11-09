@@ -6,6 +6,7 @@
   <h1>Adnify</h1>
   <p><a href="README_CN.md">中文</a> | <a href="README.md">English</a> | <a href="README_JA.md">日本語</a> | <strong>한국어</strong> | <a href="README_ES.md">Español</a> | <a href="README_FR.md">Français</a> | <a href="README_DE.md">Deutsch</a> | <a href="README_PT_BR.md">Português (Brasil)</a> | <a href="README_RU.md">Русский</a></p>
   <p><strong>AI를 코드에 연결하세요.</strong></p>
+  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">Adnify 다운로드</a></strong></p>
 </div>
 
 Adnify는 코드 편집, AI 실행, 에셋 생성, 브라우저 검증을 하나로 통합한 데스크톱 개발 환경입니다. Agent Mode로 바로 구현하거나 Plan Mode에서 요구 사항과 작업 의존성을 검토한 뒤 실행할 수 있습니다.

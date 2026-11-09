@@ -6,6 +6,7 @@
   <h1>Adnify</h1>
   <p><a href="README_CN.md">中文</a> | <a href="README.md">English</a> | <a href="README_JA.md">日本語</a> | <a href="README_KO.md">한국어</a> | <a href="README_ES.md">Español</a> | <a href="README_FR.md">Français</a> | <strong>Deutsch</strong> | <a href="README_PT_BR.md">Português (Brasil)</a> | <a href="README_RU.md">Русский</a></p>
   <p><strong>Verbinde KI mit deinem Code.</strong></p>
+  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">Adnify herunterladen</a></strong></p>
 </div>
 
 Adnify vereint Codebearbeitung, KI-Ausführung, Mediengenerierung und Browserprüfung in einer Desktop-Entwicklungsumgebung. Mit Agent Mode setzt du Änderungen direkt um; mit Plan Mode prüfst du Anforderungen und Abhängigkeiten vor der Ausführung.

@@ -1,21 +1,17 @@
 /**
- * 同步 GitHub Release 到 Gitee
+ * 从 CNB 下载正式版附件，供手动同步到 Gitee
  * 用法: node scripts/sync-release-to-gitee.js [version]
  * 例如: node scripts/sync-release-to-gitee.js 1.2.5
  * 
  * 支持断点续传：如果下载中断，重新运行会从断点继续
- * 
- * 环境变量:
- * - GITHUB_TOKEN: GitHub Personal Access Token (可选，用于提高 API 速率限制)
  */
 
 const https = require('https')
 const fs = require('fs')
 const path = require('path')
 
-const GITHUB_REPO = 'ad-naan/adnify'
+const CNB_REPO_URL = 'https://cnb.cool/aadnaan/Adnify'
 const GITEE_RELEASE_URL = 'https://gitee.com/adnaan/adnify/releases/new'
-const GITHUB_TOKEN = "999"
 
 const version = process.argv[2]
 if (!version) {
@@ -25,7 +21,11 @@ if (!version) {
 }
 
 const tag = version.startsWith('v') ? version : `v${version}`
-const downloadDir = path.join(__dirname, '..', 'release-download')
+if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+  console.error('请输入正式版 tag，例如 v1.7.72')
+  process.exit(1)
+}
+const downloadDir = path.join(__dirname, '..', 'release-download', tag)
 
 if (!fs.existsSync(downloadDir)) {
   fs.mkdirSync(downloadDir, { recursive: true })
@@ -46,10 +46,13 @@ function downloadFile(url, filePath, expectedSize, name) {
     // 检查是否有部分下载的文件
     if (fs.existsSync(filePath)) {
       existingSize = fs.statSync(filePath).size
-      if (existingSize >= expectedSize) {
+      if (existingSize === expectedSize) {
         console.log(`  ✓ ${name} (已完成)`)
         return resolve()
       }
+      if (existingSize > expectedSize) existingSize = 0
+    }
+    if (existingSize > 0) {
       console.log(`  ↻ ${name} 续传中... (已有 ${formatSize(existingSize)})`)
     } else {
       console.log(`  ⬇ ${name} (${formatSize(expectedSize)})`)
@@ -69,16 +72,18 @@ function downloadFile(url, filePath, expectedSize, name) {
     const makeRequest = (requestUrl) => {
       https.get(requestUrl, options, (response) => {
         // 处理重定向
-        if (response.statusCode === 301 || response.statusCode === 302) {
-          return makeRequest(response.headers.location)
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume()
+          return makeRequest(new URL(response.headers.location, requestUrl))
         }
 
         if (response.statusCode !== 200 && response.statusCode !== 206) {
           return reject(new Error(`HTTP ${response.statusCode}`))
         }
 
-        const file = fs.createWriteStream(filePath, { flags: existingSize > 0 ? 'a' : 'w' })
-        let downloaded = existingSize
+        const resuming = response.statusCode === 206 && existingSize > 0
+        const file = fs.createWriteStream(filePath, { flags: resuming ? 'a' : 'w' })
+        let downloaded = resuming ? existingSize : 0
         const total = expectedSize
         let lastPercent = 0
 
@@ -98,6 +103,7 @@ function downloadFile(url, filePath, expectedSize, name) {
 
         file.on('finish', () => {
           file.close()
+          if (downloaded !== expectedSize) return reject(new Error('文件大小与发布附件不符'))
           console.log(`    100% - 完成!`)
           resolve()
         })
@@ -114,19 +120,10 @@ function downloadFile(url, filePath, expectedSize, name) {
 }
 
 // 获取 Release 信息
-const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${tag}`
+const apiUrl = `${CNB_REPO_URL}/-/releases/tags/${tag}`
 const apiHeaders = {
   'User-Agent': 'Node.js',
-  'Accept': 'application/vnd.github.v3+json',
-}
-
-// 如果有 Token，添加认证头
-if (GITHUB_TOKEN) {
-  apiHeaders['Authorization'] = `token ${GITHUB_TOKEN}`
-  console.log('🔑 使用 GitHub Token 认证\n')
-} else {
-  console.log('⚠️  未设置 GITHUB_TOKEN，可能遇到速率限制')
-  console.log('   设置方法: set GITHUB_TOKEN=your_token (Windows)\n')
+  'Accept': 'application/vnd.cnb.api+json',
 }
 
 https.get(apiUrl, { headers: apiHeaders }, (res) => {
@@ -144,20 +141,28 @@ https.get(apiUrl, { headers: apiHeaders }, (res) => {
 
     if (assets.length === 0) {
       console.log('⚠️  该 Release 没有附件，可能还在构建中')
-      console.log(`   查看构建进度: https://github.com/${GITHUB_REPO}/actions`)
+      console.log(`   查看版本页面: ${CNB_REPO_URL}/-/releases`)
       process.exit(0)
     }
 
     console.log(`找到 ${assets.length} 个文件:\n`)
     
+    let failed = false
     for (const asset of assets) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(asset.name)) continue
       const filePath = path.join(downloadDir, asset.name)
       try {
-        await downloadFile(asset.browser_download_url, filePath, asset.size, asset.name)
+        const url = `${CNB_REPO_URL}/-/releases/download/${tag}/${asset.name}`
+        await downloadFile(url, filePath, asset.size, asset.name)
       } catch (err) {
+        failed = true
         console.error(`\n  ✗ ${asset.name}: ${err.message}`)
         console.log('  💡 重新运行脚本可以断点续传')
       }
+    }
+    if (failed) {
+      process.exitCode = 1
+      return
     }
 
     console.log(`
@@ -172,7 +177,7 @@ https.get(apiUrl, { headers: apiHeaders }, (res) => {
    - 标签: ${tag}
    - 标题: Adnify ${tag}
 
-3. 上传文件 (从 release-download 目录拖拽):
+3. 上传文件 (从下方版本目录拖拽):
 `)
     fs.readdirSync(downloadDir).forEach(f => {
       const stat = fs.statSync(path.join(downloadDir, f))

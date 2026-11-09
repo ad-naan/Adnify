@@ -26,13 +26,13 @@
 
 ## 开发环境
 
-本仓库与 CI 统一钉在 **Node.js 24.19.0**（Active LTS，`engines`: `^24.19.0`）与 **pnpm 9.15.9**（精确）。不要使用 Node 22 或 25+：CI / `.nvmrc` 钉 24.19.0；Node 26 上 Electron 安装（`extract-zip`）会失败。本机 Node 不对时，`engine-strict` 会让 `pnpm install` 直接失败。
+CI 使用 **Node.js 24.19.0** 和 **pnpm 11.22.0**。本地 Node 版本须满足 `^24.19.0`，pnpm 版本须与 `packageManager` 一致。
 
 | 配置来源 | 文件 |
 |----------|------|
 | Node 精确版本 | `.nvmrc` / `.node-version` / `mise.toml` → **24.19.0** |
-| 引擎约束 | `package.json` → `engines`（`node`: `^24.19.0`，`pnpm`: `9.15.9`） |
-| 强制校验 | `.npmrc` + `pnpm-workspace.yaml` → `engineStrict` / `packageManagerStrictVersion` |
+| 引擎约束 | `package.json` → `engines`（`node`: `^24.19.0`，`pnpm`: `11.22.0`） |
+| 强制校验 | `pnpm-workspace.yaml` → `engineStrict` / `packageManagerStrictVersion` |
 | 包管理器门禁 | `preinstall` → `scripts/ensure-pnpm.js`（拒绝 npm/yarn） |
 | pnpm 精确版本 | `package.json` → `packageManager` |
 
@@ -56,7 +56,7 @@ pnpm dev
 
 常见问题：
 
-- **`Unsupported engine` / install 被拒绝**：当前 Node 低于 24.19.0 或不在 24.x，或 pnpm 不是 9.15.9。先 `nvm use` / `mise install`，再 `corepack enable`。
+- **`Unsupported engine` / install 被拒绝**：检查 Node 是否满足 `^24.19.0`，以及 pnpm 是否为 11.22.0。
 - **`This repository requires pnpm`**：用了 npm/yarn。改用 `pnpm install`。
 - **`Electron failed to install correctly`**：确认 Node **24.19.0+** 后执行：
 
@@ -95,6 +95,23 @@ pnpm test:coverage
 - 添加必要的测试用例
 - PR 描述清晰说明改动内容
 - 本地 Node / pnpm 版本与仓库要求一致（见上方开发环境）
+
+## CNB CI 和正式发布
+
+`.cnb.yml` 在推送 `main` 或 `master` 时运行 Linux 和 Windows 检查，PR 在 CNB 的 Linux 节点上运行。两者都执行类型检查、单元测试、Chromium 回归和生产构建。
+
+正式发布使用 CNB 的 Linux x64 和 arm64 节点，以及四个组织自托管节点。接入后，在 Runner 服务账户的 PATH 中配置 Git、Node.js 24.19.0 和 pnpm 11.22.0。
+
+| Runner 标签 | 额外环境 |
+| --- | --- |
+| `windows, x64` 和 `windows, arm64` | Python 与对应架构的 Visual Studio C++ Build Tools |
+| `macos, x64` 和 `macos, arm64` | Xcode Command Line Tools、Python 3 和 setuptools |
+
+在根组织的「组织设置 → 构建节点」接入 Runner。桌面启动检查需要 Runner 账户能够启动应用。发布流水线使用 CNB 注入的临时 `CNB_TOKEN` 写入草稿与附件。仓库需公开，以便客户端匿名更新。[CNB 构建节点文档](https://docs.cnb.cool/zh/build/build-node.html)
+
+从已准备好的发布分支运行 `node scripts/release.js patch`。脚本会更新版本、创建 tag，并将分支和该 tag 推送到 `cnb` 远程。若版本与 tag 已经准备好，只需把对应分支和新 tag 推送到 CNB。流水线要求 tag 与 `package.json` 中的正式版本一致，六组安装包和更新清单齐全后才发布。构建失败时，从 CNB 重跑该 tag 的整个构建，继续使用原草稿。安装包与更新文件都在 [CNB Releases](https://cnb.cool/aadnaan/Adnify/-/releases)。
+
+首次切换时，可把桥接工作流同步到 GitHub 默认分支，再把同一个发布 tag 推到 GitHub，并手动运行 `Legacy updater bridge`，让仍在查询 GitHub 的旧客户端取得迁移版。也可以从 CNB 手动安装一次迁移版。当前 macOS 构建沿用无签名配置，内置安装失败时客户端会提供 CNB 下载入口。
 
 ## 许可协议
 
