@@ -33,8 +33,7 @@ function parseChangelogData() {
   }
 }
 
-function generateReleaseNotes() {
-  const version = getTargetVersion()
+function generateReleaseNotes(version = getTargetVersion()) {
   const changelogData = parseChangelogData()
   const release = changelogData.find(r => r.rawVersion === version || r.version === version)
 
@@ -86,13 +85,13 @@ function generateReleaseNotes() {
 
 `
 
-  fs.writeFileSync(OUTPUT_MD_PATH, notes, 'utf8')
-  console.log(`[Release Notes] Successfully generated ${OUTPUT_MD_PATH} for v${version}`)
   return notes
 }
 
 if (require.main === module) {
-  generateReleaseNotes()
+  const version = getTargetVersion()
+  fs.writeFileSync(OUTPUT_MD_PATH, generateReleaseNotes(version), 'utf8')
+  console.log(`[Release Notes] Successfully generated ${OUTPUT_MD_PATH} for v${version}`)
 }
 
 module.exports = { generateReleaseNotes }

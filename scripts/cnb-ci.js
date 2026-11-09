@@ -71,7 +71,7 @@ async function prepare() {
 
   await api(releases, {
     method: 'POST',
-    body: { tag_name: tag, name: `Adnify ${tag}`, body: generateReleaseNotes(), draft: true, make_latest: 'false' },
+    body: { tag_name: tag, name: `Adnify ${tag}`, body: generateReleaseNotes(version), draft: true, make_latest: 'false' },
   })
 }
 
