@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'vite'
 
 const suites = [
-  { name: 'motion', config: 'vite.motion.config.mjs', scripts: ['run-motion.mjs', 'run-first-message.mjs'] },
+  { name: 'motion', config: 'vite.motion.config.mjs', scripts: ['run-motion.mjs', 'run-first-message.mjs', 'run-workbench-visibility.mjs'] },
   { name: 'window-focus', config: 'vite.window-focus.config.mjs', scripts: ['run-window-focus.mjs'] },
   { name: 'git', config: 'vite.git.config.mjs', scripts: ['run-git.mjs'] },
 ]

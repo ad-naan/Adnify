@@ -544,7 +544,7 @@ export default function Editor({ planCanvas = false }: { planCanvas?: boolean })
       )}
 
       {/* 编辑器主体 */}
-      <div className="flex-1 relative min-h-0 overflow-visible flex flex-col" style={planCanvas ? { visibility: 'hidden' } : undefined} aria-hidden={planCanvas || undefined}>
+      <div className="flex-1 relative min-h-0 overflow-visible flex flex-col" style={planCanvas ? { display: 'none' } : undefined} aria-hidden={planCanvas || undefined}>
         {isPlanBoardDocument ? (
           <PlanWorkspace />
         ) : activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (
