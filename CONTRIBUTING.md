@@ -96,22 +96,15 @@ pnpm test:coverage
 - PR 描述清晰说明改动内容
 - 本地 Node / pnpm 版本与仓库要求一致（见上方开发环境）
 
-## CNB CI 和正式发布
+## GitHub Actions CI 和正式发布
 
-`.cnb.yml` 在推送 `main` 或 `master` 时运行 Linux 和 Windows 检查，PR 在 CNB 的 Linux 节点上运行。两者都执行类型检查、单元测试、Chromium 回归和生产构建。
+`.github/workflows/ci.yml` 在推送 `master`、创建或更新面向 `master` 的 PR 时，在 GitHub 托管的 Linux 和 Windows 节点上运行类型检查、单元测试、Chromium 回归和生产构建，也支持手动触发。
 
-正式发布使用 CNB 的 Linux x64 和 arm64 节点，以及四个组织自托管节点。接入后，在 Runner 服务账户的 PATH 中配置 Git、Node.js 24.19.0 和 pnpm 11.22.0。
+`.github/workflows/release.yml` 在推送 `v*` tag 时，使用 GitHub 托管节点分别构建 Windows、macOS、Linux 的 x64 和 arm64 安装包，汇总安装包、更新清单和 blockmap 后创建 GitHub Release。
 
-| Runner 标签 | 额外环境 |
-| --- | --- |
-| `windows, x64` 和 `windows, arm64` | Python 与对应架构的 Visual Studio C++ Build Tools |
-| `macos, x64` 和 `macos, arm64` | Xcode Command Line Tools、Python 3 和 setuptools |
+从已准备好的发布分支运行 `node scripts/release.js patch`。脚本会更新版本、创建 tag，并将分支和该 tag 推送到 `origin` 的 `master` 分支。若版本与 tag 已准备好，将对应提交及 tag 推送到 GitHub 即可触发发布。安装包发布到 [GitHub Releases](https://github.com/ad-naan/adnify/releases)。
 
-在根组织的「组织设置 → 构建节点」接入 Runner。桌面启动检查需要 Runner 账户能够启动应用。发布流水线使用 CNB 注入的临时 `CNB_TOKEN` 写入草稿与附件。仓库需公开，以便客户端匿名更新。[CNB 构建节点文档](https://docs.cnb.cool/zh/build/build-node.html)
-
-从已准备好的发布分支运行 `node scripts/release.js patch`。脚本会更新版本、创建 tag，并将分支和该 tag 推送到 `cnb` 远程。若版本与 tag 已经准备好，只需把对应分支和新 tag 推送到 CNB。流水线要求 tag 与 `package.json` 中的正式版本一致，六组安装包和更新清单齐全后才发布。构建失败时，从 CNB 重跑该 tag 的整个构建，继续使用原草稿。安装包与更新文件都在 [CNB Releases](https://cnb.cool/aadnaan/Adnify/-/releases)。
-
-首次切换时，可把桥接工作流同步到 GitHub 默认分支，再把同一个发布 tag 推到 GitHub，并手动运行 `Legacy updater bridge`，让仍在查询 GitHub 的旧客户端取得迁移版。也可以从 CNB 手动安装一次迁移版。当前 macOS 构建沿用无签名配置，内置安装失败时客户端会提供 CNB 下载入口。
+发布工作流还会同步代码和版本说明到 Gitee，需要配置 `GITEE_USERNAME` 和 `GITEE_TOKEN` 仓库密钥。内测发布使用 `internal-release.yml` 手动触发。
 
 ## 许可协议
 

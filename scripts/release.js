@@ -51,13 +51,13 @@ console.log(`✅ Committed version bump`)
 execSync(`git tag -a v${newVersion} -m "Release v${newVersion}"`, { stdio: 'inherit' })
 console.log(`✅ Created tag v${newVersion}`)
 
-// 4. 推送 CNB 主分支，再单独推送当前版本的 tag。
-execSync('git push cnb HEAD:refs/heads/master', { stdio: 'inherit' })
-execSync(`git push cnb refs/tags/v${newVersion}`, { stdio: 'inherit' })
-console.log(`✅ Pushed to CNB`)
+// 4. 推送 GitHub 主分支，再单独推送当前版本的 tag。
+execSync('git push origin HEAD:refs/heads/master', { stdio: 'inherit' })
+execSync(`git push origin refs/tags/v${newVersion}`, { stdio: 'inherit' })
+console.log(`✅ Pushed to GitHub`)
 
 console.log(`
-CNB is building v${newVersion} for Windows, macOS and Linux.
+GitHub Actions is building v${newVersion} for Windows, macOS and Linux.
 When all artifacts are ready, the release will appear at:
-https://cnb.cool/aadnaan/Adnify/-/releases
+https://github.com/ad-naan/adnify/releases
 `)

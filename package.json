@@ -141,9 +141,10 @@
     "productName": "Adnify",
     "npmRebuild": false,
     "publish": {
-      "provider": "generic",
-      "url": "https://cnb.cool/aadnaan/Adnify/-/releases/latest/download/",
-      "useMultipleRangeRequest": false
+      "provider": "github",
+      "owner": "ad-naan",
+      "repo": "adnify",
+      "releaseType": "release"
     },
     "directories": {
       "output": "release"
