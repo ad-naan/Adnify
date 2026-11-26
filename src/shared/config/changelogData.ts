@@ -69,6 +69,121 @@ export function releaseList(zh: string[] | undefined, en: string[] | undefined, 
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.72",
+    "rawVersion": "1.7.72",
+    "date": "2026-11-26",
+    "title": "Live2D 桌宠与 Dojo 训练",
+    "titleEn": "Live2D Desktop Pets and Dojo Training",
+    "highlight": "新增可拖动的 Live2D 桌宠，支持角色库、LLM 互动和自定义语音。Dojo 训练模式提供只读导师和步骤验收。",
+    "highlightEn": "Adds a draggable Live2D desktop pet with a character library, LLM-driven interactions, and custom speech. Dojo training provides a read-only mentor and step verification.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "桌宠与 Live2D 角色 / Desktop Pets and Live2D",
+        "labelEn": "Desktop Pets and Live2D",
+        "items": [
+          {
+            "title": "可拖动的桌宠窗口和角色库",
+            "titleEn": "Draggable Desktop Pet and Character Library",
+            "details": [
+              "轻点角色可互动，按住角色可拖动。窗口默认显示为 75%，记住拖动后的位置，并提供尺寸、摆放位置和置顶设置。",
+              "支持内置水獭、按需下载的免费 Live2D 样例，以及本地 .model3.json 模型。鼠标悬停或键盘聚焦时显示控制按钮，台词以纯文字气泡显示。"
+            ],
+            "detailsEn": [
+              "Click the pet to interact or drag it to move. The window defaults to 75%, remembers its position, and offers size, placement, and always-on-top controls.",
+              "Choose a built-in otter, download free Live2D samples on demand, or import a local .model3.json model. Controls appear on hover or keyboard focus, and dialogue appears in a text-only bubble."
+            ]
+          },
+          {
+            "title": "LLM 互动和自定义语音",
+            "titleEn": "LLM-Driven Interactions and Custom Speech",
+            "details": [
+              "开启工作台互动后，由当前对话模型决定是否回应，并生成台词和选择角色动作。源码和文件名留在本地。",
+              "支持系统语音和独立配置的 HTTP 语音服务。可填写服务地址、模型、音色和 API Key，并自定义 JSON 请求和音频响应字段。"
+            ],
+            "detailsEn": [
+              "With workbench interactions enabled, the active chat model decides whether to respond, writes the dialogue, and selects a character action. Source code and file names stay on the device.",
+              "Use system speech or configure a separate HTTP speech service with its endpoint, model, voice, API key, JSON request template, and audio response field."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "Dojo 与多任务执行 / Dojo and Task Execution",
+        "labelEn": "Dojo and Task Execution",
+        "items": [
+          {
+            "title": "Dojo 训练模式",
+            "titleEn": "Dojo Training Mode",
+            "details": [
+              "新增训练进度、步骤验收、只读导师和可点击的源码位置。"
+            ],
+            "detailsEn": [
+              "Adds training progress, step verification, a read-only mentor, and clickable source locations."
+            ]
+          },
+          {
+            "title": "工作分支冲突协助",
+            "titleEn": "Worktree Merge Conflict Assistance",
+            "details": [
+              "支持在临时 worktree 中处理并行任务合并冲突，并在任务结束时清理待处理审批。"
+            ],
+            "detailsEn": [
+              "Can assist with parallel task merge conflicts in a temporary worktree and clears pending approvals when tasks end."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "工作台修复 / Workbench Fixes",
+        "labelEn": "Workbench Fixes",
+        "items": [
+          {
+            "title": "修复隐藏面板的界面残留",
+            "titleEn": "Fixed Visual Remnants From Hidden Panels",
+            "details": [
+              "关闭工作台面板或终端区域后，子组件不再残留在工作区画面上。"
+            ],
+            "detailsEn": [
+              "Closing a workbench panel or terminal area now hides its entire surface, including child widgets."
+            ]
+          },
+          {
+            "title": "多窗口文件监听和搜索路径",
+            "titleEn": "Multi-Window Watching and Search Paths",
+            "details": [
+              "按窗口隔离文件监听，并根据搜索根目录解析结果的相对路径。"
+            ],
+            "detailsEn": [
+              "Isolates file watchers by window and resolves relative result paths against the search root."
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "依赖更新 / Dependency Updates",
+        "labelEn": "Dependency Updates",
+        "items": [
+          {
+            "title": "minimatch 更新与兼容补丁",
+            "titleEn": "minimatch Update and Compatibility Patches",
+            "details": [
+              "更新 minimatch 及相关依赖的兼容补丁。"
+            ],
+            "detailsEn": [
+              "Updates minimatch and compatibility patches for dependent packages."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.71",
     "rawVersion": "1.7.71",
     "date": "2026-10-17",
@@ -76,8 +191,7 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Global Context Menu, Interactive Card Refinements & Token Performance Optimization",
     "highlight": "引入全局输入与选区右键上下文菜单，支持 Electron 原生与自定义多级操作；深度重构 ask_user 交互卡片，优化单选/多选交互、草稿保留与快捷键体验；优化 Token 估算算法并支持词表空闲预加载；增加后台与闲置状态下的采样挂起机制以降低 CPU 开销；升级多项安全依赖并加固测试环境。",
     "highlightEn": "Introduces a global context menu for text inputs and selections with native and custom support. Deeply refactors ask_user interactive cards with improved single/multi-select flows, draft preservation, and keyboard shortcuts. Optimizes token estimation with idle vocabulary preloading. Suspends background and idle sampling to reduce CPU consumption. Upgrades critical security dependencies and hardens test harnesses.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
     "categories": [
       {
         "type": "feature",
