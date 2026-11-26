@@ -7,6 +7,7 @@ export interface SelectOption {
     value: string
     label: string
     icon?: React.ReactNode
+    disabled?: boolean
 }
 
 interface SelectProps {
@@ -17,6 +18,7 @@ interface SelectProps {
     className?: string
     disabled?: boolean
     dropdownPosition?: 'top' | 'bottom' | 'auto'
+    'aria-label'?: string
 }
 
 export const Select = memo(function Select({
@@ -26,6 +28,7 @@ export const Select = memo(function Select({
     placeholder = 'Select...',
     className = '',
     disabled = false,
+    'aria-label': ariaLabel,
     dropdownPosition = 'auto'
 }: SelectProps) {
     const [isOpen, setIsOpen] = useState(false)
@@ -70,9 +73,11 @@ export const Select = memo(function Select({
             {options.map((option) => (
                 <button
                     key={option.value}
+                    type="button"
+                    disabled={option.disabled}
                     onClick={() => { onChange(option.value); setIsOpen(false); }}
                     className={`
-                        w-full flex items-center justify-between px-3 py-2 text-sm text-left rounded-lg transition-all duration-200
+                        w-full flex items-center justify-between px-3 py-2 text-sm text-left rounded-lg transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45
                         ${option.value === value
                             ? 'text-accent bg-accent/10 font-bold'
                             : 'text-text-secondary hover:bg-text-primary/[0.05] hover:text-text-primary'
@@ -93,6 +98,8 @@ export const Select = memo(function Select({
         <div ref={containerRef} className={`relative ${className}`}>
             <button
                 type="button"
+                aria-label={ariaLabel}
+                aria-expanded={isOpen}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 disabled={disabled}
                 className={`

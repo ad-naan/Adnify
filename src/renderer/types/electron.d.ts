@@ -350,6 +350,7 @@ export type DebugEvent =
 // ============================================
 
 export interface ElectronAPI {
+  desktopPet: import('@shared/desktopPet').DesktopPetEditorApi
   notifications: import('@shared/types/notifications').NotificationAPI
   assetRequest: (action: import('@shared/types/assets').AssetAction) => Promise<{ ok: boolean; value?: unknown; error?: string }>
   // App
@@ -843,6 +844,7 @@ export interface ElectronAPI {
 declare global {
   interface Window {
     electronAPI: ElectronAPI
+    desktopPet: import('@shared/desktopPet').DesktopPetViewApi
   }
 }
 

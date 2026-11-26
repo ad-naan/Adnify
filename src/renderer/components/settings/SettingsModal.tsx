@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check, Search, X, Bell, Activity, HardDrive } from 'lucide-react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check, Search, X, Bell, Activity, HardDrive, PawPrint } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
@@ -15,6 +15,7 @@ import { SETTINGS_SEARCH_INDEX, type SettingsSearchEntry } from './settingsSearc
 import { safeOpenFile } from '@renderer/utils/fileUtils'
 import { api } from '@renderer/services/electronAPI'
 import type { NotificationSettingsHandle } from './tabs/NotificationSettings'
+import type { DesktopPetSettingsHandle } from './tabs/DesktopPetSettings'
 
 const ProviderSettings = lazy(() =>
     import('./tabs/ProviderSettings').then(module => ({ default: module.ProviderSettings })),
@@ -58,6 +59,7 @@ const DataSettings = lazy(() => import('./tabs/DataSettings').then(module => ({ 
 const LogSettings = lazy(() => import('./tabs/LogSettings').then(module => ({ default: module.LogSettings })))
 const BackgroundTaskSettings = lazy(() => import('./tabs/BackgroundTaskSettings').then(module => ({ default: module.BackgroundTaskSettings })))
 const NotificationSettings = lazy(() => import('./tabs/NotificationSettings').then(module => ({ default: module.NotificationSettings })))
+const DesktopPetSettings = lazy(() => import('./tabs/DesktopPetSettings').then(module => ({ default: module.DesktopPetSettings })))
 
 function serializeComparable(value: unknown): string {
     return stableStringify(value) ?? ''
@@ -108,7 +110,7 @@ function SettingsTabFallback({ language }: { language: Language }) {
     )
 }
 
-export default function SettingsModal() {
+export default function SettingsModal({ desktopPetRequest = 0 }: { desktopPetRequest?: number } = {}) {
     const {
         llmConfig,
         modelRouting,
@@ -151,11 +153,16 @@ export default function SettingsModal() {
         save: s.save,
     })))
 
-    const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
+    const [activeTab, setActiveTab] = useState<SettingsTab>(desktopPetRequest ? 'desktopPet' : 'provider')
+    useEffect(() => { if (desktopPetRequest) setActiveTab('desktopPet') }, [desktopPetRequest])
     const [notificationVisited, setNotificationVisited] = useState(false)
     const [notificationDirty, setNotificationDirty] = useState(false)
     const notificationRef = useRef<NotificationSettingsHandle>(null)
     useEffect(() => { if (activeTab === 'notifications') setNotificationVisited(true) }, [activeTab])
+    const [desktopPetVisited, setDesktopPetVisited] = useState(false)
+    const [desktopPetDirty, setDesktopPetDirty] = useState(false)
+    const desktopPetRef = useRef<DesktopPetSettingsHandle>(null)
+    useEffect(() => { if (activeTab === 'desktopPet') setDesktopPetVisited(true) }, [activeTab])
     const [showApiKey, setShowApiKey] = useState(false)
     const [saved, setSaved] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
@@ -285,7 +292,7 @@ export default function SettingsModal() {
     }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localModelRouting, localProviderConfigs, localSecuritySettings, localWebSearchConfig, localProxySettings])
 
     const isDirty = useMemo(() => {
-        return notificationDirty || localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
+        return notificationDirty || desktopPetDirty || localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
             localSnapshots.modelRouting !== sourceSnapshots.modelRouting ||
             localLanguage !== language ||
             localAutoApprove !== autoApprove ||
@@ -300,7 +307,7 @@ export default function SettingsModal() {
             localSnapshots.providerConfigs !== sourceSnapshots.providerConfigs ||
             localSnapshots.securitySettings !== sourceSnapshots.securitySettings ||
             localSnapshots.editorConfig !== sourceSnapshots.editorConfig
-    }, [notificationDirty, aiInstructions, autoApprove, enableFileLogging, language, localAiInstructions, localAutoApprove, localEnableFileLogging, localLanguage, localPromptTemplateId, localSnapshots, promptTemplateId, sourceSnapshots])
+    }, [notificationDirty, desktopPetDirty, aiInstructions, autoApprove, enableFileLogging, language, localAiInstructions, localAutoApprove, localEnableFileLogging, localLanguage, localPromptTemplateId, localSnapshots, promptTemplateId, sourceSnapshots])
 
     const handleSave = useCallback(async () => {
         if (!isDirty) {
@@ -323,6 +330,10 @@ export default function SettingsModal() {
         try {
             if (notificationDirty && !await notificationRef.current?.save()) {
                 setActiveTab('notifications')
+                return
+            }
+            if (desktopPetDirty && !await desktopPetRef.current?.save()) {
+                setActiveTab('desktopPet')
                 return
             }
             set('llmConfig', localConfig)
@@ -375,6 +386,7 @@ export default function SettingsModal() {
         finalEditorConfig,
         isDirty,
         notificationDirty,
+        desktopPetDirty,
         localAgentConfig,
         localAiInstructions,
         localAutoApprove,
@@ -486,6 +498,7 @@ export default function SettingsModal() {
         { id: 'assets', group: 'extensions', label: t('assets.assetCapabilities', language), description: t('assets.customGenerationToolsHTTPAPIsAndAsset', language), icon: <Database className="w-4 h-4" /> },
         { id: 'security', group: 'app', label: t('settingsModal.securityApprovals', language), description: t('settingsModal.approvalPolicyWorkspaceBoundaries', language), icon: <Shield className="w-4 h-4" /> },
         { id: 'notifications', group: 'app', label: t('notifications.settingsTitle', language), description: t('notifications.settingsDescription', language), icon: <Bell className="w-4 h-4" /> },
+        { id: 'desktopPet', group: 'app', label: t('desktopPet.title', language), description: t('desktopPet.description', language), icon: <PawPrint className="w-4 h-4" /> },
         { id: 'background', group: 'app', label: t('backgroundTasks.title', language), description: t('backgroundTasks.description', language), icon: <Activity className="w-4 h-4" /> },
         { id: 'network', group: 'app', label: t('settingsCategories.network', language), description: t('settingsCategories.networkDescription', language), icon: <Globe className="w-4 h-4" /> },
         { id: 'data', group: 'app', label: t('settingsCategories.data', language), description: t('settingsCategories.dataDescription', language), icon: <HardDrive className="w-4 h-4" /> },
@@ -605,6 +618,8 @@ export default function SettingsModal() {
                 )
             case 'system':
                 return <SystemSettings language={language} />
+            case 'desktopPet':
+                return null
             case 'network':
                 return <NetworkSettings language={language} githubToken={localGithubToken} setGithubToken={setLocalGithubToken} proxySettings={localProxySettings} setProxySettings={setLocalProxySettings} />
             case 'data':
@@ -743,6 +758,11 @@ export default function SettingsModal() {
                                 {(notificationVisited || activeTab === 'notifications') && (
                                     <div hidden={activeTab !== 'notifications'}>
                                         <NotificationSettings ref={notificationRef} language={language} onDirtyChange={setNotificationDirty} />
+                                    </div>
+                                )}
+                                {(desktopPetVisited || activeTab === 'desktopPet') && (
+                                    <div hidden={activeTab !== 'desktopPet'}>
+                                        <DesktopPetSettings ref={desktopPetRef} language={language} onDirtyChange={setDesktopPetDirty} />
                                     </div>
                                 )}
                             </Suspense>

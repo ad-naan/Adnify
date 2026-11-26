@@ -119,4 +119,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'system.diagnostics', tab: 'diagnostics', labelKey: 'systemSettings.diagnosticsTitle', keywords: ['diagnostics', '诊断', 'memory', '内存', 'performance', '性能', 'trace', '卡顿', 'gpu'] },
   { id: 'system.backup', tab: 'data', labelKey: 'settingsSearch.systemBackup', keywords: ['backup', '备份', 'export', '导出', 'import', '导入', 'restore', '恢复'] },
   { id: 'system.changelog', tab: 'system', labelKey: 'settingsSearch.systemChangelog', keywords: ['version', 'release', 'changelog', '版本', '更新', '日志'] },
+  { id: 'desktopPet.open', tab: 'desktopPet', labelKey: 'desktopPet.title', keywords: ['pet', 'live2d', 'voice', '桌宠', '角色', '语音'] },
 ]

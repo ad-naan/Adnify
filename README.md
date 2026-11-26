@@ -21,7 +21,6 @@
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
     <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
-  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">Download Adnify</a></strong></p>
 </div>
 
 Adnify brings code editing, AI execution, asset generation, and browser verification into one desktop workspace. Use **Agent Mode** for direct implementation or **Plan Mode** for requirement clarification, reviewed task graphs, dependency-aware execution, and result validation. Manage commands and background services across windows, and receive task results through system notifications or your own webhook receiver.
@@ -54,10 +53,9 @@ Names are in no particular order. If there are any errors or omissions, please c
 
 Join our community to discuss Adnify usage and development!
 
-| WeChat Group | QQ Group | Author WeChat |
-|:---:|:---:|:---:|
-| <img src="images/wechat-group.png" width="200" height="200" alt="WeChat Group QR" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ Group QR" /> | <img src="images/wechat-author.png" width="200" height="200" alt="Author WeChat" /> |
-| Scan to join WeChat group | QQ Group: `1076926858` | WeChat ID: `adnaan_worker` |
+| QQ Group | Telegram Group |
+|:---:|:---:|
+| <img src="images/qq-group.png" width="200" height="200" alt="QQ Group QR" /><br />Group number `1076926858` | [Join the Telegram group](https://t.me/+PmTfI0crVn9jNDdl) |
 
 > 💡 For issues or suggestions, submit them on [Gitee Issues](https://gitee.com/adnaan/adnify/issues) or [Github Issues](https://github.com/ad-naan/adnify/issues)
 
@@ -581,7 +579,7 @@ If you like this project, please give it a ⭐️ Star!
 If Adnify helps you, feel free to buy the author a coffee ☕️
 
 <div align="center">
-  <img src="images/donate-wechat.png" alt="WeChat Donation QR Code" width="300" />
+  <img src="images/donate-wechat.jpg" alt="WeChat Donation QR Code" width="300" />
   <p><em>Scan to support, thank you for your encouragement!</em></p>
 </div>
 

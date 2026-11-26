@@ -26,6 +26,7 @@ import type { StreamingEditState } from '@renderer/agent/types'
 import type { ThemeName } from '@store/slices/themeSlice'
 import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
 import { consumePendingNavigation } from '@services/editorNavigation'
+import { watchEditorActivity } from '@features/desktopPet/watchEditorActivity'
 import {
   commitEditorBufferSnapshot,
   flushEditorBufferSnapshots,
@@ -376,6 +377,8 @@ export default function Editor({ planCanvas = false }: { planCanvas?: boolean })
     // 监听内容变化，基于版本号更新 dirty 状态
     const model = editor.getModel()
     if (model && currentFilePath) {
+      const document = useStore.getState().openFiles.find(file => file.path === currentFilePath)
+      if (isWritableDocumentKind(document?.kind)) disposables.push(watchEditorActivity(editor, model))
       // 初始化时记录版本号
       const { openFiles } = useStore.getState()
       const file = openFiles.find(f => f.path === currentFilePath)

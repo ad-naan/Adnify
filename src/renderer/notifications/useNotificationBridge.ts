@@ -48,6 +48,9 @@ export function useNotificationBridge(enabled: boolean): void {
     }
     const subscriptions = [
       editorEvents.subscribe('*', (event) => {
+        if (event.attention && event.type.startsWith('agent.') && event.level !== 'info') {
+          api.desktopPet?.notifyActivity({ type: 'agent.event', event: event.type, level: event.level })
+        }
         if (event.attention) {
           if (queue.length < 60) queue.push(event)
         } else {

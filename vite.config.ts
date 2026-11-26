@@ -168,6 +168,14 @@ export default defineConfig({
           resolve: { alias: aliases },
           build: { outDir: 'dist/preload' }
         }
+      },
+      {
+        entry: 'src/main/desktopPetPreload.ts',
+        onstart(options) { options.reload() },
+        vite: {
+          resolve: { alias: aliases },
+          build: { outDir: 'dist/preload' }
+        }
       }
     ])
   ],
@@ -176,6 +184,10 @@ export default defineConfig({
   build: {
     outDir: 'dist/renderer',
     rollupOptions: {
+      input: {
+        workbench: path.resolve(__dirname, 'index.html'),
+        desktopPet: path.resolve(__dirname, 'desktop-pet.html'),
+      },
       // 忽略 web-tree-sitter 的 eval 警告（这是库内部使用，无法避免）
       onwarn(warning, warn) {
         if (warning.code === 'EVAL' && (warning.id?.includes('web-tree-sitter') || warning.id?.includes('onnxruntime-web'))) {

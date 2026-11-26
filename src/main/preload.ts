@@ -577,6 +577,33 @@ async function invokeNotification<T>(name: string, ...args: unknown[]): Promise<
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  desktopPet: {
+    open: () => ipcRenderer.invoke('desktop-pet:open'),
+    close: () => ipcRenderer.invoke('desktop-pet:close-from-editor'),
+    getState: () => ipcRenderer.invoke('desktop-pet:get-state'),
+    savePreferences: (value: import('@shared/desktopPet').PetPreferences, position?: import('@shared/desktopPet').PetPosition, speechKey?: string | null) =>
+      ipcRenderer.invoke('desktop-pet:preferences', value, position, speechKey),
+    importModel: () => ipcRenderer.invoke('desktop-pet:import'),
+    installGalleryModel: (id: string) => ipcRenderer.invoke('desktop-pet:install-gallery-model', id),
+    removeModel: (id: string) => ipcRenderer.invoke('desktop-pet:remove', id),
+    onState: (callback: (state: import('@shared/desktopPet').PetState) => void) => {
+      const handler = (_event: IpcRendererEvent, state: import('@shared/desktopPet').PetState) => callback(state)
+      ipcRenderer.on('desktop-pet:state', handler)
+      return () => ipcRenderer.removeListener('desktop-pet:state', handler)
+    },
+    onOpenSettings: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('desktop-pet:settings-requested', handler)
+      return () => ipcRenderer.removeListener('desktop-pet:settings-requested', handler)
+    },
+    isWatching: () => ipcRenderer.invoke('desktop-pet:is-watching'),
+    notifyActivity: (activity: import('@shared/desktopPet').PetActivity) => ipcRenderer.send('desktop-pet:activity', activity),
+    onWatching: (callback: (watching: boolean) => void) => {
+      const handler = (_event: IpcRendererEvent, watching: boolean) => callback(watching)
+      ipcRenderer.on('desktop-pet:watching', handler)
+      return () => ipcRenderer.removeListener('desktop-pet:watching', handler)
+    },
+  },
   assetRequest: (action: import('@shared/types/assets').AssetAction) => ipcRenderer.invoke('assets:request', action),
   appReady: () => ipcRenderer.send('app:ready'),
   systemPrivilegeGetStatus: () => ipcRenderer.invoke('systemPrivilege:getStatus'),

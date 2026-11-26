@@ -226,6 +226,9 @@ importers:
       katex:
         specifier: ^0.19.0
         version: 0.19.0
+      live2d-web:
+        specifier: 0.9.0
+        version: 0.9.0(react@18.3.1)
       lucide-react:
         specifier: ^0.562.0
         version: 0.562.0(react@18.3.1)
@@ -2675,6 +2678,17 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
+  live2d-web@0.9.0:
+    resolution: {integrity: sha512-yboilM46r/K8+SIiwtUUj/OG2j6qD86AtDPhFKSiH6ICvpiHiCWRZuE0FO/tWpyVHXy2d8p1wlRdqnQKFE2/6Q==}
+    peerDependencies:
+      '@mediapipe/tasks-vision': ^1.0.1
+      react: '>=18.2 <20'
+    peerDependenciesMeta:
+      '@mediapipe/tasks-vision':
+        optional: true
+      react:
+        optional: true
+
   locate-path@3.0.0:
     resolution: {integrity: sha512-7AO748wWnIhNqAuaty2ZWHkQHRSNfPVIsPIfwEOWO22AmaoVrWavlOcMR5nzTLNYvp36X220/maaRsrec1G65A==}
     engines: {node: '>=6'}
@@ -4009,6 +4023,9 @@ packages:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
     hasBin: true
+
+  wlipsync@1.3.1:
+    resolution: {integrity: sha512-R7m2b7UkfpXxvQYxypIkJqtmgmgMXNZ/z3558u9S0rI0HoMhKusXz4tFdDSsct3eRoZg1WBan6YfcawGxJqP1g==}
 
   wordwrapjs@5.1.1:
     resolution: {integrity: sha512-0yweIbkINJodk27gX9LBGMzyQdBDan3s/dEAiwBOj+Mf0PPyWL6/rikalkv8EeD0E8jm4o5RXEOrFTP3NXbhJg==}
@@ -6450,6 +6467,12 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
+  live2d-web@0.9.0(react@18.3.1):
+    dependencies:
+      wlipsync: 1.3.1
+    optionalDependencies:
+      react: 18.3.1
+
   locate-path@3.0.0:
     dependencies:
       p-locate: 3.0.0
@@ -8104,6 +8127,8 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  wlipsync@1.3.1: {}
 
   wordwrapjs@5.1.1: {}
 

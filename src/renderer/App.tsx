@@ -60,6 +60,15 @@ function AppContent() {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [desktopPetRequest, setDesktopPetRequest] = useState(0)
+
+  useEffect(() => window.electronAPI?.desktopPet?.onOpenSettings(() => {
+    setDesktopPetRequest(value => value + 1)
+    useStore.getState().setShowSettings(true)
+  }), [])
+  useEffect(() => {
+    if (!showSettings) setDesktopPetRequest(0)
+  }, [showSettings])
 
   useEffect(() => {
     window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
@@ -120,7 +129,7 @@ function AppContent() {
 
       {showSettings && (
         <Suspense fallback={<SettingsSkeleton />}>
-          <SettingsModal />
+          <SettingsModal desktopPetRequest={desktopPetRequest} />
         </Suspense>
       )}
       {showCommandPalette && (

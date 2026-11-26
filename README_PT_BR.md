@@ -6,7 +6,6 @@
   <h1>Adnify</h1>
   <p><a href="README_CN.md">中文</a> | <a href="README.md">English</a> | <a href="README_JA.md">日本語</a> | <a href="README_KO.md">한국어</a> | <a href="README_ES.md">Español</a> | <a href="README_FR.md">Français</a> | <a href="README_DE.md">Deutsch</a> | <strong>Português (Brasil)</strong> | <a href="README_RU.md">Русский</a></p>
   <p><strong>Conecte a IA ao seu código.</strong></p>
-  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">Baixar o Adnify</a></strong></p>
 </div>
 
 O Adnify reúne edição de código, execução com IA, geração de recursos e verificação no navegador em um ambiente de desenvolvimento para desktop. Use o Agent Mode para implementar diretamente ou o Plan Mode para revisar requisitos e dependências antes da execução.

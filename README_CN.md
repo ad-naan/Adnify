@@ -20,7 +20,6 @@
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
     <img src="https://img.shields.io/badge/TypeScript-5-blue" alt="TypeScript 5" />
   </p>
-  <p><strong><a href="https://cnb.cool/aadnaan/Adnify/-/releases">下载 Adnify</a></strong></p>
 </div>
 
 Adnify 将代码编辑、AI 执行、素材生成和浏览器验证放进同一个桌面工作区。使用 **Agent Mode** 直接分析和实现，或使用 **Plan Mode** 澄清需求、审查任务图、按依赖执行并验收结果；跨窗口管理命令和后台服务，通过系统通知或自己的 Webhook 接收工具获取任务结果。
@@ -51,10 +50,9 @@ Adnify 将代码编辑、AI 执行、素材生成和浏览器验证放进同一�
 
 欢迎加入交流群，一起讨论 Adnify 的使用和开发！
 
-| 微信群 | QQ 群 | 作者微信 |
-|:---:|:---:|:---:|
-| <img src="images/wechat-group.png" width="200" height="200" alt="微信群二维码" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ群二维码" /> | <img src="images/wechat-author.png" width="200" height="200" alt="作者微信" /> |
-| 扫码加入微信群 | QQ群号: `1076926858` | 微信号: `adnaan_worker` |
+| QQ 群 | Telegram 群 |
+|:---:|:---:|
+| <img src="images/qq-group.png" width="200" height="200" alt="QQ群二维码" /><br />群号 `1076926858` | [加入 Telegram 群](https://t.me/+PmTfI0crVn9jNDdl) |
 
 > 💡 如有问题或建议，也可以直接在 [Gitee Issues](https://gitee.com/adnaan/adnify/issues) 或[Github Issues](https://github.com/ad-naan/adnify/issues)  提交
 
@@ -588,7 +586,7 @@ adnify/
 如果 Adnify 对你有帮助，欢迎请作者喝杯咖啡 ☕️
 
 <div align="center">
-  <img src="images/donate-wechat.png" alt="微信赞赏码" width="300" />
+  <img src="images/donate-wechat.jpg" alt="微信赞赏码" width="300" />
   <p><em>扫码支持，感谢你的鼓励！</em></p>
 </div>
 

@@ -32,6 +32,7 @@ import { createFileLogWriter } from './services/fileLogWriter'
 import { processDiagnostics } from './services/diagnostics/ProcessDiagnostics'
 import { backgroundTaskService } from './services/backgroundTasks/BackgroundTaskService'
 import { applicationDiagnostics } from './services/diagnostics/ApplicationDiagnostics'
+import { DesktopPetController } from './services/window/DesktopPetController'
 import {
   shutdownWindowController,
   type ShutdownWindowPresentation,
@@ -114,6 +115,7 @@ let lastActiveWindow: BrowserWindow | null = null
 const pendingShutdownRequests = new Map<string, (success: boolean) => void>()
 const authorizedCloseWindows = new Set<number>()
 let appQuitInProgress = false
+let desktopPet: DesktopPetController | undefined
 let executionTray: Tray | undefined
 function openExecutionManager(): void {
   const win = getMainWindow() || createWindow(false)
@@ -668,6 +670,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     }
 
     windows.delete(windowId)
+    if (windows.size === 0) desktopPet?.close()
     if (cachedWebContentsId) {
       windowWorkspaces.delete(cachedWebContentsId)
     }
@@ -909,6 +912,7 @@ async function initializeModules(firstWin: BrowserWindow) {
     ipcMain.on('i18n:changed', (_event, lang: Language) => {
       // 保存到配置
       configStore.set('language', lang)
+      desktopPet?.refresh()
       // 更新主进程语言
       setApplicationMenu(lang)
       // 可选：通知所有窗口语言已更新
@@ -1000,6 +1004,8 @@ app.whenReady().then(async () => {
 
   // 1. 初始化 Store（必须在模块加载前完成）
   await initStores()
+  desktopPet = new DesktopPetController(configStore, windows, () => appQuitInProgress, getMainWindow)
+  desktopPet.register()
   processDiagnostics.start()
 
   // Apply initial proxy settings if configured
@@ -1058,6 +1064,7 @@ app.whenReady().then(async () => {
 
   // 6. 模块就绪，加载页面内容
   loadWindowContent(firstWin, false)
+  firstWin.once('ready-to-show', () => desktopPet?.openOnStartup())
 }).catch(error => {
   // 启动链条里任何一步抛出都必须显式收场。
   // 上面注册的 process.on('unhandledRejection') 只记日志，同时也压掉了 Node
@@ -1126,6 +1133,7 @@ app.on('window-all-closed', () => {
  */
 let isCleanupDone = false
 app.on('before-quit', async (e) => {
+  desktopPet?.close()
   if (isDevelopmentRuntime() && !isCleanupDone) {
     e.preventDefault()
     appQuitInProgress = true
